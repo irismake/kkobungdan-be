@@ -248,15 +248,19 @@ def test_notification_worker_flush_pending_limits_to_notification_ids(db, factor
         fcm_message_id=None,
         sent_at=None,
     )
+    old_notification_id = old_notification.id
+    event_notification_id = event_notification.id
     fcm = RecordingFCMService(FCMSendResult(success=True, message_id="message-filtered"))
 
-    NotificationWorker(fcm).flush_pending(lambda: db, notification_ids=[event_notification.id])
+    NotificationWorker(fcm).flush_pending(lambda: db, notification_ids=[event_notification_id])
 
-    db.refresh(old_notification)
-    db.refresh(event_notification)
+    old_notification = db.get(Notification, old_notification_id)
+    event_notification = db.get(Notification, event_notification_id)
     assert len(fcm.calls) == 1
+    assert old_notification is not None
     assert old_notification.status == NotificationStatus.PENDING
     assert old_notification.fcm_message_id is None
+    assert event_notification is not None
     assert event_notification.status == NotificationStatus.SENT
     assert event_notification.fcm_message_id == "message-filtered"
 
