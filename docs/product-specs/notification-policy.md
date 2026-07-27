@@ -43,8 +43,8 @@
 
 [비동기 발송 - FastAPI BackgroundTask]
   API 응답 후 즉시 실행
-  → NotificationWorker.flush_pending(SessionLocal)
-    → PENDING 알림 조회 → FCM 발송 → SENT / FAILED 업데이트
+  → NotificationWorker.flush_pending(SessionLocal, notification_ids)
+    → 이번 이벤트에서 생성된 PENDING 알림 조회 → FCM 발송 → SENT / FAILED 업데이트
 
 [배치 재시도 - APScheduler, 5분 주기]
   → NotificationWorker.retry_failed(SessionLocal)
@@ -106,7 +106,7 @@
 
 ### 현재 구현 주의사항
 
-- `POST /v1/proposal/{id}/confirm-received`는 알림 레코드를 생성하지만 현재 라우터에서 `NotificationWorker.flush_pending(SessionLocal)` background task를 등록하지 않는다. 즉시 FCM 발송이 필요하면 라우터에 background task 연결을 추가해야 한다.
+- 이벤트 기반 outbox 발송은 해당 이벤트에서 생성된 `PENDING` 알림 id만 background task에 전달한다. 기존에 남아 있던 다른 `PENDING` 알림은 이 이벤트의 즉시 발송 대상에 섞지 않는다.
 - 이벤트 기반 outbox 발송은 클라이언트 payload를 `notification_type`, `offer_id`, `proposal_id`로 제한한다. 커스텀 알림 직접 발송 경로는 별도 경로로 기존 data prefix를 사용할 수 있다.
 
 ---

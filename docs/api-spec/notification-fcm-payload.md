@@ -147,5 +147,5 @@
 
 ## 구현 주의사항
 
-- `POST /v1/proposal/{proposalId}/confirm-received`에서 생성되는 알림은 현재 라우터에 즉시 발송 background task가 연결되어 있지 않다. 알림 레코드는 생성되지만 즉시 FCM 전송이 보장되지 않는다.
+- `POST /v1/proposal/{proposalId}/confirm-received`에서 생성되는 알림도 즉시 발송 background task에 연결된다. background task에는 해당 이벤트에서 생성된 `PENDING` 알림 id만 전달된다.
 - 커스텀 알림 API 경로는 자동 알림과 달리 `notification_id`, `related_entity_type`, `related_entity_id`, `data_*` 필드를 포함할 수 있다. 이 문서는 자동 알림 outbox 발송 payload만 다룬다.

@@ -8,7 +8,7 @@
 - 현재 사용자 식별은 `Authorization: Bearer <access_token>` 에서 읽은 `userId` 를 기준으로 한다.
 - `GET /v1/user/detail` 은 `id`, `name`, `phone`, `phoneVerifiedAt`, `createdAt`, `lastLoginAt`, `alarmEnabled` 만 반환한다.
 - `phone` 은 저장/조회 시 공백과 하이픈을 제거하고, `+82` 로 시작하면 `0` 으로 치환한 정규화 형식을 사용한다.
-- `alarmEnabled` 는 사용자 선호값이며 기본값은 `false` 다.
+- `alarmEnabled` 는 사용자 선호값이며 기본값은 `true` 다.
 - `fcm-token` 은 사용자당 1개만 유지하는 upsert 정책이다.
 - `user` API는 이메일, 닉네임, 평점, 프로필 이미지, 연락처 변경 API를 제공하지 않는다.
 

@@ -35,7 +35,7 @@ class User(Base):
     phone = Column(String(20), unique=True, nullable=True, index=True)
     phone_verified_at = Column(DateTime(timezone=True), nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
-    alarm_enabled = Column(Boolean, nullable=True, default=False, server_default="0")
+    alarm_enabled = Column(Boolean, nullable=True, default=True, server_default="1")
     level = Column(Integer, nullable=False, default=0, server_default="0")
     deleted = Column(Boolean, nullable=False, default=False, server_default="0")
     deleted_at = Column(DateTime(timezone=True), nullable=True)

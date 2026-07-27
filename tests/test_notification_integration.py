@@ -7,6 +7,7 @@ from app.main import app
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.user import UserFCMToken
 from app.schemas.notification import FCMSendResult
+from app.services.fcm_service import FCMService
 from app.services.notification_worker import NotificationWorker
 
 
@@ -229,6 +230,55 @@ def test_notification_worker_sends_pending_notification_with_fcm_data(db, factor
     assert notification.status == NotificationStatus.SENT
     assert notification.fcm_message_id == "message-1"
     assert notification.sent_at is not None
+
+
+def test_notification_worker_flush_pending_limits_to_notification_ids(db, factory, sample_user):
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-filtered"))
+    old_notification = factory.notification(
+        sample_user.id,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 30, "proposal_id": 40}',
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    event_notification = factory.notification(
+        sample_user.id,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 31, "proposal_id": 41}',
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="message-filtered"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db, notification_ids=[event_notification.id])
+
+    db.refresh(old_notification)
+    db.refresh(event_notification)
+    assert len(fcm.calls) == 1
+    assert old_notification.status == NotificationStatus.PENDING
+    assert old_notification.fcm_message_id is None
+    assert event_notification.status == NotificationStatus.SENT
+    assert event_notification.fcm_message_id == "message-filtered"
+
+
+def test_send_to_user_stores_skipped_notification_when_alarm_disabled(db, factory):
+    user = factory.user(phone="01088889999")
+    db.add(UserFCMToken(user_id=user.id, fcm_token="token-disabled"))
+    service = FCMService.__new__(FCMService)
+
+    notification, result = service.send_to_user(
+        db=db,
+        user_id=user.id,
+        notification_type=NotificationType.CUSTOM,
+        title="테스트 알림",
+        body="테스트 알림 본문입니다.",
+    )
+
+    assert result.success is False
+    assert result.error_code == "ALARM_DISABLED"
+    assert notification.status == NotificationStatus.SKIPPED
+    assert notification.sent_at is None
+    assert notification.fcm_message_id is None
 
 
 def test_notification_worker_marks_failed_when_fcm_send_fails(db, factory, sample_user):

@@ -91,7 +91,7 @@ class UserAuthService:
             phone=phone,
             phone_verified_at=now,
             last_login_at=now,
-            alarm_enabled=False,
+            alarm_enabled=True,
         )
         db.add(user)
         try:

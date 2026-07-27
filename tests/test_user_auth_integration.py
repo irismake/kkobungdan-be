@@ -92,7 +92,7 @@ def test_signup_login_refresh_and_logout_flow(client, db, sms_sender):
     assert user.name == "홍길동"
     assert user.phone_verified_at is not None
     assert user.last_login_at is not None
-    assert user.alarm_enabled is False
+    assert user.alarm_enabled is True
 
     login_send = client.post("/v1/auth/login/send", json={"phone": "010-1234-5678"})
     assert login_send.status_code == 200
@@ -307,7 +307,7 @@ def test_user_detail_alarm_and_fcm_token_flow(client, db, sms_sender):
     assert data["id"] == user.id
     assert data["name"] == "홍길동"
     assert data["phone"] == "01012345678"
-    assert data["alarmEnabled"] is False
+    assert data["alarmEnabled"] is True
     assert data["level"] == 0
     assert data["phoneVerifiedAt"] is not None
 
@@ -841,6 +841,8 @@ def test_model_spec_matches_user_auth_docs():
     assert User.__table__.c.deleted_at.nullable is True
     assert User.__table__.c.name.nullable is True
     assert User.__table__.c.alarm_enabled.nullable is True
+    assert User.__table__.c.alarm_enabled.default.arg is True
+    assert str(User.__table__.c.alarm_enabled.server_default.arg) == "1"
 
     assert str(AuthPhoneVerification.__table__.c.id.type).upper() == "BIGINT"
     assert str(AuthPhoneVerification.__table__.c.code_hash.type).upper() == "VARCHAR(100)"

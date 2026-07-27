@@ -148,6 +148,49 @@ def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, d
     assert json.loads(runner_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
 
 
+def test_create_offer_queues_only_notifications_created_by_current_event(
+    client,
+    db,
+    factory,
+    sample_user,
+    monkeypatch,
+):
+    queued_ids = []
+
+    class RecordingWorker:
+        def flush_pending(self, db_factory, notification_ids=None):
+            _ = db_factory
+            queued_ids.extend(notification_ids or [])
+
+    sample_user.alarm_enabled = True
+    runner = factory.user("01077770033")
+    runner.alarm_enabled = True
+    stale = factory.notification(sample_user.id, status=NotificationStatus.PENDING)
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+    db.commit()
+    monkeypatch.setattr(
+        "app.api.v1.offer.offer_router.get_notification_worker",
+        lambda: RecordingWorker(),
+    )
+
+    response = client.post(
+        "/v1/offer",
+        json=offer_payload(proposal.id),
+        headers=factory.headers_for(runner),
+    )
+
+    assert response.status_code == 201
+    offer_id = response.json()["data"]["id"]
+    current_ids = {
+        notification.id
+        for notification in db.query(Notification)
+        .filter(Notification.related_entity_type == "offer", Notification.related_entity_id == offer_id)
+        .all()
+    }
+    assert set(queued_ids) == current_ids
+    assert stale.id not in queued_ids
+
+
 def test_create_second_offer_keeps_proposal_offered(client, db, factory, sample_user):
     runner1 = factory.user("01077770002")
     runner2 = factory.user("01077770003")

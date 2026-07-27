@@ -19,20 +19,30 @@ class NotificationWorker:
     def __init__(self, fcm_service: FCMService) -> None:
         self.fcm_service = fcm_service
 
-    def flush_pending(self, db_factory: Callable[[], Session]) -> None:
+    def flush_pending(self, db_factory: Callable[[], Session], notification_ids: list[int] | None = None) -> None:
         """PENDING 알림을 FCM으로 발송한다. BackgroundTask 또는 스케줄러에서 호출."""
         with db_factory() as db:
-            self._send_batch(db, NotificationStatus.PENDING)
+            self._send_batch(db, NotificationStatus.PENDING, notification_ids=notification_ids)
 
     def retry_failed(self, db_factory: Callable[[], Session]) -> None:
         """FAILED 알림 중 retry_count < MAX_RETRY 인 것을 재발송한다."""
         with db_factory() as db:
             self._send_batch(db, NotificationStatus.FAILED, only_retryable=True)
 
-    def _send_batch(self, db: Session, status: NotificationStatus, only_retryable: bool = False) -> None:
+    def _send_batch(
+        self,
+        db: Session,
+        status: NotificationStatus,
+        only_retryable: bool = False,
+        notification_ids: list[int] | None = None,
+    ) -> None:
         import json
 
         query = db.query(Notification).filter(Notification.status == status)
+        if notification_ids is not None:
+            if not notification_ids:
+                return
+            query = query.filter(Notification.id.in_(notification_ids))
         if only_retryable:
             query = query.filter(Notification.retry_count < _MAX_RETRY)
 
@@ -52,12 +62,13 @@ class NotificationWorker:
                     if k in {"offer_id", "proposal_id"}:
                         data[k] = str(v)
 
+            token = self._get_token(db, notif.user_id)
             result = self.fcm_service.send_notification(
-                token=self._get_token(db, notif.user_id),
+                token=token,
                 title=notif.title,
                 body=notif.body,
                 data=data,
-            ) if self._get_token(db, notif.user_id) else None
+            ) if token else None
 
             if result is None or not result.success:
                 notif.status = NotificationStatus.FAILED

@@ -14,13 +14,14 @@ from app.events.execution_events import (
 )
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.user import User
+from app.services.notification_outbox import track_created_notification
 
 logger = logging.getLogger(__name__)
 
 
 def _alarm_enabled(db: Session, user_id: str) -> bool:
     user = db.query(User).filter(User.id == user_id).first()
-    return user is not None and user.alarm_enabled
+    return user is not None and user.alarm_enabled is True
 
 
 def _initial_status(db: Session, user_id: str) -> NotificationStatus:
@@ -28,6 +29,7 @@ def _initial_status(db: Session, user_id: str) -> NotificationStatus:
 
 
 def _pending(
+    db: Session,
     user_id: str,
     notification_type: NotificationType,
     title: str,
@@ -38,7 +40,7 @@ def _pending(
     data: dict | None = None,
 ) -> Notification:
     import json
-    return Notification(
+    notification = Notification(
         user_id=user_id,
         notification_type=notification_type,
         title=title,
@@ -48,6 +50,8 @@ def _pending(
         related_entity_id=related_entity_id,
         status=status,
     )
+    track_created_notification(db, notification)
+    return notification
 
 
 def _add_execution_completed_notifications(
@@ -56,6 +60,7 @@ def _add_execution_completed_notifications(
 ) -> None:
     for user_id in (event.orderer_id, event.runner_id):
         db.add(_pending(
+            db=db,
             user_id=user_id,
             notification_type=NotificationType.EXECUTION_COMPLETED,
             title="완료! 수고하셨어요 🎊",
@@ -69,6 +74,7 @@ def _add_execution_completed_notifications(
 
 def on_offer_created(event: OfferCreatedEvent, db: Session) -> None:
     db.add(_pending(
+        db=db,
         user_id=event.orderer_id,
         notification_type=NotificationType.OFFER_NEW,
         title="누군가 지원했어요! 👀",
@@ -80,6 +86,7 @@ def on_offer_created(event: OfferCreatedEvent, db: Session) -> None:
     ))
 
     db.add(_pending(
+        db=db,
         user_id=event.runner_id,
         notification_type=NotificationType.OFFER_SUBMITTED,
         title="지원 완료! ✅",
@@ -93,6 +100,7 @@ def on_offer_created(event: OfferCreatedEvent, db: Session) -> None:
 
 def on_offer_accepted(event: OfferAcceptedEvent, db: Session) -> None:
     db.add(_pending(
+        db=db,
         user_id=event.accepted_runner_id,
         notification_type=NotificationType.OFFER_ACCEPTED,
         title="선택받으셨어요! 🙌",
@@ -105,6 +113,7 @@ def on_offer_accepted(event: OfferAcceptedEvent, db: Session) -> None:
 
     for runner_id in event.rejected_runner_ids:
         db.add(_pending(
+            db=db,
             user_id=runner_id,
             notification_type=NotificationType.OFFER_REJECTED,
             title="이번엔 아쉽게 됐어요 😢",
@@ -122,6 +131,7 @@ def on_meeting_confirmed_by_runner(event: MeetingConfirmedByRunnerEvent, db: Ses
         return
 
     db.add(_pending(
+        db=db,
         user_id=event.orderer_id,
         notification_type=NotificationType.MEETING_CONFIRMED,
         title="지원자가 만남을 확인했어요! 🤝",
@@ -139,6 +149,7 @@ def on_meeting_confirmed_by_orderer(event: MeetingConfirmedByOrdererEvent, db: S
         return
 
     db.add(_pending(
+        db=db,
         user_id=event.runner_id,
         notification_type=NotificationType.MEETING_CONFIRMED,
         title="요청자가 만남을 확인했어요! 🤝",
@@ -152,6 +163,7 @@ def on_meeting_confirmed_by_orderer(event: MeetingConfirmedByOrdererEvent, db: S
 
 def on_dispute_raised_by_orderer(event: DisputeRaisedByOrdererEvent, db: Session) -> None:
     db.add(_pending(
+        db=db,
         user_id=event.runner_id,
         notification_type=NotificationType.DISPUTE_RAISED,
         title="분쟁이 접수되었어요",
@@ -165,6 +177,7 @@ def on_dispute_raised_by_orderer(event: DisputeRaisedByOrdererEvent, db: Session
 
 def on_dispute_raised_by_runner(event: DisputeRaisedByRunnerEvent, db: Session) -> None:
     db.add(_pending(
+        db=db,
         user_id=event.orderer_id,
         notification_type=NotificationType.DISPUTE_RAISED,
         title="분쟁이 접수되었어요",

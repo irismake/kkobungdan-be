@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -15,6 +16,12 @@ from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.routing import Match
+
+os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("AWS_SNS_ACCESS_KEY_ID", "test-access-key")
+os.environ.setdefault("AWS_SNS_SECRET_ACCESS_KEY", "test-secret-key")
+os.environ.setdefault("AWS_SNS_SMS_SENDER_ID", "OrderRun")
 
 from app.core.config import settings
 from app.core.database import Base, get_db
@@ -34,8 +41,9 @@ class RecordingSmsSender:
 
 
 class NoopNotificationWorker:
-    def flush_pending(self, db_factory):
+    def flush_pending(self, db_factory, notification_ids=None):
         _ = db_factory
+        _ = notification_ids
 
     def retry_failed(self, db_factory):
         _ = db_factory

@@ -25,7 +25,7 @@
 
 - `signup confirm` 에서만 신규 `User` 를 생성한다.
 - `login confirm` 은 기존 `User` 를 갱신한다.
-- `signup confirm` 의 신규 `User` 는 `passwordHash=null`, `alarmEnabled=false`, `phoneVerifiedAt=now`, `lastLoginAt=now` 로 생성한다.
+- `signup confirm` 의 신규 `User` 는 `passwordHash=null`, `alarmEnabled=true`, `phoneVerifiedAt=now`, `lastLoginAt=now` 로 생성한다.
 
 ### Token Layer
 

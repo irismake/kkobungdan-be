@@ -27,7 +27,7 @@
 - `ApiResponse` 성공 envelope 가 유지되는지 확인한다.
 - `ErrorResponse` 의 `code/message/details/timestamp` 구조가 유지되는지 확인한다.
 - 사용자 detail 응답에 email, rating, profile image 같은 불필요한 필드가 추가되지 않는지 확인한다.
-- 신규 사용자 기본 `alarmEnabled=false` 가 유지되는지 확인한다.
+- 신규 사용자 기본 `alarmEnabled=true` 가 유지되는지 확인한다.
 - `phone` 정규화가 저장과 조회 모두에서 동일하게 동작하는지 확인한다.
 - `user_fcm_tokens` 가 사용자당 1개라는 제약이 유지되는지 확인한다.
 
