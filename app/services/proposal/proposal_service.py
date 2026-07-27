@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow_naive
 from app.core.errors import AppError, api_error
 from app.events.base import EventBus
 from app.events.execution_events import DisputeRaisedByOrdererEvent, MeetingConfirmedByOrdererEvent
@@ -360,7 +363,27 @@ class ProposalService:
         return ProposalService.get_proposal_detail(db, proposal.id, orderer_id)
 
     @staticmethod
-    def delete_expired_proposals(db: Session) -> int:
-        """Payment expiry cleanup is outside the current Proposal API scope."""
+    def cancel_expired_payment_proposals(db: Session, now: datetime | None = None) -> int:
+        """Cancel proposals still awaiting payment after 24 hours from creation."""
 
-        return 0
+        current_time = now or utcnow_naive()
+        if current_time.tzinfo is not None:
+            current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
+        cutoff = current_time - timedelta(hours=24)
+
+        cancelled_count = (
+            db.query(Proposal)
+            .filter(
+                Proposal.status == ProposalStatus.HOLDING,
+                Proposal.created_at <= cutoff,
+            )
+            .update(
+                {
+                    Proposal.status: ProposalStatus.CANCELLED,
+                    Proposal.updated_at: current_time,
+                },
+                synchronize_session=False,
+            )
+        )
+        db.commit()
+        return cancelled_count
