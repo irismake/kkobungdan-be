@@ -139,8 +139,7 @@ jobs:
             chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
 
             COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh
-            docker rm -f orderrun-nginx || true
-            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build nginx
+            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build --force-recreate nginx
           EOF
 
       - name: Verify production HTTP
@@ -160,8 +159,7 @@ jobs:
 
             docker compose --env-file .env.ec2 -f docker-compose.ec2.yml --profile ssl run --rm certbot
             sed -i.bak 's#^NGINX_TEMPLATE=.*#NGINX_TEMPLATE=./nginx/templates/ec2-https.conf.template#' .env.ec2
-            docker rm -f orderrun-nginx || true
-            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build nginx
+            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build --force-recreate nginx
           EOF
 
       - name: Verify production HTTPS and staging
