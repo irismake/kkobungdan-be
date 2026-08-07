@@ -5,6 +5,10 @@ from datetime import datetime, timedelta, timezone
 from app.api.v1.notification.notification_router import get_notification_dispatcher
 from app.main import app
 from app.models.notification import Notification, NotificationStatus, NotificationType
+from app.models.user import UserFCMToken
+from app.schemas.notification import FCMSendResult
+from app.services.fcm_service import FCMService
+from app.services.notification_worker import NotificationWorker
 
 
 def utcnow_naive() -> datetime:
@@ -42,6 +46,16 @@ class RecordingNotificationDispatcher:
         return notification
 
 
+class RecordingFCMService:
+    def __init__(self, result: FCMSendResult):
+        self.result = result
+        self.calls: list[dict] = []
+
+    def send_notification(self, **kwargs) -> FCMSendResult:
+        self.calls.append(kwargs)
+        return self.result
+
+
 def test_root_response_matches_openapi_example(client):
     response = client.get("/")
 
@@ -75,6 +89,7 @@ def test_notification_list_stats_detail_and_mark_read(client, db, factory, auth_
     assert listed.json()["success"] is True
     assert listed.json()["message"] == "Success"
     assert listed.json()["data"]["total"] == 3
+    assert listed.json()["data"]["notifications"][0]["data"] == "{\"proposalId\":\"1\"}"
     assert stats.status_code == 200
     assert stats.json()["success"] is True
     assert stats.json()["message"] == "Success"
@@ -83,6 +98,7 @@ def test_notification_list_stats_detail_and_mark_read(client, db, factory, auth_
     assert detail.json()["success"] is True
     assert detail.json()["message"] == "Success"
     assert detail.json()["data"]["id"] == unread.id
+    assert detail.json()["data"]["data"] == "{\"proposalId\":\"1\"}"
     assert marked.status_code == 200
     assert marked.json()["success"] is True
     assert marked.json()["message"] == "1 notification(s) marked as read"
@@ -175,8 +191,171 @@ def test_notification_send_and_failure_cases(client, db, auth_headers, sample_us
     assert sent.json()["success"] is True
     assert sent.json()["message"] == "Success"
     assert sent.json()["data"]["title"] == "테스트 알림"
+    assert sent.json()["data"]["data"] == "{\"proposalId\":\"1\"}"
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "ERROR"
     assert invalid_mark_read.status_code == 400
     assert invalid_mark_read.json()["error"]["code"] == "VALIDATION_ERROR"
     assert unauthenticated.status_code == 401
+
+
+def test_notification_worker_sends_pending_notification_with_fcm_data(db, factory, sample_user):
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-1"))
+    notification = factory.notification(
+        sample_user.id,
+        notification_type=NotificationType.OFFER_ACCEPTED,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 10, "proposal_id": 20}',
+        related_entity_type="offer",
+        related_entity_id=10,
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    notification_id = notification.id
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="message-1"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db)
+
+    notification = db.get(Notification, notification_id)
+    assert notification is not None
+    assert len(fcm.calls) == 1
+    assert fcm.calls[0]["token"] == "token-1"
+    assert fcm.calls[0]["title"] == notification.title
+    assert fcm.calls[0]["body"] == notification.body
+    assert fcm.calls[0]["data"] == {
+        "notification_type": "offer_accepted",
+        "offer_id": "10",
+        "proposal_id": "20",
+    }
+    assert notification.status == NotificationStatus.SENT
+    assert notification.fcm_message_id == "message-1"
+    assert notification.sent_at is not None
+
+
+def test_notification_worker_flush_pending_limits_to_notification_ids(db, factory, sample_user):
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-filtered"))
+    old_notification = factory.notification(
+        sample_user.id,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 30, "proposal_id": 40}',
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    event_notification = factory.notification(
+        sample_user.id,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 31, "proposal_id": 41}',
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    old_notification_id = old_notification.id
+    event_notification_id = event_notification.id
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="message-filtered"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db, notification_ids=[event_notification_id])
+
+    old_notification = db.get(Notification, old_notification_id)
+    event_notification = db.get(Notification, event_notification_id)
+    assert len(fcm.calls) == 1
+    assert old_notification is not None
+    assert old_notification.status == NotificationStatus.PENDING
+    assert old_notification.fcm_message_id is None
+    assert event_notification is not None
+    assert event_notification.status == NotificationStatus.SENT
+    assert event_notification.fcm_message_id == "message-filtered"
+
+
+def test_send_to_user_stores_skipped_notification_when_alarm_disabled(db, factory):
+    user = factory.user(phone="01088889999")
+    db.add(UserFCMToken(user_id=user.id, fcm_token="token-disabled"))
+    service = FCMService.__new__(FCMService)
+
+    notification, result = service.send_to_user(
+        db=db,
+        user_id=user.id,
+        notification_type=NotificationType.CUSTOM,
+        title="테스트 알림",
+        body="테스트 알림 본문입니다.",
+    )
+
+    assert result.success is False
+    assert result.error_code == "ALARM_DISABLED"
+    assert notification.status == NotificationStatus.SKIPPED
+    assert notification.sent_at is None
+    assert notification.fcm_message_id is None
+
+
+def test_notification_worker_marks_failed_when_fcm_send_fails(db, factory, sample_user):
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-2"))
+    notification = factory.notification(
+        sample_user.id,
+        notification_type=NotificationType.DISPUTE_RAISED,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 11, "proposal_id": 21}',
+        related_entity_type="offer",
+        related_entity_id=11,
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    notification_id = notification.id
+    fcm = RecordingFCMService(
+        FCMSendResult(success=False, error_code="UNKNOWN", error_message="temporary failure")
+    )
+
+    NotificationWorker(fcm).flush_pending(lambda: db)
+
+    notification = db.get(Notification, notification_id)
+    assert notification is not None
+    assert len(fcm.calls) == 1
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    assert notification.error_message == "temporary failure"
+
+
+def test_notification_worker_fails_without_token_and_does_not_call_fcm(db, factory, sample_user):
+    notification = factory.notification(
+        sample_user.id,
+        notification_type=NotificationType.MEETING_CONFIRMED,
+        status=NotificationStatus.PENDING,
+        data='{"offer_id": 12, "proposal_id": 22}',
+        related_entity_type="offer",
+        related_entity_id=12,
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    notification_id = notification.id
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="unused"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db)
+
+    notification = db.get(Notification, notification_id)
+    assert notification is not None
+    assert fcm.calls == []
+    assert notification.status == NotificationStatus.FAILED
+    assert notification.retry_count == 1
+    assert notification.error_message == "No FCM token"
+
+
+def test_notification_worker_ignores_skipped_notifications(db, factory, sample_user):
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-skipped"))
+    notification = factory.notification(
+        sample_user.id,
+        notification_type=NotificationType.OFFER_SUBMITTED,
+        status=NotificationStatus.SKIPPED,
+        data='{"offer_id": 13, "proposal_id": 23}',
+        related_entity_type="offer",
+        related_entity_id=13,
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    notification_id = notification.id
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="unused"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db)
+
+    notification = db.get(Notification, notification_id)
+    assert notification is not None
+    assert fcm.calls == []
+    assert notification.status == NotificationStatus.SKIPPED
+    assert notification.fcm_message_id is None
+    assert notification.sent_at is None

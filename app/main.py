@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.exceptions import http_exception_handler, validation_exception_handler
 from app.listeners import notification_listener
 from app.schemas.common import ApiResponse
+from app.tasks.payment_checker import check_and_cancel_expired_payment_proposals
 from app.core.openapi import HEALTH_EXAMPLE, ROOT_EXAMPLE, success_response
 
 setup_logging()
@@ -40,6 +41,14 @@ async def lifespan(app: FastAPI):
         minutes=5,
         args=[SessionLocal],
         id="retry_failed_notifications",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        check_and_cancel_expired_payment_proposals,
+        "interval",
+        hours=1,
+        args=[SessionLocal],
+        id="cancel_expired_payment_proposals",
         replace_existing=True,
     )
     _scheduler.start()

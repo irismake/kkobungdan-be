@@ -124,6 +124,18 @@ USER_DETAIL_EXAMPLE = {
 USER_ALARM_EXAMPLE = {"success": True, "data": None, "message": "알람 설정이 업데이트되었습니다."}
 USER_NAME_EXAMPLE = {"success": True, "data": None, "message": "닉네임이 업데이트되었습니다."}
 USER_FCM_TOKEN_EXAMPLE = {"success": True, "data": None, "message": "FCM 토큰이 업데이트되었습니다."}
+USER_WITHDRAWAL_REASONS_EXAMPLE = {
+    "success": True,
+    "data": [
+        {
+            "id": 1,
+            "questionText": "원하는 임무가 많지 않았어요.",
+            "displayOrder": 1,
+            "requiresDetail": False,
+        }
+    ],
+    "message": "Success",
+}
 USER_WITHDRAWAL_EXAMPLE = {"success": True, "data": None, "message": "회원 탈퇴가 완료되었습니다."}
 
 TERMS_AGREEMENT_EXAMPLE = {
@@ -525,7 +537,7 @@ NOTIFICATION_EXAMPLE = {
     "notification_type": "custom",
     "title": "테스트 알림",
     "body": "테스트 알림 본문입니다.",
-    "data": "{\"proposalId\":1}",
+    "data": "{\"proposalId\":\"1\"}",
     "related_entity_type": "proposal",
     "related_entity_id": 1,
     "status": "sent",

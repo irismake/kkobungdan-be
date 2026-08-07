@@ -138,6 +138,9 @@ services:
       - ${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL is required}
       - --agree-tos
       - --no-eff-email
+      - --non-interactive
+      - --keep-until-expiring
+      - --expand
 
 networks:
   orderrun-network:

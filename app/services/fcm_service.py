@@ -15,7 +15,7 @@ except ImportError:
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationStatus, NotificationType
-from app.models.user import UserFCMToken
+from app.models.user import User, UserFCMToken
 from app.schemas.notification import FCMSendResult
 
 
@@ -125,6 +125,18 @@ class FCMService:
         )
         db.add(notification)
         db.flush()
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None or user.alarm_enabled is not True:
+            notification.status = NotificationStatus.SKIPPED
+            notification.error_message = None
+            db.commit()
+            db.refresh(notification)
+            return notification, FCMSendResult(
+                success=False,
+                error_code="ALARM_DISABLED",
+                error_message="User disabled push notifications",
+            )
 
         token_record = db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).first()
 

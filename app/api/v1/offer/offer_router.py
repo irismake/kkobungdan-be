@@ -28,9 +28,16 @@ from app.schemas.common import ApiResponse, PageResponse
 from app.schemas.offer import OfferAcceptResponse, OfferCreate, OfferDetailResponse, OfferResponse, OfferSummaryResponse
 from app.schemas.dispute_evidence import DisputeRequest
 from app.services.offer.offer_service import OfferService
+from app.services.notification_outbox import pop_pending_notification_ids
 
 
 router = APIRouter(prefix="/offer", tags=["제안"])
+
+
+def _queue_created_notifications(background_tasks: BackgroundTasks, db: Session) -> None:
+    notification_ids = pop_pending_notification_ids(db)
+    if notification_ids:
+        background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal, notification_ids)
 
 
 class OfferSearchRequest:
@@ -84,7 +91,7 @@ def create_offer(
     db: Session = Depends(get_db),
 ) -> ApiResponse[OfferResponse]:
     offer = OfferService.create(db, request=offer_data, runner_id=current_user.id)
-    background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=offer, message="제안이 제출되었습니다.")
 
 
@@ -184,7 +191,7 @@ def accept_offer(
     db: Session = Depends(get_db),
 ) -> ApiResponse[OfferAcceptResponse]:
     accepted = OfferService.accept(db, offer_id=offer_id, orderer_id=current_user.id)
-    background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=accepted, message="제안이 수락되었습니다.")
 
 
@@ -216,7 +223,7 @@ def complete_delivery(
         offer_id=offer_id,
         runner_id=current_user.id,
     )
-    background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=offer, message="완료 처리되었습니다.")
 
 
@@ -251,7 +258,7 @@ def raise_offer_dispute(
         survey_question_id=request.survey_question_id,
         dispute_reason=request.dispute_reason,
     )
-    background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=offer, message="분쟁이 접수되었습니다.")
 
 

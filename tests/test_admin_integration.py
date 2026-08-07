@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from app.tasks import payment_checker
 from app.models.offer import OfferStatus
 from app.models.proposal import ProposalStatus
+from app.services.proposal.proposal_service import ProposalService
 
 
 def test_confirm_payment_posts_holding_proposal_without_request_body(client, db, factory, sample_user):
@@ -24,6 +26,53 @@ def test_confirm_payment_rejects_non_holding_proposal(client, db, factory, sampl
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "INVALID_STATUS"
+
+
+def test_cancel_expired_payment_proposals_only_cancels_holding_after_24_hours(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    expired_holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "expired")
+    boundary_holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "boundary")
+    fresh_holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "fresh")
+    expired_posted = factory.proposal(sample_user.id, ProposalStatus.POSTED, "posted")
+
+    expired_holding.created_at = now - timedelta(hours=24, minutes=1)
+    boundary_holding.created_at = now - timedelta(hours=24)
+    fresh_holding.created_at = now - timedelta(hours=23, minutes=59)
+    expired_posted.created_at = now - timedelta(hours=24, minutes=1)
+    db.commit()
+
+    cancelled_count = ProposalService.cancel_expired_payment_proposals(db, now=now)
+
+    assert cancelled_count == 2
+    db.refresh(expired_holding)
+    db.refresh(boundary_holding)
+    db.refresh(fresh_holding)
+    db.refresh(expired_posted)
+    assert expired_holding.status == ProposalStatus.CANCELLED
+    assert boundary_holding.status == ProposalStatus.CANCELLED
+    assert fresh_holding.status == ProposalStatus.HOLDING
+    assert expired_posted.status == ProposalStatus.POSTED
+
+
+def test_payment_checker_closes_session_and_returns_cancelled_count(monkeypatch):
+    class FakeSession:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    fake_session = FakeSession()
+
+    def fake_cancel(db):
+        assert db is fake_session
+        return 3
+
+    monkeypatch.setattr(payment_checker.ProposalService, "cancel_expired_payment_proposals", fake_cancel)
+
+    cancelled_count = payment_checker.check_and_cancel_expired_payment_proposals(lambda: fake_session)
+
+    assert cancelled_count == 3
+    assert fake_session.closed is True
 
 
 def test_list_pending_payment_proposals_without_auth(client, factory, sample_user):

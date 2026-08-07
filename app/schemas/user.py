@@ -49,14 +49,15 @@ class AuthSignupSendRequest(BaseModel):
         return stripped
 
 
-class AuthPhoneConfirmRequest(BaseModel):
+class AuthSignupConfirmRequest(BaseModel):
     phone: str = Field(..., min_length=1, max_length=20, description="휴대폰 번호")
     code: str = Field(..., min_length=1, max_length=20, description="SMS 인증번호")
+    fcm_token: Optional[str] = Field(None, alias="fcmToken", min_length=1, max_length=4096, description="FCM 토큰")
 
     model_config = ConfigDict(
         populate_by_name=True,
         extra="forbid",
-        json_schema_extra={"example": {"phone": "01012345678", "code": "123456"}},
+        json_schema_extra={"example": {"phone": "01012345678", "code": "123456", "fcmToken": "fcm-token"}},
     )
 
     @field_validator("phone", "code")
@@ -65,6 +66,16 @@ class AuthPhoneConfirmRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("must not be blank")
+        return stripped
+
+    @field_validator("fcm_token")
+    @classmethod
+    def strip_fcm_token(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("fcmToken must not be blank")
         return stripped
 
 
@@ -207,6 +218,32 @@ class UserDetailResponse(BaseModel):
     level: int = Field(..., description="성공 완료한 러너 Offer 수 기반 레벨")
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+
+class UserWithdrawalReasonQuestionResponse(BaseModel):
+    id: int
+    question_text: str = Field(..., serialization_alias="questionText")
+    display_order: int = Field(..., serialization_alias="displayOrder")
+    requires_detail: bool = Field(..., serialization_alias="requiresDetail")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class UserWithdrawalRequest(BaseModel):
+    reason_question_id: Optional[int] = Field(None, validation_alias="reasonQuestionId", ge=1)
+    detail_reason: Optional[str] = Field(None, validation_alias="detailReason", max_length=500)
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("detail_reason")
+    @classmethod
+    def strip_detail_reason(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("detailReason must not be blank")
+        return stripped
 
 
 class UserAlarmRequest(BaseModel):
