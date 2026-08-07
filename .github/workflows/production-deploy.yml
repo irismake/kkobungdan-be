@@ -94,13 +94,17 @@ jobs:
 
             cd ~/orderrun
             mkdir -p logs/staging/app logs/prod/app logs/nginx keys
+            existing_nginx_template="$(grep -E '^NGINX_TEMPLATE=' .env.ec2 2>/dev/null | cut -d= -f2- || true)"
+            if [ -z "$existing_nginx_template" ]; then
+              existing_nginx_template=./nginx/templates/ec2-https.conf.template
+            fi
 
             cat > .env.ec2 << 'ENVEOF'
           DOCKER_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
           EC2_PUBLIC_IP=${{ secrets.PROD_EC2_HOST }}
           PROD_DOMAIN=${{ env.PROD_DOMAIN }}
           STAGING_DOMAIN=${{ env.STAGING_DOMAIN }}
-          NGINX_TEMPLATE=./nginx/templates/ec2-http.conf.template
+          NGINX_TEMPLATE=__NGINX_TEMPLATE__
           SERVER_HOST=0.0.0.0
           SERVER_PORT=8000
           STAGING_APP_ENV=staging
@@ -135,39 +139,23 @@ jobs:
           PROD_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
           LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
           ENVEOF
+            sed -i.bak "s#__NGINX_TEMPLATE__#${existing_nginx_template}#" .env.ec2
 
             chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
 
             COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh
-            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build --force-recreate nginx
           EOF
 
-      - name: Verify production HTTP
-        run: |
-          sleep 30
-          curl -f "http://${{ env.PROD_DOMAIN }}/v1/health" || exit 1
-          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
-            test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' orderrun-app-prod)" = "healthy"
-          EOF
-
-      - name: Issue certificate and enable HTTPS
-        run: |
-          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
-            set -euo pipefail
-
-            cd ~/orderrun
-
-            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml --profile ssl run --rm certbot
-            sed -i.bak 's#^NGINX_TEMPLATE=.*#NGINX_TEMPLATE=./nginx/templates/ec2-https.conf.template#' .env.ec2
-            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build --force-recreate nginx
-          EOF
-
-      - name: Verify production HTTPS and staging
+      - name: Verify production deployment
         run: |
           sleep 30
           curl -f "https://${{ env.PROD_DOMAIN }}/v1/health" || exit 1
-          curl -f "http://${{ secrets.PROD_EC2_HOST }}/v1/health" || exit 1
+          test "$(curl -k -s -o /dev/null -w '%{http_code}' "https://${{ env.PROD_DOMAIN }}/docs")" = "404"
+          test "$(curl -k -s -o /dev/null -w '%{http_code}' "https://${{ env.PROD_DOMAIN }}/openapi.json")" = "404"
           curl -f "https://${{ env.STAGING_DOMAIN }}/v1/health" || exit 1
+          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
+            test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' orderrun-app-prod)" = "healthy"
+          EOF
 
       - name: Cleanup SSH key
         if: always()

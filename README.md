@@ -43,4 +43,4 @@
 - Runtime: Docker Compose on EC2
 - Edge Proxy: Nginx
 - Staging URL: `http://43.200.56.9`, `http://staging-api.kkobung-dan.store`
-- Production URL: `http://api.kkobung-dan.store`, `https://api.kkobung-dan.store` (HTTPS는 production 배포 workflow에서 전환)
+- Production URL: `http://api.kkobung-dan.store`, `https://api.kkobung-dan.store`

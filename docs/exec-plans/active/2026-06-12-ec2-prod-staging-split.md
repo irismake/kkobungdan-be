@@ -18,7 +18,7 @@
   - 도메인 HTTP 요청은 HTTPS로 redirect
   - IP 직접 접근은 staging HTTP 유지
 - 배포 스크립트에 `DEPLOY_TARGET=prod|staging` 지원 추가
-- production workflow는 `main` push 또는 수동 실행으로 Docker 이미지를 빌드하고, GitHub `production` Environment 승인 후 `app-prod`를 배포한다.
+- production workflow는 `main` push 또는 수동 실행으로 Docker 이미지를 빌드하고, GitHub `production` Environment 승인 후 `app-prod`만 배포한다. Nginx와 인증서 관리는 초기 설정/수동 운영 작업으로 분리한다.
 - EC2 전용 env 예시는 `.env.ec2.example`에 둔다.
 - 파일 로그 저장을 위해 앱/Nginx 로그를 `/home/ubuntu/orderrun/logs`에 마운트한다.
 
@@ -47,7 +47,7 @@
 6. `nginx`는 app 컨테이너에 `depends_on`하지 않고 독립적으로 실행한다.
 7. `scripts/deploy.sh`는 target app만 재배포하고 Nginx를 함께 recreate하지 않는다.
 8. staging workflow는 GitHub Secrets로 `.env.ec2`를 생성하고 `DEPLOY_TARGET=staging`으로 배포한다.
-9. production workflow는 GitHub Secrets로 `.env.ec2`를 생성하고 `DEPLOY_TARGET=prod`로 배포한 뒤 인증서 발급과 HTTPS Nginx 전환을 수행한다.
+9. production workflow는 GitHub Secrets로 `.env.ec2`를 생성하고 `DEPLOY_TARGET=prod`로 app-prod만 배포한다. 기존 `NGINX_TEMPLATE` 값은 보존한다.
 
 ## 검증 전략
 
@@ -99,7 +99,7 @@
    - `docker compose --env-file /home/ubuntu/orderrun/.env.ec2 -f docker-compose.ec2.yml --profile ssl run --rm certbot`
 10. EC2 `.env.ec2`의 `NGINX_TEMPLATE`를 `./nginx/templates/ec2-https.conf.template`로 변경한다.
 11. `docker compose --env-file /home/ubuntu/orderrun/.env.ec2 -f docker-compose.ec2.yml up -d --build nginx`로 Nginx를 재생성한다.
-12. 자동화 배포는 `.github/workflows/production-deploy.yml`을 사용한다. `main` push 시 build가 시작되고, deploy job은 GitHub `production` Environment 승인 후 EC2에서 위 production 배포와 SSL 전환 순서를 실행한다.
+12. 자동화 배포는 `.github/workflows/production-deploy.yml`을 사용한다. `main` push 시 build가 시작되고, deploy job은 GitHub `production` Environment 승인 후 app-prod만 재배포하고 HTTPS/문서 차단 상태를 검증한다.
 
 ## 남은 리스크
 
@@ -107,3 +107,4 @@
 - HTTPS 템플릿은 `api.kkobung-dan.store`를 인증서 이름으로 사용한다. certbot 발급 시 `api.kkobung-dan.store`를 첫 번째 `-d` 값으로 유지해야 한다.
 - Nginx는 app 컨테이너와 독립 실행되므로, 아직 뜨지 않은 upstream 라우트만 실패하고 다른 라우트는 계속 동작한다.
 - EC2 security group이 443 inbound를 허용하지 않으면 workflow의 HTTPS 검증 단계가 실패한다.
+- production workflow는 Nginx를 재생성하지 않으므로, HTTPS 템플릿/인증서 변경은 별도 수동 절차로 적용해야 한다.
