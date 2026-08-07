@@ -18,6 +18,7 @@
   - 도메인 HTTP 요청은 HTTPS로 redirect
   - IP 직접 접근은 staging HTTP 유지
 - 배포 스크립트에 `DEPLOY_TARGET=prod|staging` 지원 추가
+- production workflow는 `main` push 또는 수동 실행으로 Docker 이미지를 빌드하고, GitHub `production` Environment 승인 후 `app-prod`를 배포한다.
 - EC2 전용 env 예시는 `.env.ec2.example`에 둔다.
 - 파일 로그 저장을 위해 앱/Nginx 로그를 `/home/ubuntu/orderrun/logs`에 마운트한다.
 
@@ -46,6 +47,7 @@
 6. `nginx`는 app 컨테이너에 `depends_on`하지 않고 독립적으로 실행한다.
 7. `scripts/deploy.sh`는 target app만 재배포하고 Nginx를 함께 recreate하지 않는다.
 8. staging workflow는 GitHub Secrets로 `.env.ec2`를 생성하고 `DEPLOY_TARGET=staging`으로 배포한다.
+9. production workflow는 GitHub Secrets로 `.env.ec2`를 생성하고 `DEPLOY_TARGET=prod`로 배포한 뒤 인증서 발급과 HTTPS Nginx 전환을 수행한다.
 
 ## 검증 전략
 
@@ -65,6 +67,10 @@
 - SSL 전환 후 확인:
   - `curl https://staging-api.kkobung-dan.store/v1/health`
   - `curl https://api.kkobung-dan.store/v1/health`
+- GitHub Actions 확인:
+  - `Production Deploy` workflow가 `production` Environment 승인 후 실행되는지 확인
+  - `main` push 빌드 이미지 태그가 `prod`, `prod-${sha}`로 push되는지 확인
+  - `production` Environment에 `PROD_EC2_HOST`, `PROD_EC2_USERNAME`, `PROD_EC2_SSH_KEY`, `PROD_MYSQL_*`, `PROD_JWT_SECRET`, `LETSENCRYPT_EMAIL`, Docker Hub, AWS SNS secrets가 있는지 확인
 - Redis 제거 확인:
   - `docker ps`에 Redis 컨테이너가 없어야 한다.
 - 파일 로그 확인:
@@ -90,9 +96,11 @@
    - `docker compose --env-file /home/ubuntu/orderrun/.env.ec2 -f docker-compose.ec2.yml --profile ssl run --rm certbot`
 10. EC2 `.env.ec2`의 `NGINX_TEMPLATE`를 `./nginx/templates/ec2-https.conf.template`로 변경한다.
 11. `docker compose --env-file /home/ubuntu/orderrun/.env.ec2 -f docker-compose.ec2.yml up -d --build nginx`로 Nginx를 재생성한다.
+12. 자동화 배포는 `.github/workflows/production-deploy.yml`을 사용한다. `main` push 시 build가 시작되고, deploy job은 GitHub `production` Environment 승인 후 EC2에서 위 production 배포와 SSL 전환 순서를 실행한다.
 
 ## 남은 리스크
 
 - `docker compose pull`은 `DOCKER_IMAGE`가 registry 이미지일 때 안정적이다. 로컬 빌드만 사용할 경우 이미지 pull 정책을 조정해야 한다.
 - HTTPS 템플릿은 `api.kkobung-dan.store`를 인증서 이름으로 사용한다. certbot 발급 시 `api.kkobung-dan.store`를 첫 번째 `-d` 값으로 유지해야 한다.
 - Nginx는 app 컨테이너와 독립 실행되므로, 아직 뜨지 않은 upstream 라우트만 실패하고 다른 라우트는 계속 동작한다.
+- EC2 security group이 443 inbound를 허용하지 않으면 workflow의 HTTPS 검증 단계가 실패한다.

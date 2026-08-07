@@ -1,0 +1,184 @@
+name: Production Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/orderrun
+  DOCKER_IMAGE_TAG: prod
+  DOCKER_IMAGE_SHA_TAG: prod-${{ github.sha }}
+  PROD_DOMAIN: api.kkobung-dan.store
+  STAGING_DOMAIN: staging-api.kkobung-dan.store
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_SHA_TAG }}
+          cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:prod-buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:prod-buildcache,mode=max
+          platforms: linux/amd64
+
+      - name: Image digest
+        run: echo "Image pushed with digest ${{ steps.docker_build.outputs.digest }}"
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_EC2_SSH_KEY }}" | base64 -d > ~/.ssh/production.pem
+          chmod 600 ~/.ssh/production.pem
+          ssh-keyscan -H "${{ secrets.PROD_EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Create deployment directory on EC2
+        run: |
+          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
+            mkdir -p ~/orderrun
+          EOF
+
+      - name: Copy deployment files to EC2
+        run: |
+          scp -i ~/.ssh/production.pem \
+            docker-compose.ec2.yml \
+            "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}:~/orderrun/"
+
+          scp -i ~/.ssh/production.pem \
+            scripts/deploy.sh \
+            scripts/install-logrotate.sh \
+            scripts/staging-smoke-test.sh \
+            "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}:~/orderrun/"
+
+          scp -i ~/.ssh/production.pem -r \
+            nginx \
+            "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}:~/orderrun/"
+
+      - name: Deploy production application
+        run: |
+          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
+            set -euo pipefail
+
+            cd ~/orderrun
+            mkdir -p logs/staging/app logs/prod/app logs/nginx keys
+
+            cat > .env.ec2 << 'ENVEOF'
+          DOCKER_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
+          EC2_PUBLIC_IP=${{ secrets.PROD_EC2_HOST }}
+          PROD_DOMAIN=${{ env.PROD_DOMAIN }}
+          STAGING_DOMAIN=${{ env.STAGING_DOMAIN }}
+          NGINX_TEMPLATE=./nginx/templates/ec2-http.conf.template
+          SERVER_HOST=0.0.0.0
+          SERVER_PORT=8000
+          STAGING_APP_ENV=staging
+          STAGING_APP_DEBUG=false
+          STAGING_SECRET_KEY=staging-not-managed-by-production
+          STAGING_JWT_SECRET=staging-not-managed-by-production
+          STAGING_MYSQL_HOST=staging-not-managed-by-production
+          STAGING_MYSQL_PORT=3306
+          STAGING_MYSQL_USER=staging-not-managed-by-production
+          STAGING_MYSQL_PASSWORD=staging-not-managed-by-production
+          STAGING_MYSQL_DATABASE=staging-not-managed-by-production
+          STAGING_AWS_SNS_REGION=${{ secrets.AWS_SNS_REGION }}
+          STAGING_AWS_SNS_ACCESS_KEY_ID=${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
+          STAGING_AWS_SNS_SECRET_ACCESS_KEY=${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+          STAGING_AWS_SNS_SMS_SENDER_ID=Kkobongdan
+          STAGING_AWS_SNS_SMS_TYPE=Transactional
+          STAGING_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
+          PROD_APP_ENV=production
+          PROD_APP_DEBUG=false
+          PROD_SECRET_KEY=${{ secrets.PROD_JWT_SECRET }}
+          PROD_JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+          PROD_MYSQL_HOST=${{ secrets.PROD_MYSQL_HOST }}
+          PROD_MYSQL_PORT=${{ secrets.PROD_MYSQL_PORT }}
+          PROD_MYSQL_USER=${{ secrets.PROD_MYSQL_USER }}
+          PROD_MYSQL_PASSWORD=${{ secrets.PROD_MYSQL_PASSWORD }}
+          PROD_MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}
+          PROD_AWS_SNS_REGION=${{ secrets.AWS_SNS_REGION }}
+          PROD_AWS_SNS_ACCESS_KEY_ID=${{ secrets.AWS_SNS_ACCESS_KEY_ID }}
+          PROD_AWS_SNS_SECRET_ACCESS_KEY=${{ secrets.AWS_SNS_SECRET_ACCESS_KEY }}
+          PROD_AWS_SNS_SMS_SENDER_ID=Kkobongdan
+          PROD_AWS_SNS_SMS_TYPE=Transactional
+          PROD_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
+          LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
+          ENVEOF
+
+            chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
+
+            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh
+            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build nginx
+          EOF
+
+      - name: Verify production HTTP
+        run: |
+          sleep 30
+          curl -f "http://${{ env.PROD_DOMAIN }}/v1/health" || exit 1
+          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
+            test "$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' orderrun-app-prod)" = "healthy"
+          EOF
+
+      - name: Issue certificate and enable HTTPS
+        run: |
+          ssh -i ~/.ssh/production.pem "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}" << 'EOF'
+            set -euo pipefail
+
+            cd ~/orderrun
+
+            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml --profile ssl run --rm certbot
+            sed -i.bak 's#^NGINX_TEMPLATE=.*#NGINX_TEMPLATE=./nginx/templates/ec2-https.conf.template#' .env.ec2
+            docker compose --env-file .env.ec2 -f docker-compose.ec2.yml up -d --build nginx
+          EOF
+
+      - name: Verify production HTTPS and staging
+        run: |
+          sleep 30
+          curl -f "https://${{ env.PROD_DOMAIN }}/v1/health" || exit 1
+          curl -f "http://${{ secrets.PROD_EC2_HOST }}/v1/health" || exit 1
+          curl -f "https://${{ env.STAGING_DOMAIN }}/v1/health" || exit 1
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/production.pem
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "Deployment successful to production environment"
+          else
+            echo "Deployment failed"
+            exit 1
+          fi

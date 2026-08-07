@@ -8,7 +8,8 @@ on:
 
 env:
   DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/orderrun
-  DOCKER_IMAGE_TAG: staging-${{ github.sha }}
+  DOCKER_IMAGE_TAG: staging
+  DOCKER_IMAGE_SHA_TAG: staging-${{ github.sha }}
 
 jobs:
   build:
@@ -37,7 +38,7 @@ jobs:
           push: true
           tags: |
             ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
-            ${{ env.DOCKER_IMAGE_NAME }}:staging-latest
+            ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_SHA_TAG }}
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:staging-buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE_NAME }}:staging-buildcache,mode=max
           platforms: linux/amd64
