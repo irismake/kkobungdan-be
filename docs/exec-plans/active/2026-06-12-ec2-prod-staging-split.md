@@ -71,6 +71,9 @@
   - `Production Deploy` workflow가 `production` Environment 승인 후 실행되는지 확인
   - `main` push 빌드 이미지 태그가 `prod`, `prod-${sha}`로 push되는지 확인
   - `production` Environment에 `PROD_EC2_HOST`, `PROD_EC2_USERNAME`, `PROD_EC2_SSH_KEY`, `PROD_MYSQL_*`, `PROD_JWT_SECRET`, `LETSENCRYPT_EMAIL`, Docker Hub, AWS SNS secrets가 있는지 확인
+- Production API 문서 차단 확인:
+  - `curl -I https://api.kkobung-dan.store/docs`가 404를 반환하는지 확인
+  - `curl -I https://api.kkobung-dan.store/openapi.json`이 404를 반환하는지 확인
 - Redis 제거 확인:
   - `docker ps`에 Redis 컨테이너가 없어야 한다.
 - 파일 로그 확인:

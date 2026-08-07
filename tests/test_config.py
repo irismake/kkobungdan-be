@@ -5,6 +5,7 @@ import logging
 from app.core.config import Settings
 from app.core.logging import setup_logging
 from app.core.logging import settings as global_settings
+from app.main import _api_docs_enabled, _api_docs_path
 
 
 def test_settings_load_without_oauth_or_email_values():
@@ -54,6 +55,13 @@ def test_settings_logging_defaults_are_console_only():
     assert settings.log_dir == "/app/logs"
     assert settings.log_file_enabled is False
     assert settings.log_retention_days == 14
+
+
+def test_api_docs_are_disabled_in_production(monkeypatch):
+    monkeypatch.setattr("app.main.settings.app_env", "production")
+
+    assert _api_docs_enabled() is False
+    assert _api_docs_path() is None
 
 
 def test_setup_logging_writes_daily_file_when_enabled(tmp_path, monkeypatch):
