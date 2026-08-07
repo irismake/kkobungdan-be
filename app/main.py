@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 _scheduler = AsyncIOScheduler()
 
 
+def _api_docs_enabled() -> bool:
+    return settings.app_env.lower() != "production"
+
+
+def _api_docs_path() -> str | None:
+    return "/docs" if _api_docs_enabled() else None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     notification_listener.register_all()
@@ -64,8 +72,9 @@ app = FastAPI(
     title="OrderRun API",
     description="심부름 요청, 제안, 미션, 인증을 제공하는 OrderRun 백엔드 API입니다.",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=_api_docs_path(),
+    redoc_url="/redoc" if _api_docs_enabled() else None,
+    openapi_url="/openapi.json" if _api_docs_enabled() else None,
 )
 
 # CORS middleware
@@ -91,7 +100,7 @@ async def root():
     return {
         "message": "Welcome to OrderRun API",
         "version": "0.1.0",
-        "docs": "/docs",
+        "docs": _api_docs_path(),
     }
 
 
