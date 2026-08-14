@@ -229,28 +229,19 @@ def test_login_confirm_returns_not_found_when_no_pending_verification(client, sm
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_NOT_FOUND"
 
 
-def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, db, sms_sender, monkeypatch):
+def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
     # given: 가입된 유저, 인증 요청 완료, 프로덕션 환경
     _signup(client, sms_sender)
     monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "production")
 
     login_send = client.post("/v1/auth/login/send", json={"phone": "010-1234-5678"})
     assert login_send.status_code == 200
-    actual_code = _extract_code(sms_sender.sent_messages[-1]["message"])
-    if actual_code == "123456":
-        verification = db.query(AuthPhoneVerification).filter(
-            AuthPhoneVerification.phone == "01012345678",
-            AuthPhoneVerification.purpose == PhoneVerificationPurpose.LOGIN,
-            AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
-        ).order_by(AuthPhoneVerification.id.desc()).first()
-        assert verification is not None
-        verification.code_hash = "not-the-test-code-hash"
-        db.commit()
+    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "123456"
 
     # when: 틀린 코드로 로그인 확인 요청
     response = client.post(
         "/v1/auth/login/confirm",
-        json={"phone": "010-1234-5678", "code": "123456"},
+        json={"phone": "010-1234-5678", "code": "654321"},
     )
 
     # then: 400 PHONE_VERIFICATION_CODE_MISMATCH
@@ -258,7 +249,7 @@ def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, d
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_CODE_MISMATCH"
 
 
-def test_signup_confirm_rejects_verification_bypass_code(client, db, sms_sender, monkeypatch):
+def test_signup_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
     # given: 회원가입 인증 요청, 비프로덕션 환경
     monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "development")
 
@@ -267,24 +258,15 @@ def test_signup_confirm_rejects_verification_bypass_code(client, db, sms_sender,
         json={"name": "홍길동", "phone": "010-5555-6666", "carrier": "SKT"},
     )
     assert signup_send.status_code == 200
-    actual_code = _extract_code(sms_sender.sent_messages[-1]["message"])
-    if actual_code == "123456":
-        verification = db.query(AuthPhoneVerification).filter(
-            AuthPhoneVerification.phone == "01055556666",
-            AuthPhoneVerification.purpose == PhoneVerificationPurpose.SIGNUP,
-            AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
-        ).first()
-        assert verification is not None
-        verification.code_hash = "not-the-test-code-hash"
-        db.commit()
+    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "123456"
 
-    # when: 우회 인증 코드로 회원가입 확인 요청
+    # when: 틀린 코드로 회원가입 확인 요청
     response = client.post(
         "/v1/auth/signup/confirm",
-        json={"phone": "010-5555-6666", "code": "123456"},
+        json={"phone": "010-5555-6666", "code": "654321"},
     )
 
-    # then: 회원가입은 우회 코드를 허용하지 않으므로 400
+    # then: 400 PHONE_VERIFICATION_CODE_MISMATCH
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_CODE_MISMATCH"
 

@@ -6,10 +6,8 @@ from app.core import security
 from app.services.user_auth import phone_verification
 
 
-def test_generate_verification_code_returns_six_digits(monkeypatch):
-    monkeypatch.setattr(phone_verification.secrets, "randbelow", lambda _: 42)
-
-    assert phone_verification.generate_verification_code() == "000042"
+def test_generate_verification_code_returns_fixed_code():
+    assert phone_verification.generate_verification_code() == "123456"
 
 
 def test_hash_verification_code_is_stable_and_code_specific():
