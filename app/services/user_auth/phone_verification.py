@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import secrets
 from datetime import timedelta
 
 from app.core.config import settings
@@ -17,7 +16,7 @@ VERIFICATION_CODE_MAX_ATTEMPTS = 5
 
 
 def generate_verification_code() -> str:
-    return f"{secrets.randbelow(1_000_000):06d}"
+    return LOCAL_TEST_VERIFICATION_CODE
 
 
 def hash_verification_code(code: str) -> str:
