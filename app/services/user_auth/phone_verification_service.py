@@ -18,6 +18,8 @@ from app.schemas.user import AuthVerificationSendResponse
 from app.services.user_auth.phone_verification import (
     VERIFICATION_CODE_MAX_ATTEMPTS,
     VERIFICATION_CODE_TTL,
+    VERIFICATION_SEND_MAX_COUNT,
+    VERIFICATION_SEND_WINDOW,
     build_verification_message,
     generate_verification_code,
     hash_verification_code,
@@ -44,10 +46,12 @@ class PhoneVerificationService:
         name: str | None = None,
         carrier: str | None = None,
     ) -> AuthVerificationSendResponse:
-        if self.has_active_pending(db, purpose, phone):
-            raise api_error(AppError.PHONE_VERIFICATION_ALREADY_SENT)
+        if self.is_send_rate_limited(db, purpose, phone):
+            raise api_error(AppError.PHONE_VERIFICATION_SEND_RATE_LIMITED)
         if self.sms_sender is None:
             raise api_error(AppError.SMS_SENDER_NOT_CONFIGURED)
+
+        self.expire_pending(db, purpose, phone)
 
         code = generate_verification_code()
         now = utcnow_naive()
@@ -70,23 +74,59 @@ class PhoneVerificationService:
         return AuthVerificationSendResponse(phone=phone, expires_at=verification.expires_at)
 
     @staticmethod
-    def has_active_pending(
+    def expire_pending(
+        db: Session,
+        purpose: PhoneVerificationPurpose,
+        phone: str,
+    ) -> None:
+        """Invalidate earlier codes so only the newest one can be confirmed."""
+        db.query(AuthPhoneVerification).filter(
+            AuthPhoneVerification.purpose == purpose,
+            AuthPhoneVerification.phone == phone,
+            AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
+        ).update(
+            {AuthPhoneVerification.status: PhoneVerificationStatus.EXPIRED},
+            synchronize_session=False,
+        )
+        db.commit()
+
+    @staticmethod
+    def is_send_rate_limited(
         db: Session,
         purpose: PhoneVerificationPurpose,
         phone: str,
     ) -> bool:
-        now = utcnow_naive()
-        return (
+        """True when sends within the window reached the limit.
+
+        Only sends made after the latest successful verification are counted,
+        so a completed signup or login resets the quota.
+        """
+        window_start = utcnow_naive() - VERIFICATION_SEND_WINDOW
+        last_verified_at = (
+            db.query(AuthPhoneVerification.verified_at)
+            .filter(
+                AuthPhoneVerification.purpose == purpose,
+                AuthPhoneVerification.phone == phone,
+                AuthPhoneVerification.status == PhoneVerificationStatus.VERIFIED,
+                AuthPhoneVerification.verified_at.isnot(None),
+            )
+            .order_by(AuthPhoneVerification.verified_at.desc())
+            .limit(1)
+            .scalar()
+        )
+        if last_verified_at is not None and last_verified_at > window_start:
+            window_start = last_verified_at
+
+        sent_count = (
             db.query(AuthPhoneVerification)
             .filter(
                 AuthPhoneVerification.purpose == purpose,
                 AuthPhoneVerification.phone == phone,
-                AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
-                AuthPhoneVerification.expires_at > now,
+                AuthPhoneVerification.sent_at > window_start,
             )
-            .first()
-            is not None
+            .count()
         )
+        return sent_count >= VERIFICATION_SEND_MAX_COUNT
 
     @staticmethod
     def verify(
