@@ -50,3 +50,31 @@ def check_and_cancel_expired_payment_proposals(db_factory: Callable[[], Session]
         raise
     finally:
         db.close()
+
+
+def send_pending_payment_reminders(db_factory: Callable[[], Session] = SessionLocal) -> int:
+    """
+    Remind orderers whose proposals are still awaiting payment 30 minutes after creation.
+
+    This function should be called periodically (e.g., every 10 minutes) by a scheduler.
+    """
+    db = db_factory()
+    try:
+        reminded_count = ProposalService.send_payment_reminders(db)
+
+        notification_ids = pop_pending_notification_ids(db)
+        if notification_ids:
+            get_notification_worker().flush_pending(db_factory, notification_ids)
+
+        if reminded_count > 0:
+            logger.info(
+                f"Sent {reminded_count} payment reminder(s) at {datetime.now(timezone.utc)}"
+            )
+
+        return reminded_count
+
+    except Exception as e:
+        logger.error(f"Error sending payment reminders: {str(e)}", exc_info=True)
+        raise
+    finally:
+        db.close()

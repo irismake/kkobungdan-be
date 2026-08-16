@@ -1,8 +1,9 @@
 """Admin API router."""
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
+from app.core.firebase import get_notification_worker
 from app.core.errors import AppError
 from app.core.openapi import (
     OFFER_RESOLVED_EXAMPLE,
@@ -18,11 +19,18 @@ from app.schemas.common import PageResponse
 from app.schemas.proposal_report import ProposalReportResponse
 from app.models.proposal_report import ProposalReportStatus
 from app.services.offer.offer_service import OfferService
+from app.services.notification_outbox import pop_pending_notification_ids
 from app.services.proposal.proposal_service import ProposalService
 from app.services.proposal.proposal_report_service import ProposalReportService
 
 
 router = APIRouter(prefix="/admin", tags=["관리자"])
+
+
+def _queue_created_notifications(background_tasks: BackgroundTasks, db: Session) -> None:
+    notification_ids = pop_pending_notification_ids(db)
+    if notification_ids:
+        background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal, notification_ids)
 
 
 @router.get(
@@ -83,6 +91,7 @@ def reject_proposal_report(report_id: int, db: Session = Depends(get_db)) -> Api
 )
 def confirm_payment(
     proposal_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
@@ -99,6 +108,7 @@ def confirm_payment(
         db=db,
         proposal_id=proposal_id,
     )
+    _queue_created_notifications(background_tasks, db)
 
     return ApiResponse(
         success=True,

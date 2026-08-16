@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.events.base import EventBus
 from app.events.offer_events import OfferCreatedEvent, OfferAcceptedEvent
-from app.events.proposal_events import PaymentExpiredProposalCancelledEvent
+from app.events.proposal_events import (
+    PaymentExpiredProposalCancelledEvent,
+    PaymentReminderDueEvent,
+    ProposalPaymentConfirmedEvent,
+)
 from app.events.execution_events import (
     DisputeRaisedByOrdererEvent,
     DisputeRaisedByRunnerEvent,
@@ -100,6 +104,18 @@ def on_offer_created(event: OfferCreatedEvent, db: Session) -> None:
 
 
 def on_offer_accepted(event: OfferAcceptedEvent, db: Session) -> None:
+    db.add(_pending(
+        db=db,
+        user_id=event.orderer_id,
+        notification_type=NotificationType.PROPOSAL_MATCHED,
+        title="미션이 시작됐어요! 🏃",
+        body="지원자를 선택하셨어요! 미션을 바로 시작해보세요.",
+        related_entity_type="offer",
+        related_entity_id=event.offer_id,
+        status=_initial_status(db, event.orderer_id),
+        data={"offer_id": event.offer_id, "proposal_id": event.proposal_id},
+    ))
+
     db.add(_pending(
         db=db,
         user_id=event.accepted_runner_id,
@@ -204,6 +220,34 @@ def on_payment_expired_proposal_cancelled(event: PaymentExpiredProposalCancelled
     ))
 
 
+def on_proposal_payment_confirmed(event: ProposalPaymentConfirmedEvent, db: Session) -> None:
+    db.add(_pending(
+        db=db,
+        user_id=event.orderer_id,
+        notification_type=NotificationType.PAYMENT_COMPLETED,
+        title="게시물이 등록됐어요! 🎉",
+        body="웨이팅비 입금이 확인됐어요. 지금 바로 지원자를 기다려보세요!",
+        related_entity_type="proposal",
+        related_entity_id=event.proposal_id,
+        status=_initial_status(db, event.orderer_id),
+        data={"proposal_id": event.proposal_id},
+    ))
+
+
+def on_payment_reminder_due(event: PaymentReminderDueEvent, db: Session) -> None:
+    db.add(_pending(
+        db=db,
+        user_id=event.orderer_id,
+        notification_type=NotificationType.PAYMENT_REMINDER,
+        title="입금이 아직 확인되지 않았어요 🔍",
+        body="웨이팅비 입금이 확인되지 않아 게시물이 등록되지 않았어요. 입금 내역 확인 후 다시 시도해주세요.",
+        related_entity_type="proposal",
+        related_entity_id=event.proposal_id,
+        status=_initial_status(db, event.orderer_id),
+        data={"proposal_id": event.proposal_id},
+    ))
+
+
 def register_all() -> None:
     EventBus.register(OfferCreatedEvent, on_offer_created)
     EventBus.register(OfferAcceptedEvent, on_offer_accepted)
@@ -212,3 +256,5 @@ def register_all() -> None:
     EventBus.register(DisputeRaisedByOrdererEvent, on_dispute_raised_by_orderer)
     EventBus.register(DisputeRaisedByRunnerEvent, on_dispute_raised_by_runner)
     EventBus.register(PaymentExpiredProposalCancelledEvent, on_payment_expired_proposal_cancelled)
+    EventBus.register(ProposalPaymentConfirmedEvent, on_proposal_payment_confirmed)
+    EventBus.register(PaymentReminderDueEvent, on_payment_reminder_due)

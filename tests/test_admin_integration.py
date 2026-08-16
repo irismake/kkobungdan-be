@@ -20,6 +20,76 @@ def test_confirm_payment_posts_holding_proposal_without_request_body(client, db,
     assert proposal.status == ProposalStatus.POSTED
 
 
+def test_confirm_payment_notifies_orderer(client, db, factory, sample_user):
+    sample_user.alarm_enabled = True
+    proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
+    db.commit()
+
+    response = client.post(f"/v1/admin/proposal/{proposal.id}/confirm-payment")
+
+    assert response.status_code == 200
+    notification = (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PAYMENT_COMPLETED)
+        .one()
+    )
+    assert notification.user_id == sample_user.id
+    assert notification.title == "게시물이 등록됐어요! 🎉"
+    assert notification.related_entity_id == proposal.id
+    assert notification.status == NotificationStatus.PENDING
+
+
+def test_send_payment_reminders_targets_only_pending_payments_once(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    sample_user.alarm_enabled = True
+    due = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "독촉 대상")
+    too_fresh = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "30분 미경과")
+    past_deadline = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "24시간 초과")
+    already_paid = factory.proposal(sample_user.id, ProposalStatus.POSTED, "입금 완료")
+
+    due.created_at = now - timedelta(minutes=31)
+    too_fresh.created_at = now - timedelta(minutes=29)
+    past_deadline.created_at = now - timedelta(hours=24, minutes=1)
+    already_paid.created_at = now - timedelta(hours=2)
+    db.commit()
+
+    assert ProposalService.send_payment_reminders(db, now=now) == 1
+
+    notification = (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PAYMENT_REMINDER)
+        .one()
+    )
+    assert notification.related_entity_id == due.id
+    assert notification.title == "입금이 아직 확인되지 않았어요 🔍"
+
+    # 재실행해도 같은 Proposal에 중복 발송하지 않는다.
+    assert ProposalService.send_payment_reminders(db, now=now) == 0
+    assert (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PAYMENT_REMINDER)
+        .count()
+        == 1
+    )
+
+
+def test_send_payment_reminders_skips_notification_when_alarm_disabled(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    sample_user.alarm_enabled = False
+    due = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "독촉 대상")
+    due.created_at = now - timedelta(minutes=31)
+    db.commit()
+
+    assert ProposalService.send_payment_reminders(db, now=now) == 1
+
+    notification = (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PAYMENT_REMINDER)
+        .one()
+    )
+    assert notification.status == NotificationStatus.SKIPPED
+
+
 def test_confirm_payment_rejects_non_holding_proposal(client, db, factory, sample_user):
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 

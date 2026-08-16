@@ -282,6 +282,10 @@ def client(db: Session, sms_sender: RecordingSmsSender, monkeypatch: pytest.Monk
         "app.api.v1.proposal.proposal_router.get_notification_worker",
         lambda: NoopNotificationWorker(),
     )
+    monkeypatch.setattr(
+        "app.api.v1.admin.admin_router.get_notification_worker",
+        lambda: NoopNotificationWorker(),
+    )
 
     with TestClient(app) as test_client:
         yield OpenApiAssertingClient(test_client)
