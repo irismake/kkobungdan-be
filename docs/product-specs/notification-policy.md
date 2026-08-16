@@ -82,9 +82,19 @@
 | 요청자가 분쟁 접수 | 지원자 | `DISPUTE_RAISED` | 분쟁이 접수되었어요 | 요청자가 분쟁을 접수했어요. 앱에서 내용을 확인해주세요. | `POST /v1/proposal/{id}/dispute` |
 | 지원자가 분쟁 접수 | 요청자 | `DISPUTE_RAISED` | 분쟁이 접수되었어요 | 지원자가 분쟁을 접수했어요. 앱에서 내용을 확인해주세요. | `POST /v1/offer/{id}/dispute` |
 
+### 결제 관련
+
+| 이벤트 | 수신자 | NotificationType | 타이틀 | 내용 | 트리거 |
+|---|---|---|---|---|---|
+| 24시간 미입금 자동 취소 | 요청자 | `PROPOSAL_CANCELLED` | 입금 기한이 지나 요청이 취소됐어요 | '{제목}' 요청이 24시간 내 미입금으로 취소됐어요. 다시 등록해주세요. | 스케줄러 (`cancel_expired_payment_proposals`, 1시간 주기) |
+
+`HOLDING`은 입금 전 단계라 아직 매칭된 지원자가 없다. 따라서 수신자는 요청자 1인이다. 스케줄러가 1시간 주기로 동작하므로 취소 시점과 알림 발송 사이에 최대 1시간 지연이 있을 수 있다.
+
+이 알림만 `related_entity_type="proposal"`, `related_entity_id=<proposal_id>`로 저장하며, `data`에는 `proposal_id`만 담는다.
+
 ### 저장 필드와 FCM data
 
-현재 1차 알림은 모두 `related_entity_type="offer"`, `related_entity_id=<offer_id>`로 저장한다. 이 값은 서버 알림 조회/관리용 DB 필드이며 FCM data payload에는 포함하지 않는다.
+결제 관련 알림을 제외한 1차 알림은 모두 `related_entity_type="offer"`, `related_entity_id=<offer_id>`로 저장한다. 이 값은 서버 알림 조회/관리용 DB 필드이며 FCM data payload에는 포함하지 않는다.
 
 `notifications.data`에는 JSON 문자열로 `offer_id`, `proposal_id`를 저장한다. `NotificationWorker`가 FCM으로 전달하는 data payload는 다음 JSON 형태다.
 
@@ -119,7 +129,7 @@
 | 만남 확인 리마인드 1차 (2시간 후) | 시간 기반 트리거 | APScheduler 시간 조건 추가 |
 | 만남 확인 리마인드 2차 (6시간 후) | 시간 기반 트리거 | 동일 |
 | 웨이팅비 정산 완료 | 정산 실행 API 없음 | 정산 처리 API 구현 |
-| 입금 미확인 시간 초과 (30분) | 시간 기반 트리거 | 스케줄러 조건 추가 |
+| 입금 미확인 독촉 (30분) | 시간 기반 트리거 | 스케줄러 조건 추가. 24시간 미입금 자동 취소 알림과는 별개 이벤트다. |
 | 게시물 만료 (48시간 미선택) | 시간 기반 트리거 | 스케줄러 조건 추가 |
 
 ---

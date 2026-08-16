@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.events.base import EventBus
 from app.events.offer_events import OfferCreatedEvent, OfferAcceptedEvent
+from app.events.proposal_events import PaymentExpiredProposalCancelledEvent
 from app.events.execution_events import (
     DisputeRaisedByOrdererEvent,
     DisputeRaisedByRunnerEvent,
@@ -189,6 +190,20 @@ def on_dispute_raised_by_runner(event: DisputeRaisedByRunnerEvent, db: Session) 
     ))
 
 
+def on_payment_expired_proposal_cancelled(event: PaymentExpiredProposalCancelledEvent, db: Session) -> None:
+    db.add(_pending(
+        db=db,
+        user_id=event.orderer_id,
+        notification_type=NotificationType.PROPOSAL_CANCELLED,
+        title="입금 기한이 지나 요청이 취소됐어요",
+        body=f"'{event.proposal_title}' 요청이 24시간 내 미입금으로 취소됐어요. 다시 등록해주세요.",
+        related_entity_type="proposal",
+        related_entity_id=event.proposal_id,
+        status=_initial_status(db, event.orderer_id),
+        data={"proposal_id": event.proposal_id},
+    ))
+
+
 def register_all() -> None:
     EventBus.register(OfferCreatedEvent, on_offer_created)
     EventBus.register(OfferAcceptedEvent, on_offer_accepted)
@@ -196,3 +211,4 @@ def register_all() -> None:
     EventBus.register(MeetingConfirmedByOrdererEvent, on_meeting_confirmed_by_orderer)
     EventBus.register(DisputeRaisedByOrdererEvent, on_dispute_raised_by_orderer)
     EventBus.register(DisputeRaisedByRunnerEvent, on_dispute_raised_by_runner)
+    EventBus.register(PaymentExpiredProposalCancelledEvent, on_payment_expired_proposal_cancelled)

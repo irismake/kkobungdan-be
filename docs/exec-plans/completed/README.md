@@ -17,3 +17,4 @@
 - [`2026-07-01-user-service-responsibility-refactor.md`](./2026-07-01-user-service-responsibility-refactor.md): 사용자 인증·프로필·탈퇴 서비스 책임 분리
 - [`2026-07-01-api-router-domain-packages.md`](./2026-07-01-api-router-domain-packages.md): API 라우터 도메인 패키지화와 버전별 조립
 - [`2026-08-16-verification-send-rate-limit.md`](./2026-08-16-verification-send-rate-limit.md): 인증번호 재발송 5분 대기 제거와 5분당 3회 발송 제한 전환
+- [`2026-08-16-payment-expired-cancel-notification.md`](./2026-08-16-payment-expired-cancel-notification.md): 24시간 미입금 자동 취소 시 요청자 알림 발송

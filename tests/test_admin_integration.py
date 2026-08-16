@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from app.tasks import payment_checker
+from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.offer import OfferStatus
 from app.models.proposal import ProposalStatus
 from app.services.proposal.proposal_service import ProposalService
@@ -54,9 +55,62 @@ def test_cancel_expired_payment_proposals_only_cancels_holding_after_24_hours(db
     assert expired_posted.status == ProposalStatus.POSTED
 
 
+def test_cancel_expired_payment_proposals_notifies_orderer(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    sample_user.alarm_enabled = True
+    expired = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "만료 요청")
+    fresh = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "정상 요청")
+    expired.created_at = now - timedelta(hours=24, minutes=1)
+    fresh.created_at = now - timedelta(hours=1)
+    db.commit()
+
+    ProposalService.cancel_expired_payment_proposals(db, now=now)
+
+    notifications = (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PROPOSAL_CANCELLED)
+        .all()
+    )
+    assert len(notifications) == 1
+    notification = notifications[0]
+    assert notification.user_id == sample_user.id
+    assert notification.related_entity_type == "proposal"
+    assert notification.related_entity_id == expired.id
+    assert notification.status == NotificationStatus.PENDING
+    assert "만료 요청" in notification.body
+
+
+def test_cancel_expired_payment_proposals_skips_notification_when_alarm_disabled(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    sample_user.alarm_enabled = False
+    expired = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "만료 요청")
+    expired.created_at = now - timedelta(hours=24, minutes=1)
+    db.commit()
+
+    ProposalService.cancel_expired_payment_proposals(db, now=now)
+
+    notification = (
+        db.query(Notification)
+        .filter(Notification.notification_type == NotificationType.PROPOSAL_CANCELLED)
+        .one()
+    )
+    assert notification.status == NotificationStatus.SKIPPED
+
+
+def test_cancel_expired_payment_proposals_creates_no_notification_when_nothing_expired(db, factory, sample_user):
+    now = datetime(2026, 6, 2, 12, 0, 0)
+    fresh = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "정상 요청")
+    fresh.created_at = now - timedelta(hours=1)
+    db.commit()
+
+    assert ProposalService.cancel_expired_payment_proposals(db, now=now) == 0
+    assert db.query(Notification).count() == 0
+
+
 def test_payment_checker_closes_session_and_returns_cancelled_count(monkeypatch):
     class FakeSession:
         closed = False
+        info: dict = {}
 
         def close(self):
             self.closed = True

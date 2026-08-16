@@ -11,6 +11,8 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.firebase import get_notification_worker
+from app.services.notification_outbox import pop_pending_notification_ids
 from app.services.proposal.proposal_service import ProposalService
 
 
@@ -26,6 +28,12 @@ def check_and_cancel_expired_payment_proposals(db_factory: Callable[[], Session]
     db = db_factory()
     try:
         cancelled_count = ProposalService.cancel_expired_payment_proposals(db)
+
+        # No HTTP request context here, so flush the outbox directly instead of
+        # handing the ids to BackgroundTasks like the routers do.
+        notification_ids = pop_pending_notification_ids(db)
+        if notification_ids:
+            get_notification_worker().flush_pending(db_factory, notification_ids)
 
         if cancelled_count > 0:
             logger.info(

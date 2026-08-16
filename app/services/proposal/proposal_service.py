@@ -10,6 +10,7 @@ from app.core.time import utcnow_naive
 from app.core.errors import AppError, api_error
 from app.events.base import EventBus
 from app.events.execution_events import DisputeRaisedByOrdererEvent, MeetingConfirmedByOrdererEvent
+from app.events.proposal_events import PaymentExpiredProposalCancelledEvent
 from app.models.dispute_survey import DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.offer import Offer, OfferStatus
@@ -371,19 +372,28 @@ class ProposalService:
             current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
         cutoff = current_time - timedelta(hours=24)
 
-        cancelled_count = (
+        expired = (
             db.query(Proposal)
             .filter(
                 Proposal.status == ProposalStatus.HOLDING,
                 Proposal.created_at <= cutoff,
             )
-            .update(
-                {
-                    Proposal.status: ProposalStatus.CANCELLED,
-                    Proposal.updated_at: current_time,
-                },
-                synchronize_session=False,
-            )
+            .all()
         )
+        if not expired:
+            return 0
+
+        for proposal in expired:
+            proposal.status = ProposalStatus.CANCELLED
+            proposal.updated_at = current_time
+
+        db.flush()
+        for proposal in expired:
+            EventBus.publish(PaymentExpiredProposalCancelledEvent(
+                proposal_id=proposal.id,
+                orderer_id=proposal.orderer_id,
+                proposal_title=proposal.title,
+            ), db)
+
         db.commit()
-        return cancelled_count
+        return len(expired)
