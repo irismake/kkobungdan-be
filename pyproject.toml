@@ -18,7 +18,10 @@ dependencies = [
     "python-multipart>=0.0.9",
     "boto3>=1.34.0",
     "apscheduler>=3.10.0",
-    "firebase-admin>=6.0.0",
+    # 상한 고정: 7.x에서 AndroidNotification.notification_priority 제거,
+    # messaging.InvalidArgumentError 삭제 등 breaking change가 있었다.
+    # 메이저 업그레이드 시 app/services/fcm_service.py 검증 필요.
+    "firebase-admin>=7.5.0,<8.0.0",
 ]
 
 [project.optional-dependencies]
