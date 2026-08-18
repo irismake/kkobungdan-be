@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +34,24 @@ OPEN_CHAT_OFFER_STATUSES = (
     OfferStatus.DISPUTED,
     OfferStatus.RESOLVED,
 )
+
+# 내 활동 - 수행 기록 화면의 배지 노출 순서. 같은 배지 안에서는 최신순으로 정렬한다.
+# 배지: 대기중 -> 진행중 -> 분쟁중 -> 완료 -> 취소
+OFFER_BADGE_ORDER = (
+    (OfferStatus.WAITING,),
+    (OfferStatus.ACCEPTED, OfferStatus.RUNNER_COMPLETED),
+    (OfferStatus.DISPUTED,),
+    (OfferStatus.ALL_COMPLETED,),
+    (OfferStatus.REJECTED, OfferStatus.CANCELLED, OfferStatus.RESOLVED),
+)
+
+
+def _offer_badge_rank():
+    """배지 순서를 SQL 정렬식으로 변환한다. 매핑에 없는 상태는 맨 뒤로 보낸다."""
+    return case(
+        *[(Offer.status.in_(statuses), rank) for rank, statuses in enumerate(OFFER_BADGE_ORDER)],
+        else_=len(OFFER_BADGE_ORDER),
+    )
 
 
 class OfferService:
@@ -189,7 +208,7 @@ class OfferService:
 
         total = query.count()
         offers = (
-            query.order_by(Offer.created_at.desc(), Offer.id.desc())
+            query.order_by(_offer_badge_rank().asc(), Offer.created_at.desc(), Offer.id.desc())
             .offset(page * size)
             .limit(size)
             .all()

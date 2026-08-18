@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow_naive
@@ -51,6 +52,25 @@ OPEN_CHAT_OFFER_STATUSES = (
     OfferStatus.RESOLVED,
 )
 PUBLIC_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
+
+# 내 활동 - 요청 화면의 배지 노출 순서. 같은 배지 안에서는 최신순으로 정렬한다.
+# 배지: 미입금 -> 대기중 -> 진행중 -> 분쟁중 -> 완료 -> 취소
+PROPOSAL_BADGE_ORDER = (
+    (ProposalStatus.HOLDING,),
+    (ProposalStatus.POSTED, ProposalStatus.OFFERED),
+    (ProposalStatus.MATCHED, ProposalStatus.ORDER_COMPLETED),
+    (ProposalStatus.DISPUTED,),
+    (ProposalStatus.ALL_COMPLETED,),
+    (ProposalStatus.CANCELLED, ProposalStatus.REPORTED, ProposalStatus.RESOLVED),
+)
+
+
+def _proposal_badge_rank():
+    """배지 순서를 SQL 정렬식으로 변환한다. 매핑에 없는 상태는 맨 뒤로 보낸다."""
+    return case(
+        *[(Proposal.status.in_(statuses), rank) for rank, statuses in enumerate(PROPOSAL_BADGE_ORDER)],
+        else_=len(PROPOSAL_BADGE_ORDER),
+    )
 
 
 class ProposalService:
@@ -122,7 +142,7 @@ class ProposalService:
             query = query.filter(Proposal.status.in_(proposal_statuses))
         total = query.count()
         items = (
-            query.order_by(Proposal.deadline.asc(), Proposal.created_at.desc(), Proposal.id.desc())
+            query.order_by(Proposal.created_at.desc(), Proposal.id.desc())
             .offset(page * size)
             .limit(size)
             .all()
@@ -192,7 +212,7 @@ class ProposalService:
 
         total = query.count()
         proposals = (
-            query.order_by(Proposal.deadline.asc(), Proposal.created_at.desc(), Proposal.id.desc())
+            query.order_by(_proposal_badge_rank().asc(), Proposal.created_at.desc(), Proposal.id.desc())
             .offset(page * size)
             .limit(size)
             .all()

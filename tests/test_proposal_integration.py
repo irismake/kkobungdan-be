@@ -95,32 +95,23 @@ def test_list_public_requires_auth_and_supports_multi_status_filter(client, db, 
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_list_public_orders_by_deadline_then_creation_time(client, db, factory, auth_headers, sample_user):
-    later = factory.proposal(sample_user.id, ProposalStatus.POSTED, "later")
-    earlier = factory.proposal(sample_user.id, ProposalStatus.POSTED, "earlier")
-    same_deadline_old = factory.proposal(sample_user.id, ProposalStatus.POSTED, "same-old")
-    same_deadline_new = factory.proposal(sample_user.id, ProposalStatus.POSTED, "same-new")
+def test_list_public_orders_by_latest_creation_time(client, db, factory, auth_headers, sample_user):
+    """홈 화면은 마감 기한과 무관하게 최신 게시글이 최상단에 온다."""
+    oldest = factory.proposal(sample_user.id, ProposalStatus.POSTED, "oldest")
+    middle = factory.proposal(sample_user.id, ProposalStatus.POSTED, "middle")
+    newest = factory.proposal(sample_user.id, ProposalStatus.POSTED, "newest")
 
-    later.deadline = datetime.now(timezone.utc) + timedelta(days=3)
-    later.meeting_at = later.deadline
-    earlier.deadline = datetime.now(timezone.utc) + timedelta(days=1)
-    earlier.meeting_at = earlier.deadline
-    same_deadline = datetime.now(timezone.utc) + timedelta(days=2)
-    same_deadline_old.deadline = same_deadline
-    same_deadline_old.meeting_at = same_deadline
-    same_deadline_new.deadline = same_deadline
-    same_deadline_new.meeting_at = same_deadline
+    # 최신 글일수록 마감이 멀도록 배치해 deadline 정렬이 남아 있으면 실패하게 한다.
+    for proposal, days in ((oldest, 1), (middle, 2), (newest, 3)):
+        proposal.deadline = datetime.now(timezone.utc) + timedelta(days=days)
+        proposal.meeting_at = proposal.deadline
     db.commit()
-    db.refresh(later)
-    db.refresh(earlier)
-    db.refresh(same_deadline_old)
-    db.refresh(same_deadline_new)
 
     response = client.get("/v1/proposal", headers=auth_headers)
 
     assert response.status_code == 200
     ordered_ids = [item["id"] for item in response.json()["data"]["content"]]
-    assert ordered_ids[:4] == [earlier.id, same_deadline_new.id, same_deadline_old.id, later.id]
+    assert ordered_ids[:3] == [newest.id, middle.id, oldest.id]
 
 
 def test_detail_returns_proposal_regardless_of_status(client, db, factory, auth_headers, sample_user):
@@ -258,32 +249,46 @@ def test_list_own_returns_only_current_user_with_offers_and_multi_status_filter(
     }
 
 
-def test_list_own_orders_by_deadline_then_creation_time(client, db, factory, auth_headers, sample_user):
-    later = factory.proposal(sample_user.id, ProposalStatus.POSTED, "later")
-    earlier = factory.proposal(sample_user.id, ProposalStatus.POSTED, "earlier")
-    same_deadline_old = factory.proposal(sample_user.id, ProposalStatus.POSTED, "same-old")
-    same_deadline_new = factory.proposal(sample_user.id, ProposalStatus.POSTED, "same-new")
-
-    later.deadline = datetime.now(timezone.utc) + timedelta(days=3)
-    later.meeting_at = later.deadline
-    earlier.deadline = datetime.now(timezone.utc) + timedelta(days=1)
-    earlier.meeting_at = earlier.deadline
-    same_deadline = datetime.now(timezone.utc) + timedelta(days=2)
-    same_deadline_old.deadline = same_deadline
-    same_deadline_old.meeting_at = same_deadline
-    same_deadline_new.deadline = same_deadline
-    same_deadline_new.meeting_at = same_deadline
+def test_list_own_orders_by_badge_then_latest(client, db, factory, auth_headers, sample_user):
+    """내 활동 - 요청은 배지 순으로 묶이고, 같은 배지 안에서는 최신순이다."""
+    # 생성 순서와 배지 순서를 서로 어긋나게 하고, created_at도 id 순서와 일부러 뒤집어
+    # 배지 순 정렬과 created_at 정렬이 각각 제 역할을 하는지 본다.
+    base = datetime.now(timezone.utc) - timedelta(hours=3)
+    same_deadline = datetime.now(timezone.utc) + timedelta(days=1)
+    rows = [
+        ("미입금-이전", ProposalStatus.HOLDING, 10),
+        ("취소-이전", ProposalStatus.CANCELLED, 20),
+        ("진행중-이전", ProposalStatus.MATCHED, 30),
+        ("완료-이전", ProposalStatus.ALL_COMPLETED, 40),
+        ("대기중-최신", ProposalStatus.POSTED, 90),
+        ("미입금-최신", ProposalStatus.HOLDING, 60),
+        ("분쟁중", ProposalStatus.DISPUTED, 70),
+        ("취소-신고", ProposalStatus.REPORTED, 80),
+        ("대기중-이전", ProposalStatus.OFFERED, 50),
+        ("취소-분쟁해결", ProposalStatus.RESOLVED, 100),
+        ("진행중-최신", ProposalStatus.ORDER_COMPLETED, 110),
+        ("완료-최신", ProposalStatus.ALL_COMPLETED, 120),
+    ]
+    for title, status, minutes in rows:
+        proposal = factory.proposal(sample_user.id, status, title)
+        proposal.created_at = base + timedelta(minutes=minutes)
+        # deadline이 정렬에 끼어들지 않도록 모두 같은 값으로 맞춘다.
+        proposal.deadline = same_deadline
+        proposal.meeting_at = same_deadline
     db.commit()
-    db.refresh(later)
-    db.refresh(earlier)
-    db.refresh(same_deadline_old)
-    db.refresh(same_deadline_new)
 
     response = client.get("/v1/proposal/own", headers=auth_headers)
 
     assert response.status_code == 200
-    ordered_ids = [item["id"] for item in response.json()["data"]["content"]]
-    assert ordered_ids[:4] == [earlier.id, same_deadline_new.id, same_deadline_old.id, later.id]
+    ordered_titles = [item["title"] for item in response.json()["data"]["content"]]
+    assert ordered_titles == [
+        "미입금-최신", "미입금-이전",
+        "대기중-최신", "대기중-이전",
+        "진행중-최신", "진행중-이전",
+        "분쟁중",
+        "완료-최신", "완료-이전",
+        "취소-분쟁해결", "취소-신고", "취소-이전",
+    ]
 
 
 def test_create_proposal_validates_contract_and_stores_holding(client, db, factory, auth_headers, sample_user):

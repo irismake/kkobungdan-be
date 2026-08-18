@@ -519,7 +519,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Proposal 상태 필터. 반복 입력 가능: `status=A&status=B`. 공개 상태(`POSTED`, `OFFERED`)만 반환 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
-| sort | string | X | `createdAt,desc` | 정렬 |
+
+정렬은 고정이다: `createdAt DESC, id DESC` (최신 게시글이 최상단).
 
 #### `GET /v1/proposal/own`
 
@@ -528,7 +529,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Proposal 상태 필터. 반복 입력 가능: `status=A&status=B`. 없으면 전체 상태 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
-| sort | string | X | `createdAt,desc` | 정렬 |
+
+정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
+배지 순서는 미입금(`HOLDING`) → 대기중(`POSTED`, `OFFERED`) → 진행중(`MATCHED`, `ORDER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`CANCELLED`, `REPORTED`, `RESOLVED`)다.
 
 #### `POST /v1/proposal`, `PUT /v1/proposal/{id}`
 
@@ -583,6 +586,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Offer 상태 필터. 반복 입력 가능: `status=A&status=B`. 없으면 전체 상태 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
+
+정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
+배지 순서는 대기중(`WAITING`) → 진행중(`ACCEPTED`, `RUNNER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`REJECTED`, `CANCELLED`, `RESOLVED`)다.
 
 #### `POST /v1/proposal/{proposalId}/confirm-received`
 
