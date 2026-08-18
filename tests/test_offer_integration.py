@@ -353,12 +353,50 @@ def test_get_own_offers_supports_paging_and_multi_status_filter(client, db, fact
     assert response.status_code == 200
     page = response.json()["data"]
     assert page["totalElements"] == 2
-    assert [item["id"] for item in page["content"]] == [accepted.id, waiting.id]
+    assert [item["id"] for item in page["content"]] == [waiting.id, accepted.id]
     assert all("acceptedAt" in item for item in page["content"])
     assert all("runnerConfirmedAt" in item for item in page["content"])
     assert all("ordererConfirmedAt" in item for item in page["content"])
     assert all("deliveryCompletedAt" not in item for item in page["content"])
     assert all("receiptConfirmedAt" not in item for item in page["content"])
+
+
+def test_get_own_offers_orders_by_badge_then_latest(client, db, factory, sample_user):
+    """내 활동 - 수행 기록은 배지 순으로 묶이고, 같은 배지 안에서는 최신순이다."""
+    runner = factory.user("01077770020")
+    # 생성 순서와 배지 순서를 어긋나게 하고, created_at도 id 순서와 일부러 뒤집는다.
+    base = datetime.now(timezone.utc) - timedelta(hours=3)
+    rows = [
+        (OfferStatus.CANCELLED, 10),
+        (OfferStatus.ACCEPTED, 80),
+        (OfferStatus.ALL_COMPLETED, 30),
+        (OfferStatus.WAITING, 40),
+        (OfferStatus.DISPUTED, 50),
+        (OfferStatus.RUNNER_COMPLETED, 20),
+        (OfferStatus.REJECTED, 70),
+        (OfferStatus.RESOLVED, 60),
+    ]
+    for status, minutes in rows:
+        proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
+        db.add(Offer(
+            proposal_id=proposal.id,
+            runner_id=runner.id,
+            status=status,
+            created_at=base + timedelta(minutes=minutes),
+        ))
+    db.commit()
+
+    response = client.get("/v1/offer/own", headers=factory.headers_for(runner))
+
+    assert response.status_code == 200
+    ordered_statuses = [item["status"] for item in response.json()["data"]["content"]]
+    assert ordered_statuses == [
+        "WAITING",
+        "ACCEPTED", "RUNNER_COMPLETED",
+        "DISPUTED",
+        "ALL_COMPLETED",
+        "REJECTED", "RESOLVED", "CANCELLED",
+    ]
 
 
 def test_accept_offer_updates_states_and_timestamps(client, db, factory, sample_user):
@@ -767,7 +805,7 @@ def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, fa
         .one()
     )
     assert notification.related_entity_type == "offer"
-    assert "지원자가 분쟁을 접수" in notification.body
+    assert "꼬붕이 분쟁을 접수" in notification.body
 
 
 def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory, sample_user):
