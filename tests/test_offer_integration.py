@@ -438,11 +438,18 @@ def test_accept_offer_creates_selected_and_rejected_runner_notifications(client,
     assert json.loads(selected_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
     assert rejected_notification.status == NotificationStatus.PENDING
     assert json.loads(rejected_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
+
+    orderer_notification = notification_for(
+        db, sample_user.id, NotificationType.PROPOSAL_MATCHED, selected.id
+    )
+    assert orderer_notification.title == "미션이 시작됐어요! 🏃"
+    assert orderer_notification.status == NotificationStatus.PENDING
+    assert json.loads(orderer_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
     assert (
         db.query(Notification)
         .filter(Notification.user_id == sample_user.id, Notification.related_entity_id == selected.id)
         .count()
-        == 0
+        == 1
     )
 
 

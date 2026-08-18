@@ -59,7 +59,7 @@ TOKEN_EXAMPLE = {
             AppError.VALIDATION_ERROR,
             AppError.SMS_SENDER_NOT_CONFIGURED,
             AppError.PHONE_ALREADY_EXISTS,
-            AppError.PHONE_VERIFICATION_ALREADY_SENT,
+            AppError.PHONE_VERIFICATION_SEND_RATE_LIMITED,
         ),
     },
 )
@@ -111,7 +111,7 @@ def signup_confirm(
             AppError.VALIDATION_ERROR,
             AppError.SMS_SENDER_NOT_CONFIGURED,
             AppError.INVALID_CREDENTIALS,
-            AppError.PHONE_VERIFICATION_ALREADY_SENT,
+            AppError.PHONE_VERIFICATION_SEND_RATE_LIMITED,
         ),
     },
 )
