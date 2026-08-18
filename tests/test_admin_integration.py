@@ -147,8 +147,8 @@ def test_cancel_expired_payment_proposals_notifies_orderer(db, factory, sample_u
     assert notification.related_entity_type == "proposal"
     assert notification.related_entity_id == expired.id
     assert notification.status == NotificationStatus.PENDING
-    assert notification.title == "입금이 완료 되지 않아 요청이 취소되었어요. 😢"
-    assert notification.body.startswith("만료 요청 요청이 24시간 내 미입금으로")
+    assert notification.title.startswith("만료 요청 요청이 24시간 내 미입금으로")
+    assert notification.body == "24시간 이내 입금이 확인되지 않아 요청이 취소 되었어요. 다시 요청 게시글을 올려주세요."
 
 
 def test_cancel_expired_payment_proposals_skips_notification_when_alarm_disabled(db, factory, sample_user):

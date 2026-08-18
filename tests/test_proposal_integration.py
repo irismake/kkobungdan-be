@@ -567,7 +567,7 @@ def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db,
         .one()
     )
     assert notification.related_entity_type == "offer"
-    assert "요청자가 분쟁을 접수" in notification.body
+    assert "행님이 분쟁을 접수" in notification.body
 
 
 def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, factory, auth_headers, sample_user):

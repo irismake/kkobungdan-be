@@ -34,7 +34,7 @@ from app.services.user_auth.user_withdrawal_service import UserWithdrawalService
 
 WITHDRAWAL_REASONS = (
     ("원하는 임무가 많지 않았어요.", False),
-    ("원하는 꼬봉(또는 행님)을 만나기 어려웠어요.", False),
+    ("원하는 꼬붕(또는 행님)을 만나기 어려웠어요.", False),
     ("이용 방법이 어려웠어요.", False),
     ("앱이 자주 오류가 났어요.", False),
     ("다른 회원과 문제가 있었어요.", False),

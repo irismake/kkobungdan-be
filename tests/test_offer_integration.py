@@ -805,7 +805,7 @@ def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, fa
         .one()
     )
     assert notification.related_entity_type == "offer"
-    assert "지원자가 분쟁을 접수" in notification.body
+    assert "꼬붕이 분쟁을 접수" in notification.body
 
 
 def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory, sample_user):
