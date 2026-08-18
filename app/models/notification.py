@@ -20,6 +20,7 @@ class NotificationType(str, enum.Enum):
     EXECUTION_COMPLETED = "execution_completed"
     PAYMENT_COMPLETED = "payment_completed"
     PAYMENT_FAILED = "payment_failed"
+    PAYMENT_REMINDER = "payment_reminder"
     SYSTEM_ANNOUNCEMENT = "system_announcement"
     CUSTOM = "custom"
     OFFER_SUBMITTED = "offer_submitted"

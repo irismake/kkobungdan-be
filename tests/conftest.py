@@ -230,6 +230,15 @@ assert TEST_ENGINE.dialect.name == "mysql", "Tests must use MySQL"
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def register_event_listeners() -> None:
+    """App startup wires notification listeners; mirror it so tests that call
+    services directly (without the `client` fixture) also receive events."""
+    from app.listeners import notification_listener
+
+    notification_listener.register_all()
+
+
 @pytest.fixture(scope="function")
 def db() -> Generator[Session, None, None]:
     Base.metadata.create_all(bind=TEST_ENGINE)
@@ -271,6 +280,10 @@ def client(db: Session, sms_sender: RecordingSmsSender, monkeypatch: pytest.Monk
     )
     monkeypatch.setattr(
         "app.api.v1.proposal.proposal_router.get_notification_worker",
+        lambda: NoopNotificationWorker(),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.admin.admin_router.get_notification_worker",
         lambda: NoopNotificationWorker(),
     )
 

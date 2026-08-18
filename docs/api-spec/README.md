@@ -519,7 +519,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Proposal 상태 필터. 반복 입력 가능: `status=A&status=B`. 공개 상태(`POSTED`, `OFFERED`)만 반환 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
-| sort | string | X | `createdAt,desc` | 정렬 |
+
+정렬은 고정이다: `createdAt DESC, id DESC` (최신 게시글이 최상단).
 
 #### `GET /v1/proposal/own`
 
@@ -528,7 +529,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Proposal 상태 필터. 반복 입력 가능: `status=A&status=B`. 없으면 전체 상태 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
-| sort | string | X | `createdAt,desc` | 정렬 |
+
+정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
+배지 순서는 미입금(`HOLDING`) → 대기중(`POSTED`, `OFFERED`) → 진행중(`MATCHED`, `ORDER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`CANCELLED`, `REPORTED`, `RESOLVED`)다.
 
 #### `POST /v1/proposal`, `PUT /v1/proposal/{id}`
 
@@ -583,6 +586,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | status | array[string] | X | 없음 | Offer 상태 필터. 반복 입력 가능: `status=A&status=B`. 없으면 전체 상태 |
 | page | integer | X | 0 | 페이지 번호 |
 | size | integer | X | 20 | 페이지 크기 |
+
+정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
+배지 순서는 대기중(`WAITING`) → 진행중(`ACCEPTED`, `RUNNER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`REJECTED`, `CANCELLED`, `RESOLVED`)다.
 
 #### `POST /v1/proposal/{proposalId}/confirm-received`
 
@@ -671,7 +677,6 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 404 | `PROPOSAL_NOT_FOUND` | Proposal을 찾을 수 없음 |
 | 404 | `OFFER_NOT_FOUND` | Offer를 찾을 수 없음 |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 사용 중인 전화번호 |
-| 409 | `PHONE_VERIFICATION_ALREADY_SENT` | 만료되지 않은 인증 코드가 이미 있음 |
 | 409 | `DUPLICATE_OFFER` | 동일 Proposal에 중복 Offer 제출 |
 | 409 | `PROPOSAL_NOT_OPEN` | Offer를 받을 수 없는 Proposal 상태 |
 | 409 | `PROPOSAL_NOT_MATCHABLE` | 매칭할 수 없는 Proposal 상태 |
@@ -681,6 +686,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 409 | `OFFER_NOT_ACCEPTABLE` | 수락할 수 없는 Offer 상태 |
 | 409 | `OFFER_NOT_CANCELLABLE` | 취소할 수 없는 Offer 상태 |
 | 409 | `OFFER_NOT_UPDATABLE` | 변경할 수 없는 Offer 상태 |
+| 429 | `PHONE_VERIFICATION_SEND_RATE_LIMITED` | 인증번호 발송 횟수 초과 (5분당 3회) |
 | 500 | `INTERNAL_SERVER_ERROR` | 알 수 없는 서버 오류 |
 
 ## 문서 정본 규칙

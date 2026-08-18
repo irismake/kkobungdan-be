@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow_naive
 from app.core.errors import AppError, api_error
 from app.events.base import EventBus
 from app.events.execution_events import DisputeRaisedByOrdererEvent, MeetingConfirmedByOrdererEvent
+from app.events.proposal_events import (
+    PaymentExpiredProposalCancelledEvent,
+    PaymentReminderDueEvent,
+    ProposalPaymentConfirmedEvent,
+)
 from app.models.dispute_survey import DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
+from app.models.notification import Notification, NotificationType
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.user import User
@@ -20,6 +27,8 @@ from app.schemas.proposal import ProposalDetailResponse, ProposalOwnOfferRespons
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
 
 
+PAYMENT_DEADLINE = timedelta(hours=24)
+PAYMENT_REMINDER_DELAY = timedelta(minutes=30)
 EDITABLE_STATUSES = (ProposalStatus.HOLDING, ProposalStatus.POSTED)
 CANCELLABLE_STATUSES = (ProposalStatus.HOLDING, ProposalStatus.POSTED, ProposalStatus.OFFERED)
 EXECUTION_OFFER_STATUSES = (
@@ -43,6 +52,25 @@ OPEN_CHAT_OFFER_STATUSES = (
     OfferStatus.RESOLVED,
 )
 PUBLIC_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
+
+# 내 활동 - 요청 화면의 배지 노출 순서. 같은 배지 안에서는 최신순으로 정렬한다.
+# 배지: 미입금 -> 대기중 -> 진행중 -> 분쟁중 -> 완료 -> 취소
+PROPOSAL_BADGE_ORDER = (
+    (ProposalStatus.HOLDING,),
+    (ProposalStatus.POSTED, ProposalStatus.OFFERED),
+    (ProposalStatus.MATCHED, ProposalStatus.ORDER_COMPLETED),
+    (ProposalStatus.DISPUTED,),
+    (ProposalStatus.ALL_COMPLETED,),
+    (ProposalStatus.CANCELLED, ProposalStatus.REPORTED, ProposalStatus.RESOLVED),
+)
+
+
+def _proposal_badge_rank():
+    """배지 순서를 SQL 정렬식으로 변환한다. 매핑에 없는 상태는 맨 뒤로 보낸다."""
+    return case(
+        *[(Proposal.status.in_(statuses), rank) for rank, statuses in enumerate(PROPOSAL_BADGE_ORDER)],
+        else_=len(PROPOSAL_BADGE_ORDER),
+    )
 
 
 class ProposalService:
@@ -114,7 +142,7 @@ class ProposalService:
             query = query.filter(Proposal.status.in_(proposal_statuses))
         total = query.count()
         items = (
-            query.order_by(Proposal.deadline.asc(), Proposal.created_at.desc(), Proposal.id.desc())
+            query.order_by(Proposal.created_at.desc(), Proposal.id.desc())
             .offset(page * size)
             .limit(size)
             .all()
@@ -184,7 +212,7 @@ class ProposalService:
 
         total = query.count()
         proposals = (
-            query.order_by(Proposal.deadline.asc(), Proposal.created_at.desc(), Proposal.id.desc())
+            query.order_by(_proposal_badge_rank().asc(), Proposal.created_at.desc(), Proposal.id.desc())
             .offset(page * size)
             .limit(size)
             .all()
@@ -295,6 +323,12 @@ class ProposalService:
         if proposal.status != ProposalStatus.HOLDING:
             raise api_error(AppError.INVALID_STATUS, f"current status: {proposal.status.value}")
         proposal.status = ProposalStatus.POSTED
+        db.flush()
+        EventBus.publish(ProposalPaymentConfirmedEvent(
+            proposal_id=proposal.id,
+            orderer_id=proposal.orderer_id,
+            proposal_title=proposal.title,
+        ), db)
         db.commit()
         db.refresh(proposal)
         return proposal
@@ -363,27 +397,86 @@ class ProposalService:
         return ProposalService.get_proposal_detail(db, proposal.id, orderer_id)
 
     @staticmethod
+    def _as_naive_utc(value: datetime | None) -> datetime:
+        current_time = value or utcnow_naive()
+        if current_time.tzinfo is not None:
+            current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
+        return current_time
+
+    @staticmethod
+    def send_payment_reminders(db: Session, now: datetime | None = None) -> int:
+        """Remind orderers whose proposals are still awaiting payment after 30 minutes.
+
+        Proposals older than the 24h deadline are skipped because they are about to be
+        cancelled, and each proposal is reminded only once.
+        """
+
+        current_time = ProposalService._as_naive_utc(now)
+        due_before = current_time - PAYMENT_REMINDER_DELAY
+        cancel_cutoff = current_time - PAYMENT_DEADLINE
+
+        pending = (
+            db.query(Proposal)
+            .filter(
+                Proposal.status == ProposalStatus.HOLDING,
+                Proposal.created_at <= due_before,
+                Proposal.created_at > cancel_cutoff,
+            )
+            .all()
+        )
+        if not pending:
+            return 0
+
+        already_reminded = {
+            proposal_id
+            for (proposal_id,) in db.query(Notification.related_entity_id).filter(
+                Notification.notification_type == NotificationType.PAYMENT_REMINDER,
+                Notification.related_entity_id.in_([p.id for p in pending]),
+            )
+        }
+        targets = [p for p in pending if p.id not in already_reminded]
+        if not targets:
+            return 0
+
+        for proposal in targets:
+            EventBus.publish(PaymentReminderDueEvent(
+                proposal_id=proposal.id,
+                orderer_id=proposal.orderer_id,
+                proposal_title=proposal.title,
+            ), db)
+
+        db.commit()
+        return len(targets)
+
+    @staticmethod
     def cancel_expired_payment_proposals(db: Session, now: datetime | None = None) -> int:
         """Cancel proposals still awaiting payment after 24 hours from creation."""
 
-        current_time = now or utcnow_naive()
-        if current_time.tzinfo is not None:
-            current_time = current_time.astimezone(timezone.utc).replace(tzinfo=None)
-        cutoff = current_time - timedelta(hours=24)
+        current_time = ProposalService._as_naive_utc(now)
+        cutoff = current_time - PAYMENT_DEADLINE
 
-        cancelled_count = (
+        expired = (
             db.query(Proposal)
             .filter(
                 Proposal.status == ProposalStatus.HOLDING,
                 Proposal.created_at <= cutoff,
             )
-            .update(
-                {
-                    Proposal.status: ProposalStatus.CANCELLED,
-                    Proposal.updated_at: current_time,
-                },
-                synchronize_session=False,
-            )
+            .all()
         )
+        if not expired:
+            return 0
+
+        for proposal in expired:
+            proposal.status = ProposalStatus.CANCELLED
+            proposal.updated_at = current_time
+
+        db.flush()
+        for proposal in expired:
+            EventBus.publish(PaymentExpiredProposalCancelledEvent(
+                proposal_id=proposal.id,
+                orderer_id=proposal.orderer_id,
+                proposal_title=proposal.title,
+            ), db)
+
         db.commit()
-        return cancelled_count
+        return len(expired)

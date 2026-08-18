@@ -6,7 +6,7 @@ from datetime import datetime
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, messaging
+    from firebase_admin import credentials, exceptions as firebase_exceptions, messaging
     FIREBASE_AVAILABLE = True
 except ImportError:
     FIREBASE_AVAILABLE = False
@@ -69,7 +69,7 @@ class FCMService:
                 priority=priority,
                 notification=messaging.AndroidNotification(
                     sound="default",
-                    notification_priority="PRIORITY_HIGH" if priority == "high" else "PRIORITY_DEFAULT",
+                    priority="high" if priority == "high" else "default",
                 ),
             )
             apns_config = messaging.APNSConfig(
@@ -91,7 +91,7 @@ class FCMService:
         except messaging.UnregisteredError:
             logger.warning(f"Token is unregistered: {token[:20]}...")
             return FCMSendResult(success=False, error_code="UNREGISTERED", error_message="Device token is no longer valid")
-        except messaging.InvalidArgumentError as e:
+        except firebase_exceptions.InvalidArgumentError as e:
             logger.error(f"Invalid argument when sending to {token[:20]}...: {str(e)}")
             return FCMSendResult(success=False, error_code="INVALID_ARGUMENT", error_message=str(e))
         except messaging.SenderIdMismatchError:

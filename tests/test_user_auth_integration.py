@@ -24,13 +24,17 @@ from app.models.user import (
 )
 from app.services.sms_service import get_sms_sender
 from app.services.proposal.proposal_service import ProposalService
-from app.services.user_auth.phone_verification import VERIFICATION_CODE_MAX_ATTEMPTS
+from app.services.user_auth.phone_verification import (
+    VERIFICATION_CODE_MAX_ATTEMPTS,
+    VERIFICATION_SEND_MAX_COUNT,
+    VERIFICATION_SEND_WINDOW,
+)
 from app.services.user_auth.user_withdrawal_service import UserWithdrawalService
 
 
 WITHDRAWAL_REASONS = (
     ("원하는 임무가 많지 않았어요.", False),
-    ("원하는 꼬봉(또는 행님)을 만나기 어려웠어요.", False),
+    ("원하는 꼬붕(또는 행님)을 만나기 어려웠어요.", False),
     ("이용 방법이 어려웠어요.", False),
     ("앱이 자주 오류가 났어요.", False),
     ("다른 회원과 문제가 있었어요.", False),
@@ -664,6 +668,128 @@ def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, facto
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+def test_signup_verification_resend_is_allowed_within_ttl(client, db, sms_sender):
+    """Resending before the previous code expires is allowed and supersedes it."""
+    phone = "010-9999-1111"
+    normalized = "01099991111"
+
+    first = client.post(
+        "/v1/auth/signup/send",
+        json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+    )
+    assert first.status_code == 200
+
+    resend = client.post(
+        "/v1/auth/signup/send",
+        json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+    )
+    assert resend.status_code == 200
+    assert len(sms_sender.sent_messages) >= 2
+
+    pending = (
+        db.query(AuthPhoneVerification)
+        .filter(
+            AuthPhoneVerification.phone == normalized,
+            AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
+        )
+        .all()
+    )
+    assert len(pending) == 1
+
+    code = _extract_code(sms_sender.sent_messages[-1]["message"])
+    confirm = client.post(
+        "/v1/auth/signup/confirm",
+        json={"phone": phone, "code": code},
+    )
+    assert confirm.status_code == 200
+
+
+def test_signup_verification_send_is_rate_limited(client, db):
+    phone = "010-3333-4444"
+    normalized = "01033334444"
+
+    for _ in range(VERIFICATION_SEND_MAX_COUNT):
+        allowed = client.post(
+            "/v1/auth/signup/send",
+            json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+        )
+        assert allowed.status_code == 200
+
+    limited = client.post(
+        "/v1/auth/signup/send",
+        json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+    )
+    assert limited.status_code == 429
+    assert limited.json()["error"]["code"] == "PHONE_VERIFICATION_SEND_RATE_LIMITED"
+
+    assert (
+        db.query(AuthPhoneVerification)
+        .filter(AuthPhoneVerification.phone == normalized)
+        .count()
+        == VERIFICATION_SEND_MAX_COUNT
+    )
+
+
+def test_verification_send_outside_window_is_allowed(client, db):
+    phone = "010-5555-6666"
+    normalized = "01055556666"
+
+    for _ in range(VERIFICATION_SEND_MAX_COUNT):
+        assert (
+            client.post(
+                "/v1/auth/signup/send",
+                json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+            ).status_code
+            == 200
+        )
+
+    stale = datetime.now(timezone.utc).replace(tzinfo=None) - VERIFICATION_SEND_WINDOW - timedelta(minutes=1)
+    for verification in db.query(AuthPhoneVerification).filter(
+        AuthPhoneVerification.phone == normalized
+    ):
+        verification.sent_at = stale
+    db.commit()
+
+    reopened = client.post(
+        "/v1/auth/signup/send",
+        json={"name": "홍길동", "phone": phone, "carrier": "KT"},
+    )
+    assert reopened.status_code == 200
+
+
+def test_successful_verification_resets_send_rate_limit(client, db, sms_sender):
+    phone = "010-1234-5678"
+    normalized = "01012345678"
+
+    _signup(client, sms_sender)
+
+    # Signup consumed one send and verified it; the quota restarts from there.
+    for _ in range(VERIFICATION_SEND_MAX_COUNT):
+        assert (
+            client.post("/v1/auth/login/send", json={"phone": phone}).status_code == 200
+        )
+
+    limited = client.post("/v1/auth/login/send", json={"phone": phone})
+    assert limited.status_code == 429
+    assert limited.json()["error"]["code"] == "PHONE_VERIFICATION_SEND_RATE_LIMITED"
+
+    verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    latest = (
+        db.query(AuthPhoneVerification)
+        .filter(
+            AuthPhoneVerification.phone == normalized,
+            AuthPhoneVerification.purpose == PhoneVerificationPurpose.LOGIN,
+        )
+        .order_by(AuthPhoneVerification.id.desc())
+        .first()
+    )
+    latest.status = PhoneVerificationStatus.VERIFIED
+    latest.verified_at = verified_at
+    db.commit()
+
+    assert client.post("/v1/auth/login/send", json={"phone": phone}).status_code == 200
+
+
 def test_verification_state_rules(client, db, sms_sender):
     first = client.post(
         "/v1/auth/signup/send",
@@ -674,12 +800,12 @@ def test_verification_state_rules(client, db, sms_sender):
         "/v1/auth/signup/send",
         json={"name": "홍길동", "phone": "01022223333", "carrier": "KT"},
     )
-    assert duplicate.status_code == 409
-    assert duplicate.json()["error"]["code"] == "PHONE_VERIFICATION_ALREADY_SENT"
+    assert duplicate.status_code == 200
 
     verification = db.query(AuthPhoneVerification).filter(
         AuthPhoneVerification.phone == "01022223333",
         AuthPhoneVerification.purpose == PhoneVerificationPurpose.SIGNUP,
+        AuthPhoneVerification.status == PhoneVerificationStatus.PENDING,
     ).first()
     assert verification is not None
     assert verification.status == PhoneVerificationStatus.PENDING
