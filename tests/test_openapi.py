@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from app.core.errors import ERRORS
+from app.core.openapi import ROUTE_LEVEL_ERRORS
 from app.main import app
 from app.models.offer import OfferStatus
 
@@ -41,7 +43,7 @@ def test_auth_signup_send_openapi_examples_match_response_shape():
         "success": False,
         "error": {
             "code": "PHONE_ALREADY_EXISTS",
-            "message": "Phone number already exists",
+            "message": "이미 가입된 휴대폰 번호입니다.",
             "details": None,
         },
         "timestamp": "2026-06-01T12:00:00+09:00",
@@ -122,7 +124,7 @@ def test_representative_success_examples_match_contracts():
     offer_accept = schema["paths"]["/v1/offer/{offer_id}/accept"]["post"]["responses"]["201"]["content"][
         "application/json"
     ]["example"]
-    assert offer_accept["message"] == "제안이 수락되었습니다."
+    assert offer_accept["message"] == "지원이 수락되었습니다."
     assert offer_accept["data"]["proposalStatus"] == "MATCHED"
     assert "missionStatus" not in offer_accept["data"]
     assert "missionId" not in offer_accept["data"]
@@ -406,3 +408,48 @@ def _base_name(node: ast.expr) -> str | None:
     if isinstance(node, ast.Subscript):
         return _base_name(node.value)
     return None
+
+
+def _error_codes_in_openapi() -> set[str]:
+    codes: set[str] = set()
+    for path_item in app.openapi()["paths"].values():
+        for method, operation in path_item.items():
+            if method not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            for status_code, response in operation.get("responses", {}).items():
+                if not str(status_code).startswith(("4", "5")):
+                    continue
+                content = response.get("content", {}).get("application/json", {})
+                for example in content.get("examples", {}).values():
+                    codes.add(example["value"]["error"]["code"])
+    return codes
+
+
+def test_every_catalog_error_code_appears_in_openapi():
+    """카탈로그에 코드를 추가하면 어떤 엔드포인트든 문서화하도록 강제한다."""
+    route_level = {ERRORS[error].code for error in ROUTE_LEVEL_ERRORS}
+    expected = {spec.code for spec in ERRORS.values()} - route_level
+
+    missing = expected - _error_codes_in_openapi()
+
+    assert not missing, f"openapi.json에 없는 에러 코드: {sorted(missing)}"
+
+
+def test_route_level_errors_are_documented_in_api_description():
+    """오퍼레이션에 붙일 수 없는 전역 코드는 API 설명에 남아 있어야 한다."""
+    description = app.openapi()["info"]["description"]
+
+    for error in ROUTE_LEVEL_ERRORS:
+        assert ERRORS[error].code in description
+
+
+def test_internal_server_error_is_declared_on_every_operation():
+    for path, path_item in app.openapi()["paths"].items():
+        for method, operation in path_item.items():
+            if method not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            examples = (
+                operation["responses"]["500"]["content"]["application/json"]["examples"]
+            )
+            codes = {example["value"]["error"]["code"] for example in examples.values()}
+            assert "INTERNAL_SERVER_ERROR" in codes, f"{method.upper()} {path}"

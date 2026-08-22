@@ -79,7 +79,7 @@ def reject_proposal_report(report_id: int, db: Session = Depends(get_db)) -> Api
     response_model=ApiResponse[ProposalResponse],
     status_code=status.HTTP_200_OK,
     summary="입금 확인 (관리자 전용)",
-    description="관리자가 오더러의 입금을 확인하여 제안을 POSTED 상태로 전환합니다.",
+    description="관리자가 오더러의 입금을 확인하여 요청을 POSTED 상태로 전환합니다.",
     responses={
         200: success_response({"success": True, "data": PROPOSAL_EXAMPLE, "message": None}),
         **error_responses(
@@ -118,8 +118,8 @@ def confirm_payment(
 
 @router.get(
     "/proposal/pending-payment",
-    summary="입금 대기 중인 제안 목록 조회 (관리자 전용)",
-    description="관리자가 입금 대기 중인 모든 제안을 조회합니다.",
+    summary="입금 대기 중인 요청 목록 조회 (관리자 전용)",
+    description="관리자가 입금 대기 중인 모든 요청을 조회합니다.",
     responses={
         200: success_response(
             {"success": True, "data": PROPOSAL_PAGE_EXAMPLE["data"]["content"], "message": None}
@@ -162,8 +162,8 @@ def list_pending_payment_proposals(
     "/offer/{offer_id}/resolve",
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
-    summary="제안 분쟁 해결 처리 (관리자 전용)",
-    description="관리자가 분쟁 제안을 해결 완료 상태로 전환합니다.",
+    summary="지원 분쟁 해결 처리 (관리자 전용)",
+    description="관리자가 분쟁 지원을 해결 완료 상태로 전환합니다.",
     responses={
         200: success_response(OFFER_RESOLVED_EXAMPLE),
         **error_responses(
@@ -177,4 +177,4 @@ def resolve_offer(
     db: Session = Depends(get_db),
 ) -> ApiResponse[OfferResponse]:
     offer = OfferService.resolve(db, offer_id=offer_id)
-    return ApiResponse(success=True, data=offer, message="제안 분쟁이 해결되었습니다.")
+    return ApiResponse(success=True, data=offer, message="지원 분쟁이 해결되었습니다.")

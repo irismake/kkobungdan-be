@@ -344,7 +344,7 @@ def test_update_proposal_author_and_status_rules(client, db, factory, auth_heade
             headers=auth_headers,
         )
         assert response.status_code == 200
-        assert response.json()["message"] == "제안이 수정되었습니다."
+        assert response.json()["message"] == "요청이 수정되었습니다."
         assert response.json()["data"]["title"] == "수정된 제목"
         db.refresh(editable)
         assert editable.status == ProposalStatus.HOLDING
@@ -388,7 +388,7 @@ def test_cancel_proposal_author_status_rules_and_rejects_waiting_offers(client, 
     for cancellable in [holding, posted, offered]:
         response = client.post(f"/v1/proposal/{cancellable.id}/cancel", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json()["message"] == "제안이 취소되었습니다."
+        assert response.json()["message"] == "요청이 취소되었습니다."
         assert response.json()["data"]["status"] == "CANCELLED"
 
     db.refresh(waiting_offer)

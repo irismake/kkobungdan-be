@@ -1,13 +1,20 @@
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from app.core import security
+from app.schemas.user import AuthSignupSendRequest
 from app.services.user_auth import phone_verification
+from app.services.user_auth.phone_verification_service import PhoneVerificationService
+from app.services.user_auth.user_auth_service import UserAuthService
 
 
-def test_generate_verification_code_returns_fixed_code():
-    assert phone_verification.generate_verification_code() == "123456"
+def test_generate_verification_code_returns_zero_padded_six_digits(monkeypatch):
+    monkeypatch.setattr(phone_verification.secrets, "randbelow", lambda _: 42)
+
+    assert phone_verification.generate_verification_code() == "000042"
 
 
 def test_hash_verification_code_is_stable_and_code_specific():
@@ -36,17 +43,74 @@ def test_verification_send_rate_limit_policy():
     assert phone_verification.VERIFICATION_SEND_WINDOW == phone_verification.VERIFICATION_CODE_TTL
 
 
-@pytest.mark.parametrize("app_env", ["development", "local", "staging"])
-def test_login_test_code_is_allowed_in_non_production_environments(monkeypatch, app_env):
+def test_demo_verification_code_is_allowed_only_for_demo_login():
+    assert (
+        phone_verification.demo_verification_code(
+            phone_verification.PhoneVerificationPurpose.LOGIN,
+            phone_verification.DEMO_LOGIN_PHONE,
+        )
+        == "123456"
+    )
+
+
+@pytest.mark.parametrize(
+    ("purpose", "phone"),
+    [
+        (phone_verification.PhoneVerificationPurpose.SIGNUP, phone_verification.DEMO_LOGIN_PHONE),
+        (phone_verification.PhoneVerificationPurpose.LOGIN, "01012345678"),
+        (phone_verification.PhoneVerificationPurpose.SIGNUP, "01012345678"),
+        (phone_verification.PhoneVerificationPurpose.LOGIN, "01000000001"),
+        (phone_verification.PhoneVerificationPurpose.SIGNUP, "01000000001"),
+    ],
+)
+def test_demo_verification_code_rejects_other_purpose_or_phone(purpose, phone):
+    assert phone_verification.demo_verification_code(purpose, phone) is None
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production"])
+def test_demo_login_send_persists_fixed_code_without_calling_sms_sender(monkeypatch, app_env):
     monkeypatch.setattr(phone_verification.settings, "app_env", app_env)
+    db = MagicMock()
+    background_tasks = MagicMock()
+    sms_sender = MagicMock()
+    service = PhoneVerificationService(sms_sender=sms_sender)
+    service.is_send_rate_limited = MagicMock(return_value=False)
+    service.expire_pending = MagicMock()
 
-    assert phone_verification.is_login_test_code_allowed("123456") is True
+    response = service.send(
+        db,
+        phone_verification.PhoneVerificationPurpose.LOGIN,
+        phone_verification.DEMO_LOGIN_PHONE,
+        background_tasks,
+    )
+
+    verification = db.add.call_args.args[0]
+    assert verification.code_hash == phone_verification.hash_verification_code("123456")
+    assert response.phone == phone_verification.DEMO_LOGIN_PHONE
+    background_tasks.add_task.assert_not_called()
+    sms_sender.send.assert_not_called()
 
 
-def test_login_test_code_is_rejected_in_production(monkeypatch):
-    monkeypatch.setattr(phone_verification.settings, "app_env", "production")
+def test_demo_login_phone_rejects_signup_before_sms_service():
+    db = MagicMock()
+    verification_service = MagicMock()
+    payload = AuthSignupSendRequest(
+        name="데모 회원가입",
+        phone=phone_verification.DEMO_LOGIN_PHONE,
+        carrier="SKT",
+    )
 
-    assert phone_verification.is_login_test_code_allowed("123456") is False
+    with pytest.raises(HTTPException) as exc_info:
+        UserAuthService.send_signup_verification(
+            db,
+            verification_service,
+            payload,
+            MagicMock(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "PHONE_ALREADY_EXISTS"
+    verification_service.send.assert_not_called()
 
 
 def test_access_token_expiration_is_converted_to_milliseconds(monkeypatch):

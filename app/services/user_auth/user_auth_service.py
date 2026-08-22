@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import BackgroundTasks
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, api_error
@@ -25,7 +26,7 @@ from app.schemas.user import (
     AuthTokenResponse,
     AuthVerificationSendResponse,
 )
-from app.services.user_auth.phone_verification import is_login_test_code_allowed
+from app.services.user_auth.phone_verification import DEMO_LOGIN_PHONE, is_demo_login_phone
 from app.services.user_auth.phone_verification_service import PhoneVerificationService
 from app.services.user_auth.user_profile_service import UserProfileService
 
@@ -39,7 +40,7 @@ class UserAuthService:
         background_tasks: BackgroundTasks,
     ) -> AuthVerificationSendResponse:
         phone = normalize_phone(payload.phone)
-        if UserAuthService._find_user_by_phone(db, phone) is not None:
+        if is_demo_login_phone(phone) or UserAuthService._find_user_by_phone(db, phone) is not None:
             raise api_error(AppError.PHONE_ALREADY_EXISTS)
         return phone_verification.send(
             db,
@@ -58,8 +59,11 @@ class UserAuthService:
         background_tasks: BackgroundTasks,
     ) -> AuthVerificationSendResponse:
         phone = normalize_phone(payload.phone)
-        if UserAuthService._find_user_by_phone(db, phone) is None:
-            raise api_error(AppError.INVALID_CREDENTIALS)
+        user = UserAuthService._find_user_by_phone(db, phone)
+        if user is None and is_demo_login_phone(phone):
+            user = UserAuthService._create_demo_login_user(db)
+        if user is None:
+            raise api_error(AppError.PHONE_NOT_REGISTERED)
         return phone_verification.send(
             db,
             PhoneVerificationPurpose.LOGIN,
@@ -117,13 +121,12 @@ class UserAuthService:
         if user is None:
             raise api_error(AppError.USER_NOT_FOUND)
 
-        if not is_login_test_code_allowed(payload.code):
-            phone_verification.verify(
-                db,
-                PhoneVerificationPurpose.LOGIN,
-                phone,
-                payload.code,
-            )
+        phone_verification.verify(
+            db,
+            PhoneVerificationPurpose.LOGIN,
+            phone,
+            payload.code,
+        )
 
         user.update_last_login_at(utcnow_naive())
         if payload.fcm_token is not None:
@@ -154,6 +157,28 @@ class UserAuthService:
     @staticmethod
     def _find_user_by_phone(db: Session, phone: str) -> User | None:
         return db.query(User).filter(User.phone == phone, User.deleted.is_(False)).first()
+
+    @staticmethod
+    def _create_demo_login_user(db: Session) -> User:
+        now = utcnow_naive()
+        user = User(
+            name="오더런 데모",
+            phone=DEMO_LOGIN_PHONE,
+            phone_verified_at=now,
+            last_login_at=None,
+            alarm_enabled=True,
+        )
+        db.add(user)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing = UserAuthService._find_user_by_phone(db, DEMO_LOGIN_PHONE)
+            if existing is None:
+                raise
+            return existing
+        db.refresh(user)
+        return user
 
     @staticmethod
     def _build_tokens(user: User) -> AuthTokenResponse:

@@ -110,7 +110,7 @@ def signup_confirm(
         **error_responses(
             AppError.VALIDATION_ERROR,
             AppError.SMS_SENDER_NOT_CONFIGURED,
-            AppError.INVALID_CREDENTIALS,
+            AppError.PHONE_NOT_REGISTERED,
             AppError.PHONE_VERIFICATION_SEND_RATE_LIMITED,
         ),
     },

@@ -5,6 +5,7 @@
 - Base URL: `/v1`
 - Content-Type: `application/json`
 - 인증: `Authorization: Bearer {access_token}`
+- 에러 코드 정본: [`error-codes.md`](./error-codes.md)
 - 구현 갭 점검: [`implementation-gaps.md`](./implementation-gaps.md)
 - FCM 알림 payload: [`notification-fcm-payload.md`](./notification-fcm-payload.md)
 - 도메인 정책 정본: [`../domain.md`](../domain.md)
@@ -62,10 +63,13 @@
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | success | boolean | 실패 응답은 `false` |
-| error.code | string | `ErrorCode`의 외부 코드 |
-| error.message | string | 사용자에게 전달 가능한 에러 메시지 |
-| error.details | string, object, null | 상세 정보. 없을 수 있음 |
+| error.code | string | 클라이언트가 분기하는 유일한 기준. 전체 목록은 [`error-codes.md`](./error-codes.md) |
+| error.message | string | 사용자에게 그대로 노출 가능한 한국어 문구. 분기 조건으로 쓰지 않는다 |
+| error.details | string, null | 상세 정보. 대부분 `null`이며 검증 실패 시 `"필드명: 사유"` |
 | timestamp | string | 에러 발생 시각 |
+
+라우트 404·405와 서버 내부 미처리 예외를 포함해 **모든** 실패 응답이 이 봉투를 탄다.
+코드별 의미와 인증 실패 시 강제 로그아웃 판정 규칙은 [`error-codes.md`](./error-codes.md)를 정본으로 한다.
 
 ### Swagger 문서화 규칙
 
@@ -667,7 +671,6 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 400 | `PROPOSAL_DEPOSIT_INVALID` | 보증금이 0원 미만 |
 | 400 | `PHONE_VERIFICATION_EXPIRED` | 전화번호 인증 코드 만료 |
 | 400 | `PHONE_VERIFICATION_CODE_MISMATCH` | 전화번호 인증 코드 불일치 |
-| 401 | `INVALID_CREDENTIALS` | 인증 정보 오류 |
 | 401 | `INVALID_TOKEN` | 유효하지 않은 토큰 |
 | 401 | `EXPIRED_TOKEN` | 만료된 토큰 |
 | 403 | `FORBIDDEN` | 권한 없음 |

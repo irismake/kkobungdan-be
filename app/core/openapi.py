@@ -12,6 +12,37 @@ from app.schemas.common import ErrorResponse
 EXAMPLE_TIMESTAMP = "2026-06-01T12:00:00+09:00"
 
 
+# 특정 엔드포인트가 아니라 앱 전역에서 발생하는 에러.
+# INTERNAL_SERVER_ERROR는 어느 엔드포인트에서든 날 수 있으므로 모든 오퍼레이션에 주입한다.
+# NOT_FOUND·METHOD_NOT_ALLOWED는 매칭되는 오퍼레이션이 없을 때만 발생해 특정 오퍼레이션에
+# 속할 수 없으므로, 주입하지 않고 API 설명에 문서화한다.
+GLOBAL_OPERATION_ERRORS: tuple[AppError, ...] = (AppError.INTERNAL_SERVER_ERROR,)
+ROUTE_LEVEL_ERRORS: tuple[AppError, ...] = (AppError.NOT_FOUND, AppError.METHOD_NOT_ALLOWED)
+
+
+def apply_global_error_responses(schema: dict[str, Any]) -> None:
+    """Attach app-wide error responses to every operation in a generated schema."""
+    has_error_model = "ErrorResponse" in schema.get("components", {}).get("schemas", {})
+
+    for path_item in schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if not isinstance(operation, dict) or "responses" not in operation:
+                continue
+            for error in GLOBAL_OPERATION_ERRORS:
+                spec = ERRORS[error]
+                response = operation["responses"].setdefault(
+                    str(spec.http_status),
+                    {"description": "실패 응답", "content": {"application/json": {}}},
+                )
+                json_content = response.setdefault("content", {}).setdefault("application/json", {})
+                if has_error_model:
+                    json_content.setdefault("schema", {"$ref": "#/components/schemas/ErrorResponse"})
+                json_content.setdefault("examples", {}).setdefault(
+                    error.value,
+                    {"summary": spec.code, "value": error_response_example(error)},
+                )
+
+
 def error_response_example(error: AppError, details: str | None = None) -> dict[str, Any]:
     spec = ERRORS[error]
     return {
@@ -330,12 +361,12 @@ PROPOSAL_CREATE_EXAMPLE = {
 PROPOSAL_UPDATE_EXAMPLE = {
     "success": True,
     "data": {**PROPOSAL_HOLDING_EXAMPLE, "title": "수정된 제목"},
-    "message": "제안이 수정되었습니다.",
+    "message": "요청이 수정되었습니다.",
 }
 PROPOSAL_CANCEL_EXAMPLE = {
     "success": True,
     "data": PROPOSAL_CANCELLED_EXAMPLE,
-    "message": "제안이 취소되었습니다.",
+    "message": "요청이 취소되었습니다.",
 }
 PROPOSAL_RECEIVED_EXAMPLE = {
     "success": True,
@@ -472,7 +503,7 @@ OFFER_PAGE_EXAMPLE = {
     "message": "Success",
 }
 OFFER_LIST_EXAMPLE = {"success": True, "data": [OFFER_EXAMPLE], "message": "Success"}
-OFFER_CREATE_EXAMPLE = {"success": True, "data": OFFER_EXAMPLE, "message": "제안이 제출되었습니다."}
+OFFER_CREATE_EXAMPLE = {"success": True, "data": OFFER_EXAMPLE, "message": "지원이 접수되었습니다."}
 OFFER_DETAIL_EXAMPLE = {"success": True, "data": OFFER_EXAMPLE, "message": "Success"}
 OFFER_ACCEPTED_DETAIL_EXAMPLE = OFFER_DETAIL_EXAMPLES["accepted"]
 OFFER_COMPLETE_DELIVERY_EXAMPLES = {
@@ -508,13 +539,13 @@ OFFER_ACCEPT_EXAMPLE = {
         "runnerLevel": EXAMPLE_RUNNER_LEVEL,
         "acceptedAt": EXAMPLE_CREATED_AT,
     },
-    "message": "제안이 수락되었습니다.",
+    "message": "지원이 수락되었습니다.",
 }
 
 OFFER_RESOLVED_EXAMPLE = {
     "success": True,
     "data": OFFER_RESOLVED_STATUS_EXAMPLE,
-    "message": "제안 분쟁이 해결되었습니다.",
+    "message": "지원 분쟁이 해결되었습니다.",
 }
 
 SETTLEMENT_ACCOUNT_EXAMPLE = {

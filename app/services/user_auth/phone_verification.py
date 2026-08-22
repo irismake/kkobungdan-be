@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from datetime import timedelta
 
 from app.core.config import settings
+from app.models.user import PhoneVerificationPurpose
 
 
-LOCAL_TEST_VERIFICATION_CODE = "123456"
-LOGIN_TEST_CODE_ALLOWED_ENVS = {"development", "local", "staging"}
+DEMO_VERIFICATION_CODE = "123456"
+DEMO_LOGIN_PHONE = "01000000000"
 VERIFICATION_CODE_TTL_MINUTES = 5
 VERIFICATION_CODE_TTL = timedelta(minutes=VERIFICATION_CODE_TTL_MINUTES)
 VERIFICATION_CODE_MAX_ATTEMPTS = 5
@@ -18,7 +20,7 @@ VERIFICATION_SEND_WINDOW = VERIFICATION_CODE_TTL
 
 
 def generate_verification_code() -> str:
-    return LOCAL_TEST_VERIFICATION_CODE
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def hash_verification_code(code: str) -> str:
@@ -32,5 +34,13 @@ def build_verification_message(code: str) -> str:
     )
 
 
-def is_login_test_code_allowed(code: str) -> bool:
-    return code == LOCAL_TEST_VERIFICATION_CODE and settings.app_env.lower() in LOGIN_TEST_CODE_ALLOWED_ENVS
+def demo_verification_code(
+    purpose: PhoneVerificationPurpose,
+    phone: str,
+) -> str | None:
+    is_demo_login = purpose == PhoneVerificationPurpose.LOGIN and phone == DEMO_LOGIN_PHONE
+    return DEMO_VERIFICATION_CODE if is_demo_login else None
+
+
+def is_demo_login_phone(phone: str) -> bool:
+    return phone == DEMO_LOGIN_PHONE

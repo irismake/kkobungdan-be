@@ -61,7 +61,7 @@ class OfferService:
     def _get_proposal(db: Session, proposal_id: int) -> Proposal:
         proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
         if proposal is None:
-            raise api_error(AppError.OFFER_PROPOSAL_NOT_FOUND)
+            raise api_error(AppError.PROPOSAL_NOT_FOUND)
         return proposal
 
     @staticmethod

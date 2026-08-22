@@ -15,3 +15,4 @@
 | TD-005 | 인프라 | staging 배포 workflow, Dockerfile, EC2 compose flow는 FastAPI env 계약과 계속 정렬돼야 한다. | 배포 실패와 환경 불일치 위험 | env template와 deploy script를 설정 변경 시 함께 갱신 |
 | TD-006 | 인증 | 인증번호 발송 제한이 휴대폰 번호 단위라 번호를 바꿔가며 반복 요청하는 남용은 막지 못한다. 클라이언트는 제거된 409 `PHONE_VERIFICATION_ALREADY_SENT` 대신 429 `PHONE_VERIFICATION_SEND_RATE_LIMITED`를 처리해야 한다. | SMS 비용 증가, 앱의 구 에러 코드 처리 미갱신 시 재발송 UX 오작동 | 클라이언트 429 대응 확인 후 IP 기준 제한 도입 검토 |
 | TD-007 | 알림 | 시간 기반 알림이 APScheduler 1시간 주기에 묶여 있어 미입금 취소 알림이 최대 1시간 지연된다. 30분 입금 독촉과 만료 전 사전 예고 알림은 아직 미구현이다. | 사용자가 취소 사실을 늦게 인지, 입금 전환율 개선 기회 손실 | 스케줄러 주기 조정 검토, 30분 독촉 알림을 별도 계획으로 설계 |
+| TD-008 | 알림 | `NotificationType` 열거형에 코드 참조가 없는 멤버가 남아 있다 (`SYSTEM_ANNOUNCEMENT`, `EXECUTION_STARTED`, `PAYMENT_FAILED` 등). 죽은 디스패처 메서드를 제거하며 참조가 사라졌지만, `notifications.notification_type` 컬럼에 기존 레코드 값이 있을 수 있어 열거형은 그대로 두었다. | 실제로 쓰이는 알림 종류를 코드만 보고 판단하기 어렵다 | 운영 DB에서 각 값의 레코드 수를 확인한 뒤 미사용 멤버 제거 계획 수립 |

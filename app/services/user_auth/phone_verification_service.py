@@ -21,6 +21,7 @@ from app.services.user_auth.phone_verification import (
     VERIFICATION_SEND_MAX_COUNT,
     VERIFICATION_SEND_WINDOW,
     build_verification_message,
+    demo_verification_code,
     generate_verification_code,
     hash_verification_code,
 )
@@ -48,12 +49,13 @@ class PhoneVerificationService:
     ) -> AuthVerificationSendResponse:
         if self.is_send_rate_limited(db, purpose, phone):
             raise api_error(AppError.PHONE_VERIFICATION_SEND_RATE_LIMITED)
-        if self.sms_sender is None:
+        fixed_demo_code = demo_verification_code(purpose, phone)
+        if self.sms_sender is None and fixed_demo_code is None:
             raise api_error(AppError.SMS_SENDER_NOT_CONFIGURED)
 
         self.expire_pending(db, purpose, phone)
 
-        code = generate_verification_code()
+        code = fixed_demo_code or generate_verification_code()
         now = utcnow_naive()
         verification = AuthPhoneVerification(
             purpose=purpose,
@@ -70,7 +72,9 @@ class PhoneVerificationService:
         db.commit()
         db.refresh(verification)
 
-        background_tasks.add_task(self._send_sms_safely, phone, build_verification_message(code))
+        # Demo login never reaches the SMS provider, including in staging.
+        if fixed_demo_code is None:
+            background_tasks.add_task(self._send_sms_safely, phone, build_verification_message(code))
         return AuthVerificationSendResponse(phone=phone, expires_at=verification.expires_at)
 
     @staticmethod

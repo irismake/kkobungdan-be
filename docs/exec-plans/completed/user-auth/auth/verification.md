@@ -25,9 +25,9 @@
 - `POST /v1/auth/login/confirm`
   - 성공 시 `lastLoginAt` 이 갱신되고, `fcmToken` 이 있으면 저장된다.
   - 코드 mismatch / 만료 / 없음 에 대한 에러 코드가 정확히 반환된다.
-  - `development`/`staging` 의 `123456` 테스트 코드는 기존 사용자에 한해 pending 없이 성공한다.
-  - `production` 의 `123456` 은 pending verification 과 실제 코드 일치 없이는 실패한다.
-  - 회원가입 confirm 은 `123456` 테스트 코드 우회를 허용하지 않는다.
+  - 일반 전화번호는 환경과 무관하게 pending verification 없이 `123456`로 성공하지 않는다.
+  - 로그인 데모 번호는 발송 요청 후 `123456`로 성공하며 SMS 공급자를 호출하지 않는다.
+  - 회원가입은 데모 예외 없이 발송된 실제 인증번호를 검증한다.
 - `POST /v1/auth/refresh`
   - 유효한 refresh token 으로 새 access token 을 발급한다.
   - invalid / expired / wrong type token 은 401 `INVALID_TOKEN` 이다.

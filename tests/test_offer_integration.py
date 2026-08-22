@@ -66,7 +66,7 @@ def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, d
 
     assert response.status_code == 201
     body = response.json()
-    assert body["message"] == "제안이 제출되었습니다."
+    assert body["message"] == "지원이 접수되었습니다."
     assert body["data"] == {
         "id": body["data"]["id"],
         "proposalId": proposal.id,
@@ -415,7 +415,7 @@ def test_accept_offer_updates_states_and_timestamps(client, db, factory, sample_
 
     assert response.status_code == 201
     body = response.json()
-    assert body["message"] == "제안이 수락되었습니다."
+    assert body["message"] == "지원이 수락되었습니다."
     assert body["data"]["proposalId"] == proposal.id
     assert body["data"]["offerId"] == selected.id
     assert body["data"]["proposalStatus"] == "MATCHED"

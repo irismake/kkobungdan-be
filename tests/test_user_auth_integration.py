@@ -25,6 +25,7 @@ from app.models.user import (
 from app.services.sms_service import get_sms_sender
 from app.services.proposal.proposal_service import ProposalService
 from app.services.user_auth.phone_verification import (
+    DEMO_LOGIN_PHONE,
     VERIFICATION_CODE_MAX_ATTEMPTS,
     VERIFICATION_SEND_MAX_COUNT,
     VERIFICATION_SEND_WINDOW,
@@ -184,29 +185,43 @@ def test_signup_confirm_rejects_blank_fcm_token(client, sms_sender):
     assert signup_confirm.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_login_confirm_succeeds_with_verification_bypass_code(client, sms_sender, monkeypatch):
-    # given: 가입된 유저, 비프로덕션 환경
-    _signup(client, sms_sender)
-    monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "development")
+def test_demo_login_uses_fixed_code_without_sending_sms(client, db, sms_sender):
+    # given: 로그인 데모 사용자가 아직 없는 DB
+    assert db.query(User).filter(User.phone == DEMO_LOGIN_PHONE).first() is None
     sent_count = len(sms_sender.sent_messages)
 
-    # when: 우회 인증 코드로 로그인 확인 요청
+    # when: 데모 번호로 발송 후 고정 코드를 확인
+    send = client.post("/v1/auth/login/send", json={"phone": DEMO_LOGIN_PHONE})
+    assert send.status_code == 200
     response = client.post(
         "/v1/auth/login/confirm",
-        json={"phone": "010-1234-5678", "code": "123456"},
+        json={"phone": DEMO_LOGIN_PHONE, "code": "123456"},
     )
 
-    # then: 로그인 성공, SMS 미전송
+    # then: 로그인 계정이 복구되고 SMS 없이 로그인 성공
     assert response.status_code == 200
     assert response.json()["data"]["accessToken"]
     assert len(sms_sender.sent_messages) == sent_count
+    user = db.query(User).filter(User.phone == DEMO_LOGIN_PHONE).first()
+    assert user is not None
+    assert user.name == "오더런 데모"
 
 
-def test_login_confirm_returns_user_not_found_when_user_does_not_exist(client, monkeypatch):
-    # given: 존재하지 않는 유저, 비프로덕션 환경
-    monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "development")
+def test_demo_login_phone_rejects_signup_without_sending_sms(client, sms_sender):
+    sent_count = len(sms_sender.sent_messages)
 
-    # when: 우회 인증 코드로 로그인 확인 요청
+    response = client.post(
+        "/v1/auth/signup/send",
+        json={"name": "데모 회원가입", "phone": DEMO_LOGIN_PHONE, "carrier": "SKT"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PHONE_ALREADY_EXISTS"
+    assert len(sms_sender.sent_messages) == sent_count
+
+
+def test_login_confirm_returns_user_not_found_when_user_does_not_exist(client):
+    # when: 존재하지 않는 일반 번호로 로그인 확인 요청
     response = client.post(
         "/v1/auth/login/confirm",
         json={"phone": "010-9999-8888", "code": "123456"},
@@ -217,10 +232,9 @@ def test_login_confirm_returns_user_not_found_when_user_does_not_exist(client, m
     assert response.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
-def test_login_confirm_returns_not_found_when_no_pending_verification(client, sms_sender, monkeypatch):
-    # given: 가입된 유저, 인증 요청 없음, 프로덕션 환경
+def test_login_confirm_returns_not_found_when_no_pending_verification(client, sms_sender):
+    # given: 가입된 일반 유저, 인증 요청 없음
     _signup(client, sms_sender)
-    monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "production")
 
     # when: 코드 확인 요청
     response = client.post(
@@ -234,13 +248,16 @@ def test_login_confirm_returns_not_found_when_no_pending_verification(client, sm
 
 
 def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
-    # given: 가입된 유저, 인증 요청 완료, 프로덕션 환경
+    # given: 가입된 유저와 임의 인증번호
     _signup(client, sms_sender)
-    monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "production")
+    monkeypatch.setattr(
+        "app.services.user_auth.phone_verification_service.generate_verification_code",
+        lambda: "234567",
+    )
 
     login_send = client.post("/v1/auth/login/send", json={"phone": "010-1234-5678"})
     assert login_send.status_code == 200
-    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "123456"
+    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "234567"
 
     # when: 틀린 코드로 로그인 확인 요청
     response = client.post(
@@ -254,15 +271,18 @@ def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, s
 
 
 def test_signup_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
-    # given: 회원가입 인증 요청, 비프로덕션 환경
-    monkeypatch.setattr("app.services.user_auth.phone_verification.settings.app_env", "development")
+    # given: 일반 번호의 임의 회원가입 인증번호
+    monkeypatch.setattr(
+        "app.services.user_auth.phone_verification_service.generate_verification_code",
+        lambda: "234567",
+    )
 
     signup_send = client.post(
         "/v1/auth/signup/send",
         json={"name": "홍길동", "phone": "010-5555-6666", "carrier": "SKT"},
     )
     assert signup_send.status_code == 200
-    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "123456"
+    assert _extract_code(sms_sender.sent_messages[-1]["message"]) == "234567"
 
     # when: 틀린 코드로 회원가입 확인 요청
     response = client.post(
@@ -899,6 +919,18 @@ def test_signup_send_persists_verification_even_if_background_sms_fails(client, 
     ).first()
     assert verification is not None
     assert verification.status == PhoneVerificationStatus.PENDING
+
+
+def test_login_send_on_unregistered_phone_returns_user_not_found(client, db):
+    """미가입 번호는 인증 실패가 아니라 대상 부재다. 401이면 클라 인터셉터가 세션을 건드린다."""
+    response = client.post("/v1/auth/login/send", json={"phone": "010-9999-8888"})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "USER_NOT_FOUND"
+    assert response.json()["error"]["message"] == "가입되지 않은 휴대폰 번호입니다. 회원가입 후 이용해주세요."
+    assert db.query(AuthPhoneVerification).filter(
+        AuthPhoneVerification.phone == "01099998888"
+    ).count() == 0
 
 
 def test_login_send_persists_verification_even_if_background_sms_fails(client, db, factory):

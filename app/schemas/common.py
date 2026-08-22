@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field
+
+from app.core.errors import ErrorCode
 from typing import Generic, TypeVar, Optional
 from datetime import datetime, timezone
 from math import ceil
@@ -9,7 +11,7 @@ T = TypeVar("T")
 class ErrorDetail(BaseModel):
     """Error detail schema."""
 
-    code: str = Field(..., description="에러 코드")
+    code: ErrorCode = Field(..., description="에러 코드. 이 열거형 밖의 값은 나가지 않는다.")
     message: str = Field(..., description="에러 메시지")
     details: Optional[str] = Field(None, description="상세 정보")
 

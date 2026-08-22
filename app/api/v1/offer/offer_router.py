@@ -31,7 +31,7 @@ from app.services.offer.offer_service import OfferService
 from app.services.notification_outbox import pop_pending_notification_ids
 
 
-router = APIRouter(prefix="/offer", tags=["제안"])
+router = APIRouter(prefix="/offer", tags=["지원"])
 
 
 def _queue_created_notifications(background_tasks: BackgroundTasks, db: Session) -> None:
@@ -45,7 +45,7 @@ class OfferSearchRequest:
         self,
         status: list[OfferStatus] | None = Query(
             None,
-            description="제안 상태 필터. 반복 입력 가능: status=A&status=B",
+            description="지원 상태 필터. 반복 입력 가능: status=A&status=B",
         ),
     ):
         self.statuses = status
@@ -56,7 +56,7 @@ class OfferOwnerSearchRequest:
         self,
         status: list[OfferStatus] | None = Query(
             None,
-            description="제안 상태 필터. 반복 입력 가능: status=A&status=B",
+            description="지원 상태 필터. 반복 입력 가능: status=A&status=B",
         ),
         page: int = Query(0, ge=0, description="페이지 번호(0부터 시작)"),
         size: int = Query(20, ge=1, le=100, description="페이지 크기"),
@@ -70,14 +70,14 @@ class OfferOwnerSearchRequest:
     "",
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="러너 제안 등록",
-    description="러너가 요청에 수행 제안을 등록합니다.",
+    summary="러너 지원 등록",
+    description="러너가 요청에 수행 지원을 등록합니다.",
     responses={
         201: success_response(OFFER_CREATE_EXAMPLE),
         **error_responses(
             AppError.INVALID_TOKEN,
             AppError.VALIDATION_ERROR,
-            AppError.OFFER_PROPOSAL_NOT_FOUND,
+            AppError.PROPOSAL_NOT_FOUND,
             AppError.SELF_OFFER_NOT_ALLOWED,
             AppError.PROPOSAL_NOT_OPEN,
             AppError.DUPLICATE_OFFER,
@@ -92,15 +92,15 @@ def create_offer(
 ) -> ApiResponse[OfferResponse]:
     offer = OfferService.create(db, request=offer_data, runner_id=current_user.id)
     _queue_created_notifications(background_tasks, db)
-    return ApiResponse(success=True, data=offer, message="제안이 제출되었습니다.")
+    return ApiResponse(success=True, data=offer, message="지원이 접수되었습니다.")
 
 
 @router.get(
     "/own",
     response_model=ApiResponse[PageResponse[OfferResponse]],
     status_code=status.HTTP_200_OK,
-    summary="내 제안 목록 조회",
-    description="현재 러너가 등록한 제안 목록을 상태와 페이지 조건으로 조회합니다.",
+    summary="내 지원 목록 조회",
+    description="현재 러너가 등록한 지원 목록을 상태와 페이지 조건으로 조회합니다.",
     responses={
         200: success_response_examples(OFFER_PAGE_EXAMPLES),
         **error_responses(AppError.INVALID_TOKEN, AppError.VALIDATION_ERROR),
@@ -125,11 +125,11 @@ def get_own_offers(
     "",
     response_model=ApiResponse[list[OfferSummaryResponse]],
     status_code=status.HTTP_200_OK,
-    summary="요청별 제안 목록 조회",
-    description="특정 요청에 등록된 제안 목록을 조회합니다.",
+    summary="요청별 지원 목록 조회",
+    description="특정 요청에 등록된 지원 목록을 조회합니다.",
     responses={
         200: success_response_examples(OFFER_LIST_EXAMPLES),
-        **error_responses(AppError.INVALID_TOKEN, AppError.VALIDATION_ERROR, AppError.OFFER_PROPOSAL_NOT_FOUND),
+        **error_responses(AppError.INVALID_TOKEN, AppError.VALIDATION_ERROR, AppError.PROPOSAL_NOT_FOUND),
     },
 )
 def get_offers(
@@ -150,8 +150,8 @@ def get_offers(
     "/{id}",
     response_model=ApiResponse[OfferDetailResponse],
     status_code=status.HTTP_200_OK,
-    summary="제안 상세 조회",
-    description="제안 ID로 제안 상세 정보를 조회합니다.",
+    summary="지원 상세 조회",
+    description="지원 ID로 지원 상세 정보를 조회합니다.",
     responses={
         200: success_response_examples(OFFER_DETAIL_EXAMPLES),
         **error_responses(AppError.INVALID_TOKEN, AppError.OFFER_NOT_FOUND),
@@ -170,8 +170,8 @@ def get_offer(
     "/{offer_id}/accept",
     response_model=ApiResponse[OfferAcceptResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="제안 수락",
-    description="오더러가 제안을 수락하고 요청/제안 상태를 매칭 상태로 전환합니다.",
+    summary="지원 수락",
+    description="오더러가 지원을 수락하고 요청/지원 상태를 매칭 상태로 전환합니다.",
     responses={
         201: success_response(OFFER_ACCEPT_EXAMPLE),
         **error_responses(
@@ -192,7 +192,7 @@ def accept_offer(
 ) -> ApiResponse[OfferAcceptResponse]:
     accepted = OfferService.accept(db, offer_id=offer_id, orderer_id=current_user.id)
     _queue_created_notifications(background_tasks, db)
-    return ApiResponse(success=True, data=accepted, message="제안이 수락되었습니다.")
+    return ApiResponse(success=True, data=accepted, message="지원이 수락되었습니다.")
 
 
 @router.post(
@@ -200,7 +200,7 @@ def accept_offer(
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
     summary="러너 완료 처리",
-    description="러너가 제안을 완료 상태로 변경합니다.",
+    description="러너가 지원을 완료 상태로 변경합니다.",
     responses={
         200: success_response_examples(OFFER_COMPLETE_DELIVERY_EXAMPLES),
         **error_responses(
@@ -232,7 +232,7 @@ def complete_delivery(
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
     summary="러너 분쟁 접수",
-    description="러너가 수락된 제안의 분쟁을 접수합니다.",
+    description="러너가 수락된 지원의 분쟁을 접수합니다.",
     responses={
         200: success_response(OFFER_DISPUTE_EXAMPLE),
         **error_responses(
@@ -265,10 +265,10 @@ def raise_offer_dispute(
 @router.delete(
     "/{offer_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="제안 취소",
-    description="현재 러너가 등록한 제안을 취소합니다.",
+    summary="지원 취소",
+    description="현재 러너가 등록한 지원을 취소합니다.",
     responses={
-        204: no_content_response("제안 취소 성공"),
+        204: no_content_response("지원 취소 성공"),
         **error_responses(
             AppError.INVALID_TOKEN,
             AppError.OFFER_NOT_FOUND,

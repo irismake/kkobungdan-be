@@ -216,7 +216,7 @@ def update_proposal(
     db: Session = Depends(get_db),
 ) -> ApiResponse[ProposalResponse]:
     proposal = ProposalService.update(db, proposal_id=proposal_id, request=request, orderer_id=current_user.id)
-    return ApiResponse(success=True, data=proposal, message="제안이 수정되었습니다.")
+    return ApiResponse(success=True, data=proposal, message="요청이 수정되었습니다.")
 
 
 @router.post(
@@ -241,7 +241,7 @@ def cancel_proposal(
     db: Session = Depends(get_db),
 ) -> ApiResponse[ProposalResponse]:
     proposal = ProposalService.cancel(db, proposal_id=proposal_id, orderer_id=current_user.id)
-    return ApiResponse(success=True, data=proposal, message="제안이 취소되었습니다.")
+    return ApiResponse(success=True, data=proposal, message="요청이 취소되었습니다.")
 
 
 @router.post(

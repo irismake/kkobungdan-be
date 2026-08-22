@@ -154,7 +154,7 @@ def test_notification_detail_and_mark_read_are_user_scoped(client, db, factory, 
     db.refresh(own_unread)
 
     assert missing.status_code == 404
-    assert missing.json()["error"]["code"] == "ERROR"
+    assert missing.json()["error"]["code"] == "NOTIFICATION_NOT_FOUND"
     assert marked.status_code == 200
     assert marked.json()["data"]["marked_count"] == 1
     assert other_notification.read_at is None
@@ -193,7 +193,7 @@ def test_notification_send_and_failure_cases(client, db, auth_headers, sample_us
     assert sent.json()["data"]["title"] == "테스트 알림"
     assert sent.json()["data"]["data"] == "{\"proposalId\":\"1\"}"
     assert missing.status_code == 404
-    assert missing.json()["error"]["code"] == "ERROR"
+    assert missing.json()["error"]["code"] == "NOTIFICATION_NOT_FOUND"
     assert invalid_mark_read.status_code == 400
     assert invalid_mark_read.json()["error"]["code"] == "VALIDATION_ERROR"
     assert unauthenticated.status_code == 401

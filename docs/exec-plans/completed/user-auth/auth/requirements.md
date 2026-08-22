@@ -18,7 +18,7 @@
 - FastAPI 구현은 현재 Java 구현과 같은 요청/응답/에러 코드/상태 전이를 그대로 제공한다.
 - 회원가입과 로그인은 SMS 인증 절차를 반드시 통과해야 한다.
 - phone normalization, code TTL, attempt count, token type 검증, user creation 시점은 현재 구현과 동일해야 한다.
-- 단, `development`/`local`/`staging` 환경의 `POST /v1/auth/login/confirm` 은 기존 사용자에 한해 테스트 코드 `123456` 을 SMS pending 없이 허용한다.
+- 일반 전화번호는 환경과 무관하게 SMS pending 인증을 통과해야 한다. 운영 데모 정책은 [`../../../../product-specs/production-demo-login.md`](../../../../product-specs/production-demo-login.md)가 대체한다.
 
 ## In Scope
 
@@ -86,8 +86,8 @@
 ### `POST /v1/auth/login/confirm`
 
 - 요청은 `phone`, `code`, `fcmToken?` 를 받는다.
-- `development`/`local`/`staging` 에서 `code=123456` 이고 기존 사용자가 있으면 로그인 인증 레코드 없이도 성공한다.
-- 위 테스트 코드 우회는 로그인 확인 API 전용이며 `production` 과 회원가입 확인에는 적용되지 않는다.
+- 일반 전화번호는 환경과 무관하게 최신 `PENDING` 로그인 인증을 검증한다.
+- 데모 로그인 전화번호만 발송 요청에서 `123456` 인증을 생성하고 SMS 공급자를 호출하지 않은 채 일반 인증과 동일하게 확인한다.
 - 최신 `PENDING` 로그인 인증을 찾는다.
 - 인증이 없으면 404 `PHONE_VERIFICATION_NOT_FOUND` 를 반환한다.
 - 만료되었으면 400 `PHONE_VERIFICATION_EXPIRED` 를 반환하고 해당 인증을 `EXPIRED` 로 바꾼다.
