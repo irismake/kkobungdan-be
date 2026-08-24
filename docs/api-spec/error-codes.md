@@ -78,6 +78,7 @@
 | 403 | `FORBIDDEN` | 권한이 없습니다. | |
 | 403 | `PROPOSAL_SELF_REPORT_NOT_ALLOWED` | 본인의 요청은 신고할 수 없습니다. | |
 | 404 | `DISPUTE_EVIDENCE_NOT_FOUND` | 분쟁 증빙을 찾을 수 없습니다. | |
+| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없습니다. | 관리자 웹 전용 |
 | 404 | `NOTIFICATION_NOT_FOUND` | 알림을 찾을 수 없습니다. | |
 | 404 | `NOT_FOUND` | 요청하신 경로를 찾을 수 없습니다. | |
 | 404 | `OFFER_NOT_FOUND` | 지원 내역을 찾을 수 없습니다. | |
@@ -90,6 +91,8 @@
 | 409 | `DUPLICATE_PROPOSAL_REPORT` | 이미 해당 요청을 신고했습니다. | |
 | 409 | `OFFER_NOT_ACCEPTABLE` | 수락할 수 없는 지원 상태입니다. | |
 | 409 | `OFFER_NOT_CANCELLABLE` | 취소할 수 없는 지원 상태입니다. | |
+| 409 | `MISSION_NOT_RESOLVABLE` | 분쟁 중인 미션만 판정할 수 있습니다. | 관리자 웹 전용 |
+| 409 | `MISSION_NOT_SETTLEABLE` | 수행비를 지급할 수 없는 미션 상태입니다. | 관리자 웹 전용 |
 | 409 | `OFFER_NOT_UPDATABLE` | 변경할 수 없는 지원 상태입니다. | |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 가입된 휴대폰 번호입니다. | |
 | 409 | `PROPOSAL_NOT_CANCELLABLE` | 취소할 수 없는 요청 상태입니다. | |
@@ -99,17 +102,18 @@
 | 409 | `PROPOSAL_NOT_REPORTABLE` | 신고할 수 없는 요청 상태입니다. | |
 | 409 | `PROPOSAL_NOT_UPDATABLE` | 업데이트할 수 없는 요청 상태입니다. | |
 | 409 | `PROPOSAL_REPORT_NOT_REVIEWABLE` | 이미 처리된 신고입니다. | |
+| 409 | `SETTLEMENT_ACCOUNT_REQUIRED` | 요청 또는 지원을 등록하려면 정산 계좌를 먼저 등록해야 합니다. | 요청·지원 등록 전 계좌 필요 |
 | 409 | `USER_WITHDRAWAL_BLOCKED` | 진행 중인 임무, 분쟁 또는 정산이 있어 탈퇴할 수 없습니다. 모든 절차가 완료된 후 다시 이용해주세요. | |
 | 429 | `PHONE_VERIFICATION_SEND_RATE_LIMITED` | 인증번호 요청이 너무 많습니다. 잠시 후 다시 시도해주세요. | |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류가 발생했습니다. | |
 | 500 | `SMS_SENDER_NOT_CONFIGURED` | SMS 발신 설정이 완료되지 않았습니다. | |
 
-내부 enum은 43개지만 실제로 나가는 wire code는 **37개**다. 인증 실패 5종, 사용자 부재 2종,
+내부 enum은 50개지만 실제로 나가는 wire code는 **44개**다. 인증 실패 5종, 사용자 부재 2종,
 검증 실패 2종이 각각 하나의 코드로 합쳐지기 때문이며, 클라이언트는 enum 이름이 아니라 위 표의 code 기준으로 매핑한다.
 
 ## Swagger(`/docs`)와의 관계
 
-37개 코드 중 35개는 각 엔드포인트의 실패 응답 예시로 `openapi.json`에 들어 있다.
+44개 코드 중 42개는 각 엔드포인트의 실패 응답 예시로 `openapi.json`에 들어 있다.
 `NOT_FOUND`·`METHOD_NOT_ALLOWED`는 매칭되는 엔드포인트가 없을 때만 발생해 특정 오퍼레이션에 속할 수 없으므로,
 개별 API 문서 대신 API 설명(`info.description`) 상단에 문서화한다.
 
@@ -130,9 +134,9 @@
 운영 환경에서는 항상 `null`이다.
 
 
-## `HTTP_ERROR` — 38번째 값
+## `HTTP_ERROR` — 42번째 값
 
-`error.code`의 스키마 열거형(`ErrorCode`)은 위 표의 37개에 `HTTP_ERROR` 하나를 더해 38개다.
+`error.code`의 스키마 열거형(`ErrorCode`)은 위 표의 44개에 `HTTP_ERROR` 하나를 더해 45개다.
 
 `HTTP_ERROR`는 카탈로그를 거치지 않은 `HTTPException`이 봉투를 탈 때만 나가는 방어용 값이다.
 HTTP 상태는 원래 예외의 것을 그대로 유지하고, 메시지는 `요청을 처리할 수 없습니다.`로 고정된다.

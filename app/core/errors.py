@@ -11,6 +11,8 @@ from fastapi import HTTPException, status
 class ErrorCode(str, Enum):
     """클라이언트에 실제로 나가는 wire code. `error.code`의 유일한 값 집합이다."""
 
+    ADMIN_CREDENTIALS_INVALID = "ADMIN_CREDENTIALS_INVALID"
+    DISPUTE_ALREADY_REVIEWED = "DISPUTE_ALREADY_REVIEWED"
     DISPUTE_EVIDENCE_NOT_FOUND = "DISPUTE_EVIDENCE_NOT_FOUND"
     DUPLICATE_OFFER = "DUPLICATE_OFFER"
     DUPLICATE_PROPOSAL_REPORT = "DUPLICATE_PROPOSAL_REPORT"
@@ -20,6 +22,12 @@ class ErrorCode(str, Enum):
     INVALID_STATUS = "INVALID_STATUS"
     INVALID_TOKEN = "INVALID_TOKEN"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
+    MISSION_NOT_FOUND = "MISSION_NOT_FOUND"
+    MISSION_NOT_RESOLVABLE = "MISSION_NOT_RESOLVABLE"
+    MISSION_NOT_SETTLEABLE = "MISSION_NOT_SETTLEABLE"
+    REFUND_NOT_FOUND = "REFUND_NOT_FOUND"
+    REFUND_NOT_PROCESSABLE = "REFUND_NOT_PROCESSABLE"
+    SETTLEMENT_ACCOUNT_REQUIRED = "SETTLEMENT_ACCOUNT_REQUIRED"
     NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND"
     NOT_FOUND = "NOT_FOUND"
     OFFER_NOT_ACCEPTABLE = "OFFER_NOT_ACCEPTABLE"
@@ -110,6 +118,15 @@ class AppError(str, Enum):
     OFFER_NOT_UPDATABLE = "OFFER_NOT_UPDATABLE"
 
     DISPUTE_EVIDENCE_NOT_FOUND = "DISPUTE_EVIDENCE_NOT_FOUND"
+    DISPUTE_ALREADY_REVIEWED = "DISPUTE_ALREADY_REVIEWED"
+    ADMIN_CREDENTIALS_INVALID = "ADMIN_CREDENTIALS_INVALID"
+
+    MISSION_NOT_FOUND = "MISSION_NOT_FOUND"
+    MISSION_NOT_RESOLVABLE = "MISSION_NOT_RESOLVABLE"
+    MISSION_NOT_SETTLEABLE = "MISSION_NOT_SETTLEABLE"
+    REFUND_NOT_FOUND = "REFUND_NOT_FOUND"
+    REFUND_NOT_PROCESSABLE = "REFUND_NOT_PROCESSABLE"
+    SETTLEMENT_ACCOUNT_REQUIRED = "SETTLEMENT_ACCOUNT_REQUIRED"
 
     NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND"
 
@@ -296,6 +313,46 @@ ERRORS: dict[AppError, ApiErrorSpec] = {
         status.HTTP_404_NOT_FOUND,
         ErrorCode.DISPUTE_EVIDENCE_NOT_FOUND,
         "분쟁 증빙을 찾을 수 없습니다.",
+    ),
+    AppError.ADMIN_CREDENTIALS_INVALID: ApiErrorSpec(
+        status.HTTP_401_UNAUTHORIZED,
+        ErrorCode.ADMIN_CREDENTIALS_INVALID,
+        "아이디 또는 비밀번호가 올바르지 않습니다.",
+    ),
+    AppError.DISPUTE_ALREADY_REVIEWED: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.DISPUTE_ALREADY_REVIEWED,
+        "이미 처리된 분쟁입니다.",
+    ),
+    AppError.MISSION_NOT_FOUND: ApiErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        ErrorCode.MISSION_NOT_FOUND,
+        "미션을 찾을 수 없습니다.",
+    ),
+    AppError.MISSION_NOT_RESOLVABLE: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.MISSION_NOT_RESOLVABLE,
+        "분쟁 중인 미션만 판정할 수 있습니다.",
+    ),
+    AppError.MISSION_NOT_SETTLEABLE: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.MISSION_NOT_SETTLEABLE,
+        "수행비를 지급할 수 없는 미션 상태입니다.",
+    ),
+    AppError.REFUND_NOT_FOUND: ApiErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        ErrorCode.REFUND_NOT_FOUND,
+        "환불을 찾을 수 없습니다.",
+    ),
+    AppError.REFUND_NOT_PROCESSABLE: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.REFUND_NOT_PROCESSABLE,
+        "대기 중인 환불만 처리할 수 있습니다.",
+    ),
+    AppError.SETTLEMENT_ACCOUNT_REQUIRED: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.SETTLEMENT_ACCOUNT_REQUIRED,
+        "요청 또는 지원을 등록하려면 정산 계좌를 먼저 등록해야 합니다.",
     ),
     AppError.NOTIFICATION_NOT_FOUND: ApiErrorSpec(
         status.HTTP_404_NOT_FOUND,

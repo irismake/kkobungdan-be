@@ -28,6 +28,7 @@ from app.core.openapi import (
     HEALTH_EXAMPLE,
     ROOT_EXAMPLE,
     apply_global_error_responses,
+    restore_example_nulls,
     success_response,
 )
 
@@ -46,9 +47,25 @@ def _api_docs_path() -> str | None:
     return "/docs" if _api_docs_enabled() else None
 
 
+def _ensure_admin_account() -> None:
+    """설정된 관리자 계정이 없으면 만든다. 없어도 앱 기동은 막지 않는다."""
+    from app.core.database import SessionLocal
+    from app.services.admin.admin_auth_service import AdminAuthService
+
+    db = SessionLocal()
+    try:
+        AdminAuthService.ensure_admin_account(db)
+    except Exception:  # noqa: BLE001 - 기동 실패로 번지지 않게 한다
+        logger.exception("관리자 계정 보증에 실패했습니다.")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     notification_listener.register_all()
+
+    _ensure_admin_account()
 
     if settings.fcm_credentials_path or settings.fcm_credentials_json:
         init_fcm()
@@ -157,6 +174,7 @@ def custom_openapi():
         description=app.description,
         routes=app.routes,
     )
+    restore_example_nulls(openapi_schema, app.routes)
     apply_global_error_responses(openapi_schema)
 
     for path_item in openapi_schema.get("paths", {}).values():
@@ -164,12 +182,6 @@ def custom_openapi():
             if not isinstance(operation, dict):
                 continue
             operation.get("responses", {}).pop("422", None)
-            for response in operation.get("responses", {}).values():
-                examples = response.get("content", {}).get("application/json", {}).get("examples", {})
-                for example in examples.values():
-                    error = example.get("value", {}).get("error")
-                    if isinstance(error, dict) and "details" not in error:
-                        error["details"] = None
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema

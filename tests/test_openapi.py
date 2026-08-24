@@ -35,6 +35,7 @@ def test_auth_signup_send_openapi_examples_match_response_shape():
     assert success_example == {
         "success": True,
         "data": {"phone": "01012345678", "expiresAt": "2026-06-01T12:05:00+09:00"},
+        "message": None,
     }
 
     conflict_examples = operation["responses"]["409"]["content"]["application/json"]["examples"]
@@ -142,7 +143,8 @@ def test_representative_success_examples_match_contracts():
         "order_completed": "ORDER_COMPLETED",
         "all_completed": "ALL_COMPLETED",
         "disputed": "DISPUTED",
-        "resolved": "RESOLVED",
+        "refund_pending": "REFUND_PENDING",
+        "refunded": "REFUNDED",
         "cancelled": "CANCELLED",
     }
     assert set(proposal_detail_examples) == set(expected_proposal_statuses)
@@ -172,7 +174,7 @@ def test_representative_success_examples_match_contracts():
     assert "receivedConfirmedAt" not in proposal_detail_examples["order_completed"]["value"]["data"]
     assert "deliveryReportedAt" not in proposal_detail_examples["all_completed"]["value"]["data"]
     assert proposal_detail_examples["disputed"]["value"]["data"]["disputedAt"] is not None
-    assert proposal_detail_examples["resolved"]["value"]["data"]["resolvedAt"] is not None
+    assert proposal_detail_examples["refund_pending"]["value"]["data"]["resolvedAt"] is not None
 
     offer_status_by_example = {
         "offered": "WAITING",
@@ -180,7 +182,8 @@ def test_representative_success_examples_match_contracts():
         "order_completed": "ACCEPTED",
         "all_completed": "ALL_COMPLETED",
         "disputed": "DISPUTED",
-        "resolved": "RESOLVED",
+        "refund_pending": "CANCELLED",
+        "refunded": "CANCELLED",
         "cancelled": "CANCELLED",
     }
     for example_name, expected_offer_status in offer_status_by_example.items():
@@ -206,7 +209,6 @@ def test_representative_success_examples_match_contracts():
         "runner_completed": "RUNNER_COMPLETED",
         "all_completed": "ALL_COMPLETED",
         "disputed": "DISPUTED",
-        "resolved": "RESOLVED",
         "rejected": "REJECTED",
         "cancelled": "CANCELLED",
     }
@@ -239,7 +241,6 @@ def test_representative_success_examples_match_contracts():
     assert "deliveryCompletedAt" not in offer_detail_examples["runner_completed"]["value"]["data"]
     assert "receiptConfirmedAt" not in offer_detail_examples["all_completed"]["value"]["data"]
     assert offer_detail_examples["disputed"]["value"]["data"]["disputedAt"] is not None
-    assert offer_detail_examples["resolved"]["value"]["data"]["resolvedAt"] is not None
 
     for path in ("/v1/offer", "/v1/offer/own"):
         operation_examples = schema["paths"][path]["get"]["responses"]["200"]["content"]["application/json"][
@@ -272,7 +273,7 @@ def test_representative_success_examples_match_contracts():
         assert offer_delivery["data"]["runnerConfirmedAt"] is not None
         assert "deliveryCompletedAt" not in offer_delivery["data"]
         assert "receiptConfirmedAt" not in offer_delivery["data"]
-    assert "ordererConfirmedAt" not in offer_delivery_examples["runner_completed"]["value"]["data"]
+    assert offer_delivery_examples["runner_completed"]["value"]["data"]["ordererConfirmedAt"] is None
     assert offer_delivery_examples["all_completed"]["value"]["data"]["ordererConfirmedAt"] is not None
 
     settlement = schema["paths"]["/v1/settlement/account"]["put"]["responses"]["200"]["content"]["application/json"][
@@ -296,16 +297,108 @@ def test_representative_success_examples_match_contracts():
     assert notification["data"]["status"] == "sent"
 
 
+def test_nullable_fields_stay_visible_in_examples():
+    """값이 null인 필드가 예시에서 사라지면 안 된다.
+
+    FastAPI가 스키마를 exclude_none으로 인코딩하기 때문에 후처리로 되돌린다.
+    이 테스트가 깨지면 클라이언트가 nullable 필드를 문서에서 볼 수 없게 된다.
+    """
+    schema = app.openapi()
+
+    mission = schema["paths"]["/v1/admin/missions"]["get"]["responses"]["200"]["content"]["application/json"][
+        "examples"
+    ]["started"]["value"]["data"]["content"][0]
+    for field in ("resolution", "runnerConfirmedAt", "disputedAt", "resolvedAt", "payoutMemo"):
+        assert field in mission, field
+        assert mission[field] is None
+    assert mission["openChatUrl"] == "https://open.kakao.com/o/example"
+    assert {"refunded", "refundedAt", "refundedByAdminId"}.isdisjoint(mission)
+
+    report = schema["paths"]["/v1/admin/proposal-reports"]["get"]["responses"]["200"]["content"]["application/json"][
+        "examples"
+    ]["pending"]["value"]["data"]["content"][0]
+    assert report["reviewedAt"] is None
+
+    signup = schema["paths"]["/v1/auth/signup/send"]["post"]["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert signup["message"] is None
+
+
 def test_auth_login_confirm_request_exposes_explicit_fields():
     schema = app.openapi()["components"]["schemas"]["AuthLoginConfirmRequest"]
 
     assert set(schema["properties"]) == {"phone", "code", "fcmToken"}
 
 
-def test_admin_confirm_payment_has_no_request_body():
+def test_admin_confirm_payment_requires_open_chat_url():
     operation = app.openapi()["paths"]["/v1/admin/proposal/{proposal_id}/confirm-payment"]["post"]
 
-    assert "requestBody" not in operation
+    assert operation["requestBody"]["required"] is True
+    schema = app.openapi()["components"]["schemas"]["AdminConfirmPaymentRequest"]
+    assert set(schema["properties"]) == {"openChatUrl"}
+    assert schema["required"] == ["openChatUrl"]
+
+
+def test_refund_is_completed_only_through_refund_resource():
+    paths = app.openapi()["paths"]
+
+    assert "/v1/admin/missions/{mission_id}/refund" not in paths
+    assert "/v1/admin/refund/{refund_id}/reject" not in paths
+
+
+def test_admin_proposal_contracts_use_dedicated_response_schemas():
+    schemas = app.openapi()["components"]["schemas"]
+
+    assert set(schemas["AdminProposalResponse"]["properties"]) == set(schemas["ProposalResponse"]["properties"])
+    assert set(schemas["AdminProposalReportResponse"]["properties"]) == set(
+        schemas["ProposalReportResponse"]["properties"]
+    )
+
+
+def test_admin_participant_names_are_required_non_nullable_strings():
+    schemas = app.openapi()["components"]["schemas"]
+    required_names = {
+        "MissionResponse": {"ordererName", "runnerName"},
+        "AdminProposalReportResponse": {"reporterName"},
+        "AdminProposalSummaryResponse": {"ordererName"},
+        "AdminProposalDetailResponse": {"ordererName"},
+        "AdminOfferSummaryResponse": {"runnerName"},
+        "AdminDisputeSummaryResponse": {"requesterName"},
+        "AdminDisputeDetailResponse": {"requesterName", "targetName"},
+        "AdminRefundSummaryResponse": {"ordererName"},
+        "AdminRefundDetailResponse": {"ordererName"},
+        "AdminPayoutDetailResponse": {"runnerName"},
+    }
+
+    for schema_name, fields in required_names.items():
+        schema = schemas[schema_name]
+        assert fields <= set(schema["required"])
+        for field in fields:
+            assert schema["properties"][field]["type"] == "string"
+
+    assert "acceptedRunnerName" not in schemas["AdminProposalDetailResponse"]["required"]
+
+
+def test_admin_payout_list_uses_mission_response_with_settlement_status():
+    schema = app.openapi()
+    mission_schema = schema["components"]["schemas"]["MissionResponse"]
+    assert "settlementStatus" in mission_schema["properties"]
+    assert "AdminPayoutSummaryResponse" not in schema["components"]["schemas"]
+
+    item = schema["paths"]["/v1/admin/payout"]["get"]["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]["data"]["content"][0]
+    assert item["settlementStatus"] == "PENDING"
+    assert item["status"] == "COMPLETED"
+
+
+def test_proposal_and_offer_creation_document_required_settlement_account():
+    schema = app.openapi()
+    for path in ("/v1/proposal", "/v1/offer"):
+        examples = schema["paths"][path]["post"]["responses"]["409"]["content"]["application/json"]["examples"]
+        codes = {example["value"]["error"]["code"] for example in examples.values()}
+        assert "SETTLEMENT_ACCOUNT_REQUIRED" in codes
 
 
 def test_offer_accept_has_no_request_body_or_amount_response_fields():

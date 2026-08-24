@@ -22,7 +22,8 @@
 | `payments` | settlement | 목표 O / 현재 미구현 | 결제/정산 처리 |
 | `settlement_accounts` | settlement | O | 러너 정산 계좌 |
 
-관계는 애플리케이션 레벨에서 검증하며, 목표 정본 기준으로 실제 MySQL FK constraint는 두지 않는다.
+관계는 기본적으로 애플리케이션 레벨에서 검증한다. 다만 분쟁이 미션 없이 존재하지 못하게 하는
+`dispute_evidences.mission_id -> missions.id`는 실제 MySQL FK constraint로 보장한다.
 
 ```text
 users 1 -> N proposals(orderer_id)
@@ -34,6 +35,7 @@ users 1 -> 1 settlement_accounts
 proposals 1 -> N offers
 proposals 1 -> N dispute_evidences
 offers 1 -> N dispute_evidences
+missions 1 -> N dispute_evidences
 offers 1 -> 1 payments
 ```
 

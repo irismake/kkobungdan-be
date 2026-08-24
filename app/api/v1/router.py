@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.admin.admin_auth_router import router as admin_auth_router
 from app.api.v1.admin.admin_router import router as admin_router
 from app.api.v1.dispute.dispute_evidence_router import router as dispute_evidence_router
 from app.api.v1.dispute.dispute_survey_router import router as dispute_survey_router
@@ -26,4 +27,5 @@ api_router.include_router(proposal_router)
 api_router.include_router(offer_router)
 api_router.include_router(settlement_router)
 api_router.include_router(notification_router)
+api_router.include_router(admin_auth_router)
 api_router.include_router(admin_router)

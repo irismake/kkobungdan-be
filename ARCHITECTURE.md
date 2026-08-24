@@ -14,8 +14,15 @@
 - `User`: 사용자 식별, 프로필, 역할, 약관 동의 상태
 - `Proposal`: 요청 생성과 공개
 - `Offer`: 수행자의 제안 등록과 경쟁
-- `Proof`: 수행 완료 증빙과 분쟁 사유 기록
-- `Payment`: 결제 승인, 확정, 환불, 정산 기록
+- `Mission`: 수락된 Offer의 수행 단위와 관리자 수행비 지급 추적 (관리자 웹 전용)
+- `DisputeEvidence`: 분쟁 사유와 관리자 처리 상태 기록
+- `Refund`: 입금 확인된 요청의 전액 환불 처리 정본
+- `Payment`: 결제 승인과 확정 기록 (문서만 있고 ORM 미구현)
+
+세 축(`Proposal` / `Offer` / `Mission`)이 어떤 순서로 맞물리는지는 상태 흐름도로 본다.
+
+- [요청·지원·미션 상태 지도](https://claude.ai/code/artifact/bf76f755-a2be-4ac9-b9be-71733dc73f1b): 정상 종료, 분쟁 판정, 취소·환불 경로와 상태 전이표, 세 축 대응표
+  (정본은 아래 문서들이며 이 링크는 읽기용 시각 자료다)
 
 현재 기술 방향:
 
@@ -33,6 +40,8 @@
 - [`docs/api-spec/README.md`](./docs/api-spec/README.md): 외부 API 요청/응답 계약 정본
 - [`docs/domain.md`](./docs/domain.md): 도메인 상태와 정책 정본
 - [`docs/domains/README.md`](./docs/domains/README.md): 도메인별 개념과 테스트 보장 문서
+- [`docs/design-docs/refund-lifecycle.md`](./docs/design-docs/refund-lifecycle.md): 환불 정본과 분쟁 종결 상태 결정
+- [`docs/product-specs/mission.md`](./docs/product-specs/mission.md): 미션 수행 단위와 관리자 처리 흐름
 
 ## 문서 하네스 구조
 
@@ -54,6 +63,7 @@
 - [`docs/exec-plans/completed/README.md`](./docs/exec-plans/completed/README.md): 완료된 실행 계획 보관
 - [`docs/generated/db-schema.md`](./docs/generated/db-schema.md): 도메인 문서 기반 파생 스키마 스냅샷
 - [`docs/references/`](./docs/references/): 외부 도구와 플랫폼 참고 메모
+- [상태 흐름 시각화](https://claude.ai/code/artifact/bf76f755-a2be-4ac9-b9be-71733dc73f1b): 요청·지원·미션 통합 상태 지도
 
 ## 문서 책임 규칙
 

@@ -10,6 +10,8 @@ from app.models.dispute_evidence import DisputeEvidence
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.refund import Refund, RefundReason
+from app.models.settlement import SettlementAccount
 
 
 def future_deadline(days: int = 1) -> str:
@@ -265,7 +267,7 @@ def test_list_own_orders_by_badge_then_latest(client, db, factory, auth_headers,
         ("분쟁중", ProposalStatus.DISPUTED, 70),
         ("취소-신고", ProposalStatus.REPORTED, 80),
         ("대기중-이전", ProposalStatus.OFFERED, 50),
-        ("취소-분쟁해결", ProposalStatus.RESOLVED, 100),
+        ("취소-환불완료", ProposalStatus.REFUNDED, 100),
         ("진행중-최신", ProposalStatus.ORDER_COMPLETED, 110),
         ("완료-최신", ProposalStatus.ALL_COMPLETED, 120),
     ]
@@ -287,11 +289,21 @@ def test_list_own_orders_by_badge_then_latest(client, db, factory, auth_headers,
         "진행중-최신", "진행중-이전",
         "분쟁중",
         "완료-최신", "완료-이전",
-        "취소-분쟁해결", "취소-신고", "취소-이전",
+        "취소-환불완료", "취소-신고", "취소-이전",
     ]
 
 
 def test_create_proposal_validates_contract_and_stores_holding(client, db, factory, auth_headers, sample_user):
+    db.add(
+        SettlementAccount(
+            user_id=sample_user.id,
+            bank_name="국민은행",
+            account_holder=sample_user.name,
+            encrypted_account_number="123456789012",
+            masked_account_number="********9012",
+        )
+    )
+    db.commit()
     response = client.post("/v1/proposal", json=proposal_payload(), headers=auth_headers)
     assert response.status_code == 201
     body = response.json()
@@ -302,6 +314,13 @@ def test_create_proposal_validates_contract_and_stores_holding(client, db, facto
     proposal = db.query(Proposal).filter(Proposal.id == body["data"]["id"]).one()
     assert proposal.orderer_id == sample_user.id
     assert proposal.status == ProposalStatus.HOLDING
+
+
+def test_create_proposal_requires_settlement_account(client, auth_headers):
+    response = client.post("/v1/proposal", json=proposal_payload(), headers=auth_headers)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "SETTLEMENT_ACCOUNT_REQUIRED"
 
 
 def test_create_proposal_validation_errors(client, auth_headers):
@@ -389,7 +408,12 @@ def test_cancel_proposal_author_status_rules_and_rejects_waiting_offers(client, 
         response = client.post(f"/v1/proposal/{cancellable.id}/cancel", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["message"] == "요청이 취소되었습니다."
-        assert response.json()["data"]["status"] == "CANCELLED"
+        expected_status = "CANCELLED" if cancellable.id == holding.id else "REFUND_PENDING"
+        assert response.json()["data"]["status"] == expected_status
+
+    refunds = db.query(Refund).order_by(Refund.proposal_id).all()
+    assert [refund.proposal_id for refund in refunds] == [posted.id, offered.id]
+    assert {refund.reason for refund in refunds} == {RefundReason.USER_CANCELLED.value}
 
     db.refresh(waiting_offer)
     db.refresh(cancelled_offer)
@@ -648,7 +672,8 @@ def test_proposal_model_contract(db):
         "ORDER_COMPLETED",
         "ALL_COMPLETED",
         "DISPUTED",
-        "RESOLVED",
+        "REFUND_PENDING",
+        "REFUNDED",
         "REPORTED",
         "CANCELLED",
     }

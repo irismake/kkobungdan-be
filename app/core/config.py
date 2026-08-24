@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 7
 
+    # 관리자 계정. 기동 시 이 아이디의 관리자 사용자가 없으면 만든다.
+    admin_username: Optional[str] = None
+    admin_initial_password: Optional[str] = None
+
+    # 관리자 웹에 노출하는 플랫폼 입금 계좌. 요청별 데이터가 아니라 운영 설정값이다.
+    admin_deposit_bank_name: Optional[str] = None
+    admin_deposit_account_number: Optional[str] = None
+    admin_deposit_account_holder: Optional[str] = None
+
     # FCM (Firebase Cloud Messaging)
     fcm_credentials_path: Optional[str] = None   # 로컬 개발: 파일 경로
     fcm_credentials_json: Optional[str] = None   # 배포 환경: JSON 문자열 (GitHub Secret)

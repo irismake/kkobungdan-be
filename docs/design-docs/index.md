@@ -12,6 +12,7 @@
 - [`persistence-schema-canonicalization.md`](./persistence-schema-canonicalization.md): 전체 영속성 스키마 정본화와 현재 구현 갭
 - [`testing-conventions.md`](./testing-conventions.md): pytest 통합 테스트 작성 규칙 (이름, GWT 구조, 중복 방지)
 - [`api-router-organization.md`](./api-router-organization.md): API 라우터의 도메인 패키지, 명명, 버전별 조립 원칙
+- [`refund-lifecycle.md`](./refund-lifecycle.md): 환불 정본 테이블과 분쟁 종결·취소 상태 전이 결정
 - [`../api-spec/README.md`](../api-spec/README.md): 외부 API 요청/응답 계약 정본
 - [`../domain.md`](../domain.md): 도메인 상태와 정책 정본
 

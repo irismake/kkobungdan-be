@@ -137,6 +137,8 @@ jobs:
           PROD_AWS_SNS_SMS_SENDER_ID=Kkobongdan
           PROD_AWS_SNS_SMS_TYPE=Transactional
           PROD_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
+          PROD_ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+          PROD_ADMIN_INITIAL_PASSWORD=${{ secrets.ADMIN_INITIAL_PASSWORD }}
           LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
           ENVEOF
             sed -i.bak "s#__NGINX_TEMPLATE__#${existing_nginx_template}#" .env.ec2

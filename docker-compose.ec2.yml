@@ -26,6 +26,8 @@ services:
       AWS_SNS_SMS_TYPE: ${STAGING_AWS_SNS_SMS_TYPE:-Transactional}
       FCM_CREDENTIALS_PATH: ${STAGING_FCM_CREDENTIALS_PATH:-}
       FCM_CREDENTIALS_JSON: ${STAGING_FCM_CREDENTIALS_JSON:-}
+      ADMIN_USERNAME: ${STAGING_ADMIN_USERNAME:-}
+      ADMIN_INITIAL_PASSWORD: ${STAGING_ADMIN_INITIAL_PASSWORD:-}
     volumes:
       - /home/ubuntu/orderrun/keys:/app/keys:ro
       - /home/ubuntu/orderrun/logs/staging/app:/app/logs
@@ -72,6 +74,8 @@ services:
       AWS_SNS_SMS_TYPE: ${PROD_AWS_SNS_SMS_TYPE:-Transactional}
       FCM_CREDENTIALS_PATH: ${PROD_FCM_CREDENTIALS_PATH:-}
       FCM_CREDENTIALS_JSON: ${PROD_FCM_CREDENTIALS_JSON:-}
+      ADMIN_USERNAME: ${PROD_ADMIN_USERNAME:-}
+      ADMIN_INITIAL_PASSWORD: ${PROD_ADMIN_INITIAL_PASSWORD:-}
     volumes:
       - /home/ubuntu/orderrun/keys:/app/keys:ro
       - /home/ubuntu/orderrun/logs/prod/app:/app/logs

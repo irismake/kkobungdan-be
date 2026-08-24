@@ -14,10 +14,12 @@ from app.models.dispute_survey import DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.settlement import SettlementAccount
 from app.models.user import User
 from app.schemas.common import PageResponse
 from app.schemas.offer import OfferAcceptResponse, OfferCreate, OfferDetailResponse, OfferResponse, OfferSummaryResponse
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
+from app.services.mission.mission_service import MissionService
 
 
 OPEN_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
@@ -32,7 +34,6 @@ OPEN_CHAT_OFFER_STATUSES = (
     OfferStatus.RUNNER_COMPLETED,
     OfferStatus.ALL_COMPLETED,
     OfferStatus.DISPUTED,
-    OfferStatus.RESOLVED,
 )
 
 # 내 활동 - 수행 기록 화면의 배지 노출 순서. 같은 배지 안에서는 최신순으로 정렬한다.
@@ -42,7 +43,7 @@ OFFER_BADGE_ORDER = (
     (OfferStatus.ACCEPTED, OfferStatus.RUNNER_COMPLETED),
     (OfferStatus.DISPUTED,),
     (OfferStatus.ALL_COMPLETED,),
-    (OfferStatus.REJECTED, OfferStatus.CANCELLED, OfferStatus.RESOLVED),
+    (OfferStatus.REJECTED, OfferStatus.CANCELLED),
 )
 
 
@@ -143,6 +144,15 @@ class OfferService:
 
         if proposal.status not in OPEN_PROPOSAL_STATUSES:
             raise api_error(AppError.PROPOSAL_NOT_OPEN)
+
+        account_exists = (
+            db.query(SettlementAccount.id)
+            .filter(SettlementAccount.user_id == runner_id)
+            .first()
+            is not None
+        )
+        if not account_exists:
+            raise api_error(AppError.SETTLEMENT_ACCOUNT_REQUIRED)
 
         duplicate = (
             db.query(Offer)
@@ -277,6 +287,7 @@ class OfferService:
             )
             .update({Offer.status: OfferStatus.REJECTED}, synchronize_session=False)
         )
+        MissionService.create_for_accepted_offer(db, offer, proposal)
         db.flush()
         EventBus.publish(OfferAcceptedEvent(
             offer_id=offer.id,
@@ -330,6 +341,7 @@ class OfferService:
         if proposal.status == ProposalStatus.ORDER_COMPLETED:
             offer.confirm_orderer_completion()
         OfferService._sync_all_completed(db, offer, proposal)
+        MissionService.sync_from_offer_and_proposal(db, offer, proposal)
         all_completed = offer.status == OfferStatus.ALL_COMPLETED and proposal.status == ProposalStatus.ALL_COMPLETED
         db.flush()
         EventBus.publish(MeetingConfirmedByRunnerEvent(
@@ -363,9 +375,13 @@ class OfferService:
         DisputeSurveyService.ensure_active_question(db, survey_question_id, DisputeSurveyTargetType.RUNNER)
         offer.raise_dispute()
         proposal.raise_dispute()
+        mission = MissionService.sync_from_offer_and_proposal(db, offer, proposal)
+        if mission is None:
+            raise api_error(AppError.MISSION_NOT_FOUND, f"offerId: {offer.id}")
         db.add(DisputeEvidence(
             proposal_id=proposal.id,
             offer_id=offer.id,
+            mission_id=mission.id,
             actor_id=runner_id,
             survey_question_id=survey_question_id,
             reason=dispute_reason,
@@ -378,19 +394,6 @@ class OfferService:
             orderer_id=proposal.orderer_id,
             proposal_title=proposal.title,
         ), db)
-        db.commit()
-        db.refresh(offer)
-        return OfferService._to_response(db, offer)
-
-    @staticmethod
-    def resolve(db: Session, offer_id: int) -> OfferResponse:
-        offer = OfferService._get_offer(db, offer_id)
-        proposal = OfferService._get_proposal(db, offer.proposal_id)
-        if not offer.can_resolve() or not proposal.can_resolve():
-            raise api_error(AppError.OFFER_NOT_UPDATABLE, f"status: {offer.status.value}")
-
-        offer.resolve()
-        proposal.resolve()
         db.commit()
         db.refresh(offer)
         return OfferService._to_response(db, offer)

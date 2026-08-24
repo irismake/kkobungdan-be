@@ -71,7 +71,7 @@ class OfferOwnerSearchRequest:
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_201_CREATED,
     summary="러너 지원 등록",
-    description="러너가 요청에 수행 지원을 등록합니다.",
+    description="정산 계좌가 등록된 러너가 요청에 수행 지원을 등록합니다.",
     responses={
         201: success_response(OFFER_CREATE_EXAMPLE),
         **error_responses(
@@ -81,6 +81,7 @@ class OfferOwnerSearchRequest:
             AppError.SELF_OFFER_NOT_ALLOWED,
             AppError.PROPOSAL_NOT_OPEN,
             AppError.DUPLICATE_OFFER,
+            AppError.SETTLEMENT_ACCOUNT_REQUIRED,
         ),
     },
 )

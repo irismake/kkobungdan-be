@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app.main import app
 from app.models.dispute_evidence import DisputeEvidence
+from app.models.mission import MissionStatus
 from app.models.notification import Notification
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
@@ -425,9 +426,11 @@ def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(cl
 
     proposal = factory.proposal(orderer_id=user_id, status=ProposalStatus.ALL_COMPLETED)
     offer = factory.offer(proposal_id=proposal.id, runner_id=user_id, status=OfferStatus.ALL_COMPLETED)
+    mission = factory.mission(proposal, offer, MissionStatus.PAID)
     evidence = DisputeEvidence(
         proposal_id=proposal.id,
         offer_id=offer.id,
+        mission_id=mission.id,
         actor_id=user_id,
         survey_question_id=1,
         reason="탈퇴 전 분쟁 사유",
@@ -596,10 +599,7 @@ def test_withdraw_user_rejects_inactive_or_unknown_reason(client, db, factory):
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
-@pytest.mark.parametrize(
-    "proposal_status",
-    [ProposalStatus.HOLDING, ProposalStatus.POSTED, ProposalStatus.OFFERED],
-)
+@pytest.mark.parametrize("proposal_status", [ProposalStatus.HOLDING])
 def test_withdraw_user_auto_cancels_pre_match_proposal_and_waiting_offers(db, factory, proposal_status):
     user = factory.user(phone="01012340005", name="요청사용자")
     db.add(UserFCMToken(user_id=user.id, fcm_token="kept-token"))
@@ -625,7 +625,13 @@ def test_withdraw_user_auto_cancels_pre_match_proposal_and_waiting_offers(db, fa
 
 @pytest.mark.parametrize(
     "proposal_status",
-    [ProposalStatus.MATCHED, ProposalStatus.ORDER_COMPLETED, ProposalStatus.DISPUTED],
+    [
+        ProposalStatus.POSTED,
+        ProposalStatus.OFFERED,
+        ProposalStatus.MATCHED,
+        ProposalStatus.ORDER_COMPLETED,
+        ProposalStatus.DISPUTED,
+    ],
 )
 def test_withdraw_user_blocks_when_user_has_active_proposal(db, factory, proposal_status):
     user = factory.user(phone="01012340006", name="오더사용자")
@@ -663,6 +669,33 @@ def test_withdraw_user_blocks_when_user_has_active_offer(db, factory, offer_stat
     assert user.deleted is False
     assert offer.status == offer_status
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
+
+
+def test_withdraw_user_blocks_while_refund_is_pending(db, factory):
+    orderer = factory.user(phone="01012340017", name="환불대기행님")
+    runner = factory.user(phone="01012340018", name="꼬붕")
+    proposal, offer = factory.execution(orderer, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
+    mission = factory.mission(proposal, offer, MissionStatus.FAILED)
+    factory.refund(proposal, mission)
+
+    with pytest.raises(HTTPException) as exc_info:
+        UserWithdrawalService.withdraw_user(db, orderer)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
+
+
+def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
+    orderer = factory.user(phone="01012340019", name="행님")
+    runner = factory.user(phone="01012340020", name="지급대기꼬붕")
+    proposal, offer = factory.execution(orderer, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
+    factory.mission(proposal, offer, MissionStatus.COMPLETED)
+
+    with pytest.raises(HTTPException) as exc_info:
+        UserWithdrawalService.withdraw_user(db, runner)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
 
 
 def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, factory, monkeypatch):

@@ -32,6 +32,8 @@
 
 `success`, `data`, `message`는 모든 JSON 성공 응답에 항상 포함한다. 값이 없는 필드와 응답 DTO의 nullable 필드는 생략하지 않고 `null`로 반환한다. 필드 누락은 계약에 해당 필드가 없다는 의미이고, `null`은 계약에 존재하지만 현재 값이 없다는 의미이므로 서로 구분한다.
 
+`/docs`의 응답 예시도 같은 규칙을 따른다. 예시에 `null`로 적힌 필드는 계약에 존재하는 필드이므로 클라이언트 모델에 포함해야 한다. 예시에 아예 없는 키만 계약에 없는 필드다.
+
 ### 페이징 응답
 
 페이징 목록은 `data`에 `PageResponse<T>`를 담아 반환한다.
@@ -167,6 +169,22 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | detailReason | string | X | 선택 상세 사유. 최대 500자. 해당 사유의 `requiresDetail`이 `true`이면 필수 |
 
 ### ProposalResponse
+
+앱 Proposal API가 사용하는 응답이다. 관리자 API는 필드 구성이 같더라도 이 타입을 공유하지 않는다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | Proposal ID |
+| title | string | 공고 제목 |
+| content | string | 요청 상세 내용 |
+| deadline | string | 수행 마감 시각. ISO-8601 Instant |
+| errandFee | number | 러너에게 지급할 심부름비 |
+| status | string | Proposal 상태. `ProposalStatus` 참조 |
+
+### AdminProposalResponse
+
+관리자 API 전용 요청 응답이다. 현재 wire 필드는 `ProposalResponse`와 같지만 독립된 계약으로
+관리하므로 이후 관리자 웹 요구사항만 별도로 변경할 수 있다.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
@@ -347,17 +365,40 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 ### ProposalReportResponse
 
+앱의 신고 생성 API가 사용하는 응답이다. 관리자 API는 필드 구성이 같더라도 이 타입을 공유하지 않는다.
+
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | id | number | 신고 ID |
 | proposalId | number | 신고 대상 Proposal ID |
 | reporterId | string | 신고 사용자 ID |
+| reporterName | string, null | 신고 사용자 이름. 관리자 조회에서만 채워진다 |
 | reasonQuestionId | number | 선택한 신고 사유 ID |
 | reasonQuestionText | string | 선택한 신고 사유 문구 |
 | detailReason | string, null | 선택 상세 사유 |
 | status | string | `PENDING`, `ACCEPTED`, `REJECTED` |
 | createdAt | string | 신고 접수 시각 |
 | reviewedAt | string, null | 관리자 검토 시각 |
+| proposalStatus | string, null | 신고 대상 Proposal 상태. 관리자 목록 조회에서만 채워진다 |
+
+### AdminProposalReportResponse
+
+관리자 API 전용 신고 응답이다. 현재 wire 필드는 `ProposalReportResponse`와 같지만 독립된 계약이다.
+관리자 응답의 `reporterName`은 필수 문자열이며, 저장된 이름이 없을 때 `"탈퇴한 사용자"`를 반환한다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 신고 ID |
+| proposalId | number | 신고 대상 Proposal ID |
+| reporterId | string | 신고 사용자 ID |
+| reporterName | string | 신고 사용자 이름. 이름이 없으면 `"탈퇴한 사용자"` |
+| reasonQuestionId | number | 선택한 신고 사유 ID |
+| reasonQuestionText | string | 선택한 신고 사유 문구 |
+| detailReason | string, null | 선택 상세 사유 |
+| status | string | `PENDING`, `ACCEPTED`, `REJECTED` |
+| createdAt | string | 신고 접수 시각 |
+| reviewedAt | string, null | 관리자 검토 시각 |
+| proposalStatus | string, null | 신고 대상 Proposal 상태 |
 
 ## API 목록
 
@@ -411,7 +452,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 요청 게시글 목록 조회 | `GET` | `/v1/proposal` | 필요 | `200 OK` | `PageResponse<ProposalResponse>` |
 | 요청 게시글 상세 조회 | `GET` | `/v1/proposal/{id}` | 필요 | `200 OK` | `ProposalDetailResponse` |
 | 내 요청 게시글 목록 조회 | `GET` | `/v1/proposal/own` | 필요 | `200 OK` | `PageResponse<ProposalOwnResponse>` |
-| 요청 게시글 등록 | `POST` | `/v1/proposal` | 필요 | `201 Created` | `ProposalResponse` |
+| 요청 게시글 등록 | `POST` | `/v1/proposal` | 필요. 정산·환불 계좌 등록 필수 | `201 Created` | `ProposalResponse` |
 | 요청 게시글 수정 | `PUT` | `/v1/proposal/{id}` | 필요. 작성자만 가능 | `200 OK` | `ProposalResponse` |
 | 요청 게시글 취소 | `POST` | `/v1/proposal/{id}/cancel` | 필요. 작성자만 가능 | `200 OK` | `ProposalResponse` |
 | 오더 수령 확인 | `POST` | `/v1/proposal/{id}/confirm-received` | 필요. 작성자만 가능 | `200 OK` | `ProposalDetailResponse` |
@@ -428,7 +469,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
-| 오퍼 제출 | `POST` | `/v1/offer` | 필요 | `201 Created` | `OfferResponse` |
+| 오퍼 제출 | `POST` | `/v1/offer` | 필요. 러너 정산 계좌 등록 필수 | `201 Created` | `OfferResponse` |
 | 오퍼 수락 | `POST` | `/v1/offer/{offerId}/accept` | 필요. 연결된 Proposal 작성자만 가능 | `201 Created` | `OfferAcceptResponse` |
 | 오퍼 상세 조회 | `GET` | `/v1/offer/{id}` | 필요 | `200 OK` | `OfferDetailResponse` |
 | Proposal별 오퍼 목록 조회 | `GET` | `/v1/offer?proposalId={id}` | 필요 | `200 OK` | `OfferSummaryResponse[]` |
@@ -439,14 +480,57 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 ### Admin Execution API
 
-관리자 분쟁 해결은 수락된 Offer ID 기준으로 처리한다.
+관리자 분쟁 해결과 수행비 정산은 미션 ID 기준으로 처리한다. 환불은 매칭 전 취소도 포함하므로
+별도 Refund ID 기준으로 처리한다.
+미션은 관리자 웹 전용이며 앱 API에는 노출하지 않는다. 상태 정의는
+[`../product-specs/mission.md`](../product-specs/mission.md)를 따른다.
+`MissionResponse.openChatUrl`은 지원에 저장된 링크를 우선하며, 없으면 입금 확인 때
+요청에 저장한 링크를 반환한다. 두 곳 모두 링크가 없으면 `null`이다.
+`MissionResponse.settlementStatus`는 수행비 지급 처리 상태(`PENDING`, `COMPLETED`, `REJECTED`)다.
+관리자 응답에서 당사자가 반드시 존재하는 사용자 이름 필드는 non-null 문자열이다. 저장된 이름이나
+사용자 row가 없으면 `"탈퇴한 사용자"`를 반환한다. `acceptedRunnerName`처럼 연관 대상 자체가 아직
+없을 수 있는 필드만 nullable이다.
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
-| Offer 분쟁 해결 | `POST` | `/v1/admin/offer/{offerId}/resolve` | 관리자 필요 | `200 OK` | `OfferResponse` |
-| 게시글 신고 목록 조회 | `GET` | `/v1/admin/proposal-reports?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<ProposalReportResponse>` |
-| 게시글 신고 승인 | `POST` | `/v1/admin/proposal-reports/{reportId}/accept` | 관리자 필요 | `200 OK` | `ProposalReportResponse` |
-| 게시글 신고 반려 | `POST` | `/v1/admin/proposal-reports/{reportId}/reject` | 관리자 필요 | `200 OK` | `ProposalReportResponse` |
+| 미션 목록 조회 | `GET` | `/v1/admin/missions?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
+| 미션 상세 조회 | `GET` | `/v1/admin/missions/{missionId}` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 미션 분쟁 판정 | `POST` | `/v1/admin/missions/{missionId}/resolve` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 수행비 지급 기록 | `POST` | `/v1/admin/missions/{missionId}/settlement` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 입금 확인 | `POST` | `/v1/admin/proposal/{proposalId}/confirm-payment` | 관리자 필요 | `200 OK` | `AdminProposalResponse` |
+| 게시글 신고 목록 조회 | `GET` | `/v1/admin/proposal-reports?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminProposalReportResponse>` |
+| 게시글 신고 승인 | `POST` | `/v1/admin/proposal-reports/{reportId}/accept` | 관리자 필요 | `200 OK` | `AdminProposalReportResponse` |
+| 게시글 신고 반려 | `POST` | `/v1/admin/proposal-reports/{reportId}/reject` | 관리자 필요 | `200 OK` | `AdminProposalReportResponse` |
+| 대시보드 집계 조회 | `GET` | `/v1/admin/summary` | 관리자 필요 | `200 OK` | `AdminSummaryResponse` |
+| 요청 목록 조회 | `GET` | `/v1/admin/proposal?status={status}&keyword={keyword}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminProposalSummaryResponse>` |
+| 요청 상세 조회 | `GET` | `/v1/admin/proposal/{proposalId}` | 관리자 필요 | `200 OK` | `AdminProposalDetailResponse` |
+| 요청 취소 | `POST` | `/v1/admin/proposal/{proposalId}/cancel` | 관리자 필요 | `200 OK` | `AdminProposalDetailResponse` |
+| 입금 대기 요청 목록 조회 (deprecated) | `GET` | `/v1/admin/proposal/pending-payment?page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminProposalSummaryResponse>` |
+| 지원 목록 조회 | `GET` | `/v1/admin/offer?proposalId={id}&status={status}&accepted={bool}&hasDispute={bool}&keyword={keyword}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminOfferSummaryResponse>` |
+| 분쟁 목록 조회 | `GET` | `/v1/admin/dispute?status={status}&proposalId={id}&keyword={keyword}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminDisputeSummaryResponse>` |
+| 분쟁 상세 조회 | `GET` | `/v1/admin/dispute/{disputeId}` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
+| 분쟁 판정 | `POST` | `/v1/admin/dispute/{disputeId}/resolve` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
+| 분쟁 반려 | `POST` | `/v1/admin/dispute/{disputeId}/reject` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
+| 수행비 지급 목록 조회 | `GET` | `/v1/admin/payout?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
+| 수행비 지급 상세 조회 | `GET` | `/v1/admin/payout/{payoutId}` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
+| 수행비 지급 완료 | `POST` | `/v1/admin/payout/{payoutId}/complete` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
+| 수행비 지급 반려 | `POST` | `/v1/admin/payout/{payoutId}/reject` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
+| 환불 목록 조회 | `GET` | `/v1/admin/refund?status={status}&requestedFrom={date}&keyword={keyword}&proposalId={id}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminRefundSummaryResponse>` |
+| 환불 상세 조회 | `GET` | `/v1/admin/refund/{refundId}` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
+| 환불 완료 | `POST` | `/v1/admin/refund/{refundId}/complete` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
+
+`payoutId`는 미션 ID, `refundId`는 Refund ID다. 환불은 확정된 의무라 반려 엔드포인트가 없다.
+
+분쟁 판정(`outcome`)은 `COMPLETED` 또는 `FAILED`다. `COMPLETED`면 요청·지원이
+`ALL_COMPLETED`, 미션이 `COMPLETED`가 되고, `FAILED`면 요청이 `REFUND_PENDING`, 지원이
+`CANCELLED`, 미션이 `FAILED`가 되며 환불이 생성된다. 분쟁 반려는 어느 상태도 바꾸지 않는다.
+
+요청 취소는 입금 확인 전(`HOLDING`)이면 `CANCELLED`로 종결하고, 입금 확인 후면
+`REFUND_PENDING`으로 전이하며 환불을 생성한다. 수행 중이던 지원은 `CANCELLED`, 미션은
+`FAILED`가 된다. 미션이 이미 `COMPLETED`, `PAID`, `FAILED`면 취소를 거절한다.
+
+환불 응답의 `reason`은 `USER_CANCELLED`, `ADMIN_CANCELLED`, `DISPUTE_FAILED` 중 하나다.
+관리자 취소 메모나 분쟁 입력 사유는 `reasonDetail`로 별도 반환한다.
 
 ### Settlement API
 
@@ -535,7 +619,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | size | integer | X | 20 | 페이지 크기 |
 
 정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
-배지 순서는 미입금(`HOLDING`) → 대기중(`POSTED`, `OFFERED`) → 진행중(`MATCHED`, `ORDER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`CANCELLED`, `REPORTED`, `RESOLVED`)다.
+배지 순서는 미입금(`HOLDING`) → 대기중(`POSTED`, `OFFERED`) → 진행중(`MATCHED`, `ORDER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`CANCELLED`, `REFUND_PENDING`, `REFUNDED`, `REPORTED`)다.
 
 #### `POST /v1/proposal`, `PUT /v1/proposal/{id}`
 
@@ -592,7 +676,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | size | integer | X | 20 | 페이지 크기 |
 
 정렬은 고정이다: 배지 순 → `createdAt DESC, id DESC`.
-배지 순서는 대기중(`WAITING`) → 진행중(`ACCEPTED`, `RUNNER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`REJECTED`, `CANCELLED`, `RESOLVED`)다.
+배지 순서는 대기중(`WAITING`) → 진행중(`ACCEPTED`, `RUNNER_COMPLETED`) → 분쟁중(`DISPUTED`) → 완료(`ALL_COMPLETED`) → 취소(`REJECTED`, `CANCELLED`)다.
 
 #### `POST /v1/proposal/{proposalId}/confirm-received`
 
@@ -639,7 +723,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | ORDER_COMPLETED | 오더러 완료 확인 |
 | ALL_COMPLETED | 러너와 오더러 모두 완료 |
 | DISPUTED | 분쟁 접수 |
-| RESOLVED | 분쟁 해결 완료 |
+| REFUND_PENDING | 환불 대기 |
+| REFUNDED | 환불 완료 |
 | REPORTED | 관리자 승인으로 신고 처리됨 |
 | CANCELLED | 취소됨 |
 
@@ -652,9 +737,36 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | RUNNER_COMPLETED | 러너 완료 |
 | ALL_COMPLETED | 러너와 오더러 모두 완료 |
 | DISPUTED | 분쟁 접수 |
-| RESOLVED | 분쟁 해결 완료 |
 | REJECTED | 거절됨 |
-| CANCELLED | 취소됨 |
+| CANCELLED | 취소됨 (러너 취소, 분쟁 실패 판정, 관리자 취소) |
+
+### MissionStatus
+
+관리자 웹 전용이며 앱 API에는 노출하지 않는다.
+
+| 값 | 설명 |
+|----|------|
+| STARTED | 수행 진행 중 |
+| DISPUTED | 분쟁 접수 |
+| COMPLETED | 수행 완료, 수행비 지급 대기 |
+| PAID | 수행비 지급 완료 |
+| FAILED | 수행 실패로 확정 |
+
+### PayoutStatus / RefundStatus
+
+`MissionResponse.settlementStatus`와 관리자 지급 목록 필터에 쓰는 값은 `PENDING`,
+`COMPLETED`, `REJECTED`다. 환불 처리 상태(`AdminRefund*Response.status`)는 `PENDING`,
+`COMPLETED` 두 개이며 반려가 없다.
+
+### DisputeProcessStatus
+
+| 값 | 설명 |
+|----|------|
+| PENDING | 관리자 처리 대기 |
+| RESOLVED | 관리자가 판정을 마침 |
+| REJECTED | 관리자가 접수를 반려함 |
+
+요청·지원의 진행 상태와는 다른 축이다. 요청·지원은 `RESOLVED` 상태를 갖지 않는다.
 
 
 ## 에러 코드

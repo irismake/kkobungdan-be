@@ -13,10 +13,13 @@
 
 ## 탈퇴 불가 상태
 
-이미 매칭되었거나 분쟁/완료 확인 흐름이 남아 있는 활동이 있으면 탈퇴할 수 없다. UI의 "진행 중인 임무"는 현재 도메인에서 매칭 이후 수행, 완료 확인, 분쟁 단계의 Proposal/Offer를 의미한다.
+이미 매칭되었거나 분쟁/완료 확인, 환불, 수행비 지급 흐름이 남아 있는 활동이 있으면 탈퇴할 수 없다.
+UI의 "진행 중인 임무"는 매칭 이후 수행, 완료 확인, 분쟁 단계의 Proposal/Offer와 미결 Mission을 의미한다.
 
 Proposal 기준:
 
+- `POSTED`
+- `OFFERED`
 - `MATCHED`
 - `ORDER_COMPLETED`
 - `DISPUTED`
@@ -29,15 +32,22 @@ Offer 기준:
 
 이 상태는 상대방 거래 경험, 고객센터 대응, 분쟁 처리, 정산 확인이 남을 수 있으므로 탈퇴 요청을 `USER_WITHDRAWAL_BLOCKED`로 차단한다.
 
+환불·수행비 지급 기준:
+
+- 행님에게 `PENDING` Refund가 남아 있는 경우. 요청이 `REFUND_PENDING`으로 종결됐어도 실제
+  이체가 끝나지 않았으면 환불 계좌를 지울 수 없어 차단한다.
+- 꼬붕이 `COMPLETED` 미션의 수행비 지급 완료 또는 반려를 기다리는 경우.
+
+환불이 `COMPLETED`가 되면 요청은 `REFUNDED`가 되고 차단이 풀린다.
+
 ## 탈퇴 시 자동 취소 상태
 
-아직 매칭 전인 활동은 탈퇴를 막지 않고 자동 취소한다. 이 상태는 상대방과 거래가 확정되기 전이므로 탈퇴 요청 트랜잭션 안에서 종료 상태로 전환한다.
+입금 확인 전인 매칭 전 활동은 탈퇴를 막지 않고 자동 취소한다. 입금 확인된 `POSTED`/`OFFERED`는
+환불 계좌가 필요하므로 탈퇴를 차단한다.
 
 Proposal 기준:
 
 - `HOLDING`
-- `POSTED`
-- `OFFERED`
 
 Offer 기준:
 
@@ -52,13 +62,13 @@ Offer 기준:
 Proposal 기준:
 
 - `ALL_COMPLETED`
-- `RESOLVED`
+- `REFUNDED`
 - `CANCELLED`
+- `REPORTED`
 
 Offer 기준:
 
 - `ALL_COMPLETED`
-- `RESOLVED`
 - `REJECTED`
 - `CANCELLED`
 
@@ -73,7 +83,8 @@ Offer 기준:
 - `settlement_accounts`
 - `notifications`
 
-`settlement_accounts`는 미결 정산 트랜잭션이 아니라 정산 계좌 개인정보로 취급한다.
+`settlement_accounts`는 계좌 개인정보이므로 탈퇴 완료 시 삭제한다. 단, 미결 환불·수행비 지급이
+있으면 위 차단 조건에 따라 탈퇴 자체를 허용하지 않아 처리 전에 계좌가 사라지지 않게 한다.
 
 ## 보존 데이터
 
@@ -88,9 +99,9 @@ Offer 기준:
 
 ## 정산/결제 미결 검증
 
-현재 코드에는 미결 정산/결제 트랜잭션을 표현하는 `payments` ORM이 없다. 따라서 현재 차단 검증은 Proposal/Offer의 수행·분쟁 상태를 기준으로 한다.
-
-`payments` ORM과 정산 상태 전이가 도입되면 `PENDING`, `PROCESSING`, 환불/분쟁 처리 중 상태의 결제 또는 정산 row가 있는 사용자는 `USER_WITHDRAWAL_BLOCKED`로 차단한다.
+행님 환불은 `refunds.status`, 꼬붕 수행비 지급은 `missions`의 지급 시각과 반려 시각으로 미결
+상태를 판단한다. 환불 또는 수행비 지급이 완료·반려되기 전에는 `USER_WITHDRAWAL_BLOCKED`로 탈퇴를
+차단한다.
 
 ## 탈퇴 사유
 

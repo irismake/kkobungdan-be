@@ -18,7 +18,6 @@ class OfferStatus(str, enum.Enum):
     RUNNER_COMPLETED = "RUNNER_COMPLETED"
     ALL_COMPLETED = "ALL_COMPLETED"
     DISPUTED = "DISPUTED"
-    RESOLVED = "RESOLVED"
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
 
@@ -98,10 +97,16 @@ class Offer(Base):
     def can_resolve(self) -> bool:
         return self.status == OfferStatus.DISPUTED
 
-    def resolve(self) -> None:
+    def resolve_completed(self) -> None:
         if not self.can_resolve():
             raise ValueError("Cannot resolve offer not in DISPUTED status")
-        self.status = OfferStatus.RESOLVED
+        self.status = OfferStatus.ALL_COMPLETED
+        self.resolved_at = utcnow_naive()
+
+    def resolve_cancelled(self) -> None:
+        if not self.can_resolve():
+            raise ValueError("Cannot resolve offer not in DISPUTED status")
+        self.status = OfferStatus.CANCELLED
         self.resolved_at = utcnow_naive()
 
     def reject(self) -> None:
@@ -113,3 +118,17 @@ class Offer(Base):
         if not self.can_cancel():
             raise ValueError("Cannot cancel offer that is not in WAITING status")
         self.status = OfferStatus.CANCELLED
+
+    def admin_cancel(self) -> None:
+        if self.status not in {
+            OfferStatus.WAITING,
+            OfferStatus.ACCEPTED,
+            OfferStatus.RUNNER_COMPLETED,
+            OfferStatus.DISPUTED,
+        }:
+            raise ValueError("Offer cannot be cancelled by admin")
+        self.status = (
+            OfferStatus.REJECTED
+            if self.status == OfferStatus.WAITING
+            else OfferStatus.CANCELLED
+        )

@@ -87,10 +87,17 @@ def test_dispute_survey_question_model_spec_matches_plan():
     assert "idx_dispute_survey_questions_lookup" in index_names
 
 
-def test_dispute_evidence_model_records_dispute_survey_question_id():
+def test_dispute_evidence_model_requires_survey_question_and_mission():
     table = DisputeEvidence.__table__
 
     assert str(table.c.survey_question_id.type).upper() == "BIGINT"
     assert table.c.survey_question_id.nullable is False
+    assert str(table.c.mission_id.type).upper() == "BIGINT"
+    assert table.c.mission_id.nullable is False
     index_names = {index.name for index in table.indexes}
     assert "idx_dispute_evidences_survey_question_id" in index_names
+    assert "idx_dispute_evidences_mission_id" in index_names
+    assert any(
+        foreign_key.parent.name == "mission_id" and foreign_key.target_fullname == "missions.id"
+        for foreign_key in table.foreign_keys
+    )

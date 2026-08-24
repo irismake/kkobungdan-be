@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.core.time import utcnow_naive
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import ProposalStatus
 from app.models.proposal_report import ProposalReport, ProposalReportReasonQuestion, ProposalReportStatus
@@ -74,7 +75,7 @@ def test_create_proposal_report_validates_public_target_reporter_and_duplicate(c
     assert invalid_reason.status_code == 400
 
 
-def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offers(client, db, factory, sample_user):
+def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offers(client, db, factory, sample_user, admin_headers):
     reason = seed_reasons(db)[0]
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
     waiting_runner = factory.user("01055550003")
@@ -90,7 +91,7 @@ def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offe
     db.commit()
     db.refresh(report)
 
-    response = client.post(f"/v1/admin/proposal-reports/{report.id}/accept")
+    response = client.post(f"/v1/admin/proposal-reports/{report.id}/accept", headers=admin_headers)
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "ACCEPTED"
@@ -102,7 +103,7 @@ def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offe
     assert proposal.id not in {item["id"] for item in public.json()["data"]["content"]}
 
 
-def test_admin_can_reject_report_and_cannot_review_report_twice(client, db, factory, sample_user):
+def test_admin_can_reject_report_and_cannot_review_report_twice(client, db, factory, sample_user, admin_headers):
     reason = seed_reasons(db)[0]
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
     reporter = factory.user("01055550005")
@@ -111,16 +112,55 @@ def test_admin_can_reject_report_and_cannot_review_report_twice(client, db, fact
     db.commit()
     db.refresh(report)
 
-    listing = client.get("/v1/admin/proposal-reports?status=PENDING")
+    listing = client.get("/v1/admin/proposal-reports?status=PENDING", headers=admin_headers)
     assert listing.status_code == 200
     assert [item["id"] for item in listing.json()["data"]["content"]] == [report.id]
 
-    rejected = client.post(f"/v1/admin/proposal-reports/{report.id}/reject")
+    rejected = client.post(f"/v1/admin/proposal-reports/{report.id}/reject", headers=admin_headers)
     assert rejected.status_code == 200
     assert rejected.json()["data"]["status"] == "REJECTED"
     db.refresh(proposal)
     assert proposal.status == ProposalStatus.POSTED
 
-    again = client.post(f"/v1/admin/proposal-reports/{report.id}/accept")
+    again = client.post(f"/v1/admin/proposal-reports/{report.id}/accept", headers=admin_headers)
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "PROPOSAL_REPORT_NOT_REVIEWABLE"
+
+
+def test_admin_report_views_expose_reporter_name(client, db, factory, sample_user, admin_headers):
+    """관리자 웹이 신고자를 UUID가 아닌 이름으로 식별할 수 있어야 한다."""
+    reason = seed_reasons(db)[0]
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+    reporter = factory.user("01055550006", name="신고한 사람")
+    report = ProposalReport(proposal_id=proposal.id, reporter_id=reporter.id, reason_question_id=reason.id)
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    listing = client.get("/v1/admin/proposal-reports", headers=admin_headers)
+    assert listing.json()["data"]["content"][0]["reporterName"] == "신고한 사람"
+
+    reporter.withdraw(utcnow_naive())
+    db.commit()
+
+    listing = client.get("/v1/admin/proposal-reports", headers=admin_headers)
+    assert listing.json()["data"]["content"][0]["reporterName"] == "탈퇴한 사용자"
+
+    rejected = client.post(f"/v1/admin/proposal-reports/{report.id}/reject", headers=admin_headers)
+    assert rejected.json()["data"]["reporterName"] == "탈퇴한 사용자"
+
+
+def test_report_creation_response_omits_reporter_name(client, db, factory, sample_user):
+    """앱 응답은 신고자 이름을 채우지 않는다. proposalStatus와 같은 관리자 전용 필드다."""
+    reason = seed_reasons(db)[0]
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+    reporter = factory.user("01055550007", name="신고한 사람")
+
+    response = client.post(
+        f"/v1/proposal/{proposal.id}/reports",
+        json={"reasonQuestionId": reason.id},
+        headers=factory.headers_for(reporter),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["data"]["reporterName"] is None

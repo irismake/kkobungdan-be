@@ -135,18 +135,21 @@ app/
 The system has 5 main aggregates:
 
 1. **User**: Authentication via phone verification, profile, admin status
-2. **Proposal**: Errand request with budget, category, status (`draft`, `open`, `matched`, `closed`, `cancelled`)
-3. **Offer**: Runner's proposal for a Proposal with price, ETA
-4. **Mission**: Accepted offer execution (not fully implemented yet)
-5. **Payment**: Payment tracking for proposals/missions (partially implemented)
+2. **Proposal**: Errand request with fee and deadline. Status: `HOLDING`, `POSTED`, `OFFERED`, `MATCHED`, `ORDER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REFUND_PENDING`, `REFUNDED`, `REPORTED`, `CANCELLED`
+3. **Offer**: Runner's application for a Proposal. Status: `WAITING`, `ACCEPTED`, `RUNNER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REJECTED`, `CANCELLED`
+4. **Mission**: Execution unit created when an orderer accepts an offer. Admin-web only — never exposed to the app. Status (`STARTED`, `DISPUTED`, `COMPLETED`, `PAID`, `FAILED`) derives from Proposal/Offer status and owns runner payout tracking. See `docs/product-specs/mission.md`
+5. **Refund**: Canonical record of a full refund owed to an orderer after payment was confirmed. Status: `PENDING`, `COMPLETED`. See `docs/design-docs/refund-lifecycle.md`
+
+`Payment` is documented but not yet implemented as an ORM model (see `docs/exec-plans/tech-debt-tracker.md`).
 
 **Key relationships**:
 - One User can create many Proposals (as Orderer)
 - One User can submit many Offers (as Runner)
 - One Proposal has many Offers
-- One accepted Offer becomes one Mission
+- One accepted Offer becomes one Mission (1:1, at most one Mission per Proposal)
+- One Proposal has at most one Refund; a post-match Refund also points at the Mission
 
-See `docs/architecture/orderrun-domain-model.md` for detailed domain model.
+See `docs/domain.md` for the canonical status and transition tables.
 
 ### API Structure
 

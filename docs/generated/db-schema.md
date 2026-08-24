@@ -20,6 +20,8 @@
 | `terms_agreements` | terms | O | `docs/exec-plans/completed/terms-agreement/model.md` | 사용자별 필수 약관 동의 |
 | `proposals` | bidding/proposal | O | `docs/exec-plans/completed/proposal/model.md` | 심부름 모집 공고 |
 | `offers` | bidding/offer | O | `docs/domains/offer/README.md` | 러너 지원서 |
+| `missions` | mission | O | `docs/product-specs/mission.md` | 수락된 지원의 수행 단위. 관리자 웹 전용 |
+| `refunds` | refund | O | `docs/design-docs/refund-lifecycle.md` | 입금 확인된 요청의 환불 처리 정본 |
 | `dispute_evidences` | execution/dispute-evidence | O | `docs/domain.md` | 분쟁 사유 증빙 |
 | `dispute_survey_questions` | dispute-survey | O | `docs/api-spec/README.md` | 분쟁 접수 전 설문 질문 마스터 |
 | `proposal_report_reason_questions` | proposal-report | O | `docs/product-specs/proposal-reporting.md` | 게시글 신고 사유 마스터 |
@@ -40,11 +42,17 @@ users 1 -> 1 settlement_accounts
 proposals 1 -> N offers
 proposals 1 -> N dispute_evidences
 proposals 1 -> N proposal_reports
+proposals 1 -> 1 missions
+proposals 1 -> 1 refunds
 offers 1 -> N dispute_evidences
+offers 1 -> 1 missions
+missions 1 -> N dispute_evidences
+missions 1 -> 0..1 refunds
 offers 1 -> 1 payments
 ```
 
-위 관계는 애플리케이션 레벨 관계다. 목표 정본 기준으로 실제 MySQL FK constraint는 없다.
+대부분은 애플리케이션 레벨 관계다. `dispute_evidences.mission_id`만 분쟁이 반드시 미션에 연결된다는
+불변식을 DB에서도 보장하기 위해 실제 MySQL FK constraint를 둔다.
 
 ## 공통 컬럼 규칙
 
@@ -68,6 +76,8 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `last_login_at` | `datetime(6)` | YES |  | 마지막 로그인 시각 |
 | `alarm_enabled` | `boolean` | YES |  | 알림 수신 동의 여부 |
 | `level` | `integer` | NO |  | 성공 완료한 러너 Offer 수 기반 레벨 |
+| `is_admin` | `boolean` | NO |  | 관리자 웹 전용 계정 여부. 앱 사용자는 항상 거짓 |
+| `admin_username` | `varchar(50)` | YES | UNIQUE `uk_users_admin_username` | 관리자 로그인 아이디. 관리자 행에만 값이 있다 |
 | `deleted` | `boolean` | NO | INDEX `idx_users_deleted` | 탈퇴 여부 |
 | `deleted_at` | `datetime(6)` | YES |  | 탈퇴 처리 시각 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
@@ -79,6 +89,8 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 - `phone`은 하이픈/공백 제거 및 `+82` -> `0` 변환 후 저장한다.
 - 탈퇴 시 `deleted = true`로 표시한다. 이 값은 회원 탈퇴 정책의 `WITHDRAWN` 상태에 해당한다.
 - 탈퇴 시 개인정보 필드는 `null`로 영구 삭제한다. 활동 조회에서만 작성자를 `탈퇴한 사용자`로 표시한다.
+- 관리자 계정은 휴대폰이 없어 SMS 로그인 경로로는 토큰을 받을 수 없다. `POST /v1/admin/auth/login`만 사용한다.
+  계정은 앱 기동 시 `ADMIN_USERNAME` / `ADMIN_INITIAL_PASSWORD` 설정값으로 한 번만 만든다.
 - 탈퇴 후 `phone = null`이 되므로 동일 전화번호로 새 사용자 가입이 가능하며, 기존 활동 이력은 새 User ID와 연결하지 않는다.
 
 ## `auth_phone_verifications`
@@ -185,7 +197,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `errand_fee` | `integer` | NO |  | 심부름비 |
 | `item_price` | `integer` | NO |  | legacy 호환 컬럼. 현재 API 미노출 |
 | `deposit` | `integer` | NO |  | legacy 호환 컬럼. 현재 API 미노출 |
-| `status` | `varchar(20)` | NO |  | `HOLDING`, `POSTED`, `OFFERED`, `MATCHED`, `ORDER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `RESOLVED`, `REPORTED`, `CANCELLED` |
+| `status` | `varchar(20)` | NO |  | `HOLDING`, `POSTED`, `OFFERED`, `MATCHED`, `ORDER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REFUND_PENDING`, `REFUNDED`, `REPORTED`, `CANCELLED` |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `matched_at` | `datetime(6)` | YES |  | Offer 수락으로 매칭된 시각 |
 | `runner_confirmed_at` | `datetime(6)` | YES |  | 러너 완료 확인 시각 |
@@ -193,6 +205,8 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `settled_at` | `datetime(6)` | YES |  | legacy 호환 컬럼. 현재 API 미노출 |
 | `disputed_at` | `datetime(6)` | YES |  | 분쟁 접수 시각 |
 | `resolved_at` | `datetime(6)` | YES |  | 분쟁 해결 시각 |
+| `open_chat_url` | `varchar(500)` | YES |  | 입금 확인 시 관리자가 입력한 오픈채팅방 URL |
+| `admin_note` | `varchar(500)` | YES |  | 관리자 취소 메모 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
 
 ## `offers`
@@ -202,7 +216,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `id` | `bigint` | NO | PK, auto increment | Offer ID |
 | `proposal_id` | `bigint` | NO | UNIQUE `uk_proposal_runner` 일부 | 대상 Proposal ID |
 | `runner_id` | `varchar(36)` | NO | UNIQUE `uk_proposal_runner` 일부, INDEX `idx_offers_runner_id` | 지원자 사용자 ID |
-| `status` | `varchar(20)` | NO |  | `WAITING`, `ACCEPTED`, `RUNNER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `RESOLVED`, `REJECTED`, `CANCELLED` |
+| `status` | `varchar(20)` | NO |  | `WAITING`, `ACCEPTED`, `RUNNER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REJECTED`, `CANCELLED` |
 | `open_chat_url` | `varchar(500)` | YES |  | 매칭 당사자에게 노출할 카카오톡 오픈채팅방 링크 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `accepted_at` | `datetime(6)` | YES |  | 오더가 Offer를 수락한 시각 |
@@ -213,6 +227,69 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `resolved_at` | `datetime(6)` | YES |  | 분쟁 해결 시각 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
 
+## `missions`
+
+수락된 지원 하나에 대응하는 수행 단위. 앱에는 노출하지 않고 관리자 웹에서만 사용한다.
+상태는 `proposals`와 `offers`의 상태에서 파생하되 상태별 목록 조회를 위해 컬럼으로 실체화한다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
+|------|------|------|-----------|------|
+| `id` | `bigint` | NO | PK, auto increment | 미션 ID |
+| `proposal_id` | `bigint` | NO | UNIQUE `uk_missions_proposal_id` | 대상 Proposal ID |
+| `offer_id` | `bigint` | NO | UNIQUE `uk_missions_offer_id` | 수락된 Offer ID |
+| `orderer_id` | `varchar(36)` | NO | INDEX `idx_missions_orderer_id` | 행님 사용자 ID |
+| `runner_id` | `varchar(36)` | NO | INDEX `idx_missions_runner_id` | 꼬붕 사용자 ID |
+| `status` | `varchar(20)` | NO | INDEX `idx_missions_status` | `STARTED`, `DISPUTED`, `COMPLETED`, `PAID`, `FAILED` |
+| `errand_fee` | `int` | NO |  | 수행비. 지급액과 환불액의 근거 금액 |
+| `started_at` | `datetime(6)` | NO |  | 미션 시작 시각. Offer 수락 시각 |
+| `disputed_at` | `datetime(6)` | YES |  | 분쟁 전환 시각 |
+| `completed_at` | `datetime(6)` | YES |  | 미션 완료 시각 |
+| `failed_at` | `datetime(6)` | YES |  | 미션 실패 시각 |
+| `resolution` | `varchar(20)` | YES |  | 관리자 분쟁 판정 결과. `COMPLETED` 또는 `FAILED` |
+| `resolved_at` | `datetime(6)` | YES |  | 분쟁 판정 시각 |
+| `resolved_by_admin_id` | `varchar(36)` | YES |  | 판정한 관리자 ID |
+| `settlement_paid_at` | `datetime(6)` | YES |  | 꼬붕 수행비 입금 시각. null이면 미지급 |
+| `settlement_paid_by_admin_id` | `varchar(36)` | YES |  | 지급 처리 관리자 ID |
+| `settlement_rejected_at` | `datetime(6)` | YES |  | 수행비 지급 반려 시각 |
+| `settlement_rejected_by_admin_id` | `varchar(36)` | YES |  | 지급 반려 관리자 ID |
+| `payout_memo` | `varchar(200)` | YES |  | 이체 참조번호 등 관리자 메모 |
+| `created_at` | `datetime(6)` | NO |  | 생성 시각 |
+| `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
+
+지급 여부는 별도 boolean 없이 `settlement_paid_at`의 null 여부로 판정한다.
+관리자 웹의 수행비 지급(payout)은 이 컬럼에서 파생한다. 환불 정본은 `refunds`이며 Mission은
+환불 처리와 무관하게 수행 결과인 `FAILED`를 유지한다. 지급 반려는 기록만 남기고 미션 상태를
+되돌리지 않는다.
+
+꼬붕·행님의 완료 확인 시각은 `missions`에 복제하지 않는다. 정본은 `offers.runner_confirmed_at`과
+`offers.orderer_confirmed_at`이며, 관리자 미션 응답에서 조회 시점에 합쳐 내려준다.
+
+현재 코드 갭:
+
+- 없음.
+
+## `refunds`
+
+입금 확인 후 취소된 Proposal의 전액 환불 처리 정본이다. 매칭 전 취소는 `mission_id`가 없고,
+수락 이후 분쟁 또는 관리자 취소는 Mission도 함께 참조한다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
+|------|------|------|-----------|------|
+| `id` | `bigint` | NO | PK, auto increment | 관리자 환불 API의 refund ID |
+| `proposal_id` | `bigint` | NO | UNIQUE `uk_refunds_proposal_id` | 환불 대상 Proposal ID |
+| `mission_id` | `bigint` | YES | UNIQUE `uk_refunds_mission_id` | 수락 이후 환불이면 연결된 Mission ID |
+| `orderer_id` | `varchar(36)` | NO | INDEX `ix_refunds_orderer_id` | 환불받을 행님 사용자 ID |
+| `amount` | `integer` | NO |  | 요청의 수행비 전액 |
+| `reason` | `varchar(30)` | NO |  | `USER_CANCELLED`, `ADMIN_CANCELLED`, `DISPUTE_FAILED` |
+| `reason_detail` | `text` | YES |  | 관리자 취소 메모 또는 사용자 분쟁 사유 |
+| `status` | `varchar(20)` | NO | INDEX `idx_refunds_status_requested` | `PENDING`, `COMPLETED` |
+| `requested_at` | `datetime(6)` | NO | INDEX `idx_refunds_status_requested` | 환불 대상 확정 시각 |
+| `processed_at` | `datetime(6)` | YES |  | 환불 완료 시각 |
+| `processed_by_admin_id` | `varchar(36)` | YES |  | 처리 관리자 ID |
+| `admin_note` | `varchar(200)` | YES |  | 이체 참조번호 등 처리 메모 |
+| `created_at` | `datetime(6)` | NO |  | 생성 시각 |
+| `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
+
 ## `dispute_evidences`
 
 | 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
@@ -220,14 +297,21 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `id` | `bigint` | NO | PK, auto increment | 분쟁 증빙 ID |
 | `proposal_id` | `bigint` | NO | INDEX `ix_dispute_evidences_proposal_id` | 연관 Proposal ID |
 | `offer_id` | `bigint` | NO | INDEX `ix_dispute_evidences_offer_id` | 연관 Offer ID |
+| `mission_id` | `bigint` | NO | FK `fk_dispute_evidences_mission_id`, INDEX `idx_dispute_evidences_mission_id` | 연관 Mission ID |
 | `actor_id` | `varchar(36)` | NO | INDEX `ix_dispute_evidences_actor_id` | 분쟁 접수 사용자 ID |
 | `reason` | `text` | NO |  | 분쟁 사유 |
 | `survey_question_id` | `bigint` | NO | INDEX `idx_dispute_evidences_survey_question_id` | 선택한 분쟁 설문 질문 ID |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
+| `status` | `varchar(20)` | NO | INDEX `idx_dispute_evidences_status` | 관리자 처리 상태. `PENDING`, `RESOLVED`, `REJECTED` |
+| `admin_note` | `varchar(500)` | YES |  | 관리자 처리 메모 |
+| `resolved_at` | `datetime(6)` | YES |  | 관리자 처리 시각 |
+| `resolved_by_admin_id` | `varchar(36)` | YES |  | 처리한 관리자 ID |
 
-현재 코드 갭:
+`status`는 요청·지원의 진행 상태와 다른 축이다. 접수 건을 관리자가 처리했는지만 나타낸다.
 
-- 없음.
+`0025_link_disputes_to_missions` 마이그레이션은 기존 행을 `offer_id`로 백필하고, 연결되지 않은 행이
+남아 있으면 NOT NULL 전환 전에 중단한다. staging에서 중단되면 해당 분쟁의 Offer/Mission 관계를
+먼저 복구해야 한다.
 
 ## `dispute_survey_questions`
 
@@ -298,7 +382,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 현재 코드 메모:
 
 - `payments` ORM 모델은 아직 없다.
-- 회원 탈퇴의 미결 정산/결제 트랜잭션 검증은 `payments` ORM과 정산 상태 전이가 도입될 때 `PENDING`, `PROCESSING`, 환불/분쟁 처리 중 상태를 차단 조건으로 연결한다.
+- 회원 탈퇴의 미결 환불·수행비 지급은 현재 `missions`의 완료·반려 시각으로 차단한다. 향후 `payments` ORM이 도입되면 결제 처리 중 상태도 추가한다.
 - 기존 문서의 `payer_id`, `payee_id`, `amount`, `currency`, `provider`, `external_tx_id` 기준은 이 목표 정본으로 대체한다.
 
 ## `settlement_accounts`

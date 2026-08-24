@@ -21,10 +21,14 @@ from app.models.dispute_evidence import DisputeEvidence
 from app.models.notification import Notification, NotificationType
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.refund import RefundReason
+from app.models.settlement import SettlementAccount
 from app.models.user import User
 from app.schemas.common import PageResponse
 from app.schemas.proposal import ProposalDetailResponse, ProposalOwnOfferResponse, ProposalOwnResponse, ProposalRequest
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
+from app.services.mission.mission_service import MissionService
+from app.services.refund.refund_service import RefundService
 
 
 PAYMENT_DEADLINE = timedelta(hours=24)
@@ -42,14 +46,12 @@ OPEN_CHAT_PROPOSAL_STATUSES = (
     ProposalStatus.ORDER_COMPLETED,
     ProposalStatus.ALL_COMPLETED,
     ProposalStatus.DISPUTED,
-    ProposalStatus.RESOLVED,
 )
 OPEN_CHAT_OFFER_STATUSES = (
     OfferStatus.ACCEPTED,
     OfferStatus.RUNNER_COMPLETED,
     OfferStatus.ALL_COMPLETED,
     OfferStatus.DISPUTED,
-    OfferStatus.RESOLVED,
 )
 PUBLIC_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
 
@@ -61,7 +63,12 @@ PROPOSAL_BADGE_ORDER = (
     (ProposalStatus.MATCHED, ProposalStatus.ORDER_COMPLETED),
     (ProposalStatus.DISPUTED,),
     (ProposalStatus.ALL_COMPLETED,),
-    (ProposalStatus.CANCELLED, ProposalStatus.REPORTED, ProposalStatus.RESOLVED),
+    (
+        ProposalStatus.CANCELLED,
+        ProposalStatus.REFUND_PENDING,
+        ProposalStatus.REFUNDED,
+        ProposalStatus.REPORTED,
+    ),
 )
 
 
@@ -268,6 +275,14 @@ class ProposalService:
     @staticmethod
     def create(db: Session, request: ProposalRequest, orderer_id: str) -> Proposal:
         ProposalService._get_existing_user(db, orderer_id)
+        account_exists = (
+            db.query(SettlementAccount.id)
+            .filter(SettlementAccount.user_id == orderer_id)
+            .first()
+            is not None
+        )
+        if not account_exists:
+            raise api_error(AppError.SETTLEMENT_ACCOUNT_REQUIRED)
         proposal = Proposal.create_proposal(
             orderer_id=orderer_id,
             title=request.title,
@@ -304,8 +319,11 @@ class ProposalService:
         if proposal.status not in CANCELLABLE_STATUSES:
             raise api_error(AppError.PROPOSAL_NOT_CANCELLABLE, f"status: {proposal.status.value}")
 
+        paid = proposal.status in {ProposalStatus.POSTED, ProposalStatus.OFFERED}
         should_reject_waiting_offers = proposal.status == ProposalStatus.OFFERED
-        proposal.status = ProposalStatus.CANCELLED
+        proposal.cancel()
+        if paid:
+            RefundService.create_pending(db, proposal, RefundReason.USER_CANCELLED)
         if should_reject_waiting_offers:
             (
                 db.query(Offer)
@@ -318,11 +336,13 @@ class ProposalService:
         return proposal
 
     @staticmethod
-    def confirm_payment(db: Session, proposal_id: int) -> Proposal:
+    def confirm_payment(db: Session, proposal_id: int, open_chat_url: str | None = None) -> Proposal:
         proposal = ProposalService._get_proposal(db, proposal_id)
         if proposal.status != ProposalStatus.HOLDING:
             raise api_error(AppError.INVALID_STATUS, f"current status: {proposal.status.value}")
         proposal.status = ProposalStatus.POSTED
+        if open_chat_url is not None:
+            proposal.open_chat_url = open_chat_url
         db.flush()
         EventBus.publish(ProposalPaymentConfirmedEvent(
             proposal_id=proposal.id,
@@ -345,6 +365,7 @@ class ProposalService:
         proposal.confirm_orderer_completion()
         offer.confirm_orderer_completion()
         ProposalService._sync_all_completed(db, proposal, offer)
+        MissionService.sync_from_offer_and_proposal(db, offer, proposal)
         all_completed = proposal.status == ProposalStatus.ALL_COMPLETED and offer.status == OfferStatus.ALL_COMPLETED
         db.flush()
         EventBus.publish(MeetingConfirmedByOrdererEvent(
@@ -377,9 +398,13 @@ class ProposalService:
         DisputeSurveyService.ensure_active_question(db, survey_question_id, DisputeSurveyTargetType.ORDER)
         proposal.raise_dispute()
         offer.raise_dispute()
+        mission = MissionService.sync_from_offer_and_proposal(db, offer, proposal)
+        if mission is None:
+            raise api_error(AppError.MISSION_NOT_FOUND, f"offerId: {offer.id}")
         db.add(DisputeEvidence(
             proposal_id=proposal.id,
             offer_id=offer.id,
+            mission_id=mission.id,
             actor_id=orderer_id,
             survey_question_id=survey_question_id,
             reason=dispute_reason,

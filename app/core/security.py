@@ -73,3 +73,14 @@ async def get_current_user(
         raise api_error(AppError.USER_NOT_FOUND)
 
     return user
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """관리자 전용 의존성.
+
+    권한은 토큰 클레임이 아니라 DB의 `is_admin`으로 판정한다. 권한을 회수하면
+    이미 발급된 토큰으로도 더 이상 들어올 수 없다.
+    """
+    if not current_user.is_admin:
+        raise api_error(AppError.FORBIDDEN)
+    return current_user

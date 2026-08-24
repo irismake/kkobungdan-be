@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, api_error
 from app.core.time import utcnow_naive
 from app.models.notification import Notification
+from app.models.mission import Mission, MissionStatus
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.refund import Refund, RefundStatus
 from app.models.settlement import SettlementAccount
 from app.models.user import (
     AuthPhoneVerification,
@@ -21,6 +24,8 @@ from app.schemas.user import UserWithdrawalReasonQuestionResponse, UserWithdrawa
 
 
 WITHDRAWAL_BLOCKING_PROPOSAL_STATUSES = {
+    ProposalStatus.POSTED,
+    ProposalStatus.OFFERED,
     ProposalStatus.MATCHED,
     ProposalStatus.ORDER_COMPLETED,
     ProposalStatus.DISPUTED,
@@ -32,8 +37,6 @@ WITHDRAWAL_BLOCKING_OFFER_STATUSES = {
 }
 WITHDRAWAL_AUTO_CANCEL_PROPOSAL_STATUSES = {
     ProposalStatus.HOLDING,
-    ProposalStatus.POSTED,
-    ProposalStatus.OFFERED,
 }
 WITHDRAWAL_AUTO_CANCEL_OFFER_STATUSES = {OfferStatus.WAITING}
 
@@ -122,11 +125,37 @@ class UserWithdrawalService:
         if has_blocking_proposal:
             return True
 
-        return (
+        has_blocking_offer = (
             db.query(Offer.id)
             .filter(
                 Offer.runner_id == user_id,
                 Offer.status.in_(WITHDRAWAL_BLOCKING_OFFER_STATUSES),
+            )
+            .first()
+            is not None
+        )
+        if has_blocking_offer:
+            return True
+
+        # 종료된 요청·지원 상태에서도 실제 환불·지급이 남아 있으면 계좌를 삭제할 수 없다.
+        has_pending_refund = (
+            db.query(Refund.id)
+            .filter(Refund.orderer_id == user_id, Refund.status == RefundStatus.PENDING.value)
+            .first()
+            is not None
+        )
+        if has_pending_refund:
+            return True
+
+        return (
+            db.query(Mission.id)
+            .filter(
+                and_(
+                    Mission.runner_id == user_id,
+                    Mission.status == MissionStatus.COMPLETED.value,
+                    Mission.settlement_paid_at.is_(None),
+                    Mission.settlement_rejected_at.is_(None),
+                )
             )
             .first()
             is not None

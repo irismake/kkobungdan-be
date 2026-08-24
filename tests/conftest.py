@@ -309,6 +309,28 @@ def sample_user(db: Session) -> User:
 
 
 @pytest.fixture
+def admin_user(db: Session) -> User:
+    from app.core.password import hash_password
+
+    admin = User(
+        name="관리자",
+        admin_username="admin",
+        password_hash=hash_password("admin-password"),
+        is_admin=True,
+        alarm_enabled=False,
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return admin
+
+
+@pytest.fixture
+def admin_headers(admin_user: User) -> dict:
+    return {"Authorization": f"Bearer {create_access_token({'sub': admin_user.id})}"}
+
+
+@pytest.fixture
 def auth_headers(sample_user: User) -> dict:
     access_token = create_access_token({"sub": str(sample_user.id)})
     return {"Authorization": f"Bearer {access_token}"}

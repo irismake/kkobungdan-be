@@ -115,6 +115,8 @@ jobs:
           STAGING_AWS_SNS_SMS_SENDER_ID=Kkobongdan
           STAGING_AWS_SNS_SMS_TYPE=Transactional
           STAGING_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
+          STAGING_ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
+          STAGING_ADMIN_INITIAL_PASSWORD=${{ secrets.ADMIN_INITIAL_PASSWORD }}
           PROD_APP_ENV=production
           PROD_APP_DEBUG=false
           PROD_SECRET_KEY=prod-not-configured

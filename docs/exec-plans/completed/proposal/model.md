@@ -59,8 +59,12 @@
 | `ORDER_COMPLETED` | 오더러 완료 확인 이후 |
 | `ALL_COMPLETED` | 러너와 오더러 모두 완료 |
 | `DISPUTED` | 분쟁 접수 |
-| `RESOLVED` | 분쟁 해결 완료 |
+| `RESOLVED` | 분쟁 해결 완료 (2026-08-24 제거됨) |
 | `CANCELLED` | 매칭 전 취소 |
+
+> 2026-08-24 [환불 수명주기 개편](../../design-docs/refund-lifecycle.md)으로 `RESOLVED`가
+> 제거되고 `REFUND_PENDING`, `REFUNDED`, `REPORTED`가 추가됐다. 현재 상태 정본은
+> [`docs/domain.md`](../../domain.md)다.
 
 ## 상태 규칙
 

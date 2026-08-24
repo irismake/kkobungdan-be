@@ -11,7 +11,18 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import models so Base.metadata is populated for autogenerate.
-from app.models import dispute_evidence, dispute_survey, notification, offer, proposal, settlement, terms, user  # noqa: F401
+from app.models import (  # noqa: F401
+    dispute_evidence,
+    dispute_survey,
+    mission,
+    notification,
+    offer,
+    proposal,
+    refund,
+    settlement,
+    terms,
+    user,
+)
 
 
 config = context.config

@@ -37,12 +37,18 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     alarm_enabled = Column(Boolean, nullable=True, default=True, server_default="1")
     level = Column(Integer, nullable=False, default=0, server_default="0")
+    # 관리자 웹 전용 계정 표시. 앱 사용자는 항상 거짓이다.
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+    # 관리자 로그인 아이디. 관리자 행에만 값이 있다.
+    admin_username = Column(String(50), nullable=True, unique=True)
     deleted = Column(Boolean, nullable=False, default=False, server_default="0")
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
 
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+
+    __table_args__ = (UniqueConstraint("admin_username", name="uk_users_admin_username"),)
 
     def update_last_login_at(self, current_time: datetime) -> None:
         self.last_login_at = current_time

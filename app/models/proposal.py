@@ -22,7 +22,8 @@ class ProposalStatus(str, enum.Enum):
     ORDER_COMPLETED = "ORDER_COMPLETED"
     ALL_COMPLETED = "ALL_COMPLETED"
     DISPUTED = "DISPUTED"
-    RESOLVED = "RESOLVED"
+    REFUND_PENDING = "REFUND_PENDING"
+    REFUNDED = "REFUNDED"
     REPORTED = "REPORTED"
     CANCELLED = "CANCELLED"
 
@@ -39,6 +40,9 @@ class Proposal(Base):
     deadline = Column(DateTime(timezone=True), nullable=False)
     errand_fee = Column(Integer, nullable=False)
     status = Column(Enum(ProposalStatus), nullable=False, default=ProposalStatus.HOLDING, index=True)
+    # 입금 확인 시 관리자가 입력한다. 수락된 지원이 생기기 전 단계라 지원에 둘 수 없다.
+    open_chat_url = Column(String(500), nullable=True)
+    admin_note = Column(String(500), nullable=True)
 
     # Kept for migration compatibility. These fields are not exposed by the current Java Proposal API.
     meeting_at = Column(DateTime(timezone=True), nullable=False)
@@ -99,11 +103,43 @@ class Proposal(Base):
     def can_resolve(self) -> bool:
         return self.status == ProposalStatus.DISPUTED
 
-    def resolve(self) -> None:
+    def resolve_completed(self) -> None:
         if not self.can_resolve():
             raise ValueError("Cannot resolve proposal not in DISPUTED status")
-        self.status = ProposalStatus.RESOLVED
+        self.status = ProposalStatus.ALL_COMPLETED
         self.resolved_at = utcnow_naive()
+
+    def resolve_refund_pending(self) -> None:
+        if not self.can_resolve():
+            raise ValueError("Cannot resolve proposal not in DISPUTED status")
+        self.status = ProposalStatus.REFUND_PENDING
+        self.resolved_at = utcnow_naive()
+
+    def mark_refund_pending(self, admin_note: str | None = None) -> None:
+        if self.status not in {
+            ProposalStatus.POSTED,
+            ProposalStatus.OFFERED,
+            ProposalStatus.MATCHED,
+            ProposalStatus.ORDER_COMPLETED,
+            ProposalStatus.DISPUTED,
+        }:
+            raise ValueError("Proposal cannot enter refund pending status")
+        self.status = ProposalStatus.REFUND_PENDING
+        if admin_note is not None:
+            self.admin_note = admin_note
+
+    def mark_refunded(self) -> None:
+        if self.status != ProposalStatus.REFUND_PENDING:
+            raise ValueError("Proposal is not awaiting refund")
+        self.status = ProposalStatus.REFUNDED
+
+    def admin_cancel(self, admin_note: str | None = None) -> None:
+        """관리자 취소. 매칭 이후에도 취소할 수 있고 이미 취소된 건만 막는다."""
+        if self.status in {ProposalStatus.CANCELLED, ProposalStatus.REFUNDED}:
+            raise ValueError("Proposal is already cancelled")
+        self.status = ProposalStatus.CANCELLED
+        if admin_note is not None:
+            self.admin_note = admin_note
 
     def cancel(self) -> None:
         if self.status not in {
@@ -112,7 +148,11 @@ class Proposal(Base):
             ProposalStatus.OFFERED,
         }:
             raise ValueError("Cannot cancel proposal after matching")
-        self.status = ProposalStatus.CANCELLED
+        self.status = (
+            ProposalStatus.CANCELLED
+            if self.status == ProposalStatus.HOLDING
+            else ProposalStatus.REFUND_PENDING
+        )
 
     @classmethod
     def create_proposal(

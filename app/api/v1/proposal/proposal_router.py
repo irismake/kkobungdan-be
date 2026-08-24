@@ -141,7 +141,7 @@ def get_proposal(
     summary="요청 게시글 신고",
     description="공개 모집 중인 다른 사용자의 요청 게시글을 신고합니다.",
     responses={
-        201: success_response({"success": True, "data": {"id": 1, "proposalId": 1, "reporterId": "550e8400-e29b-41d4-a716-446655440001", "reasonQuestionId": 1, "reasonQuestionText": "광고 또는 스팸이에요", "detailReason": "반복 광고입니다.", "status": "PENDING", "createdAt": "2026-06-01T12:00:00+09:00", "reviewedAt": None}, "message": "신고가 접수되었습니다."}),
+        201: success_response({"success": True, "data": {"id": 1, "proposalId": 1, "reporterId": "550e8400-e29b-41d4-a716-446655440001", "reporterName": None, "reasonQuestionId": 1, "reasonQuestionText": "광고 또는 스팸이에요", "detailReason": "반복 광고입니다.", "status": "PENDING", "createdAt": "2026-06-01T12:00:00+09:00", "reviewedAt": None}, "message": "신고가 접수되었습니다."}),
         **error_responses(
             AppError.INVALID_TOKEN,
             AppError.VALIDATION_ERROR,
@@ -167,7 +167,7 @@ def create_proposal_report(
     response_model=ApiResponse[ProposalResponse],
     status_code=status.HTTP_201_CREATED,
     summary="요청 등록",
-    description="새 심부름 요청을 등록합니다.",
+    description="정산·환불 계좌가 등록된 사용자가 새 심부름 요청을 등록합니다.",
     responses={
         201: success_response(PROPOSAL_CREATE_EXAMPLE),
         **error_responses(
@@ -177,6 +177,7 @@ def create_proposal_report(
             AppError.INVALID_DATE_TIME_FORMAT,
             AppError.PROPOSAL_DEADLINE_INVALID,
             AppError.PROPOSAL_ERRAND_FEE_INVALID,
+            AppError.SETTLEMENT_ACCOUNT_REQUIRED,
         ),
     },
 )
@@ -224,7 +225,10 @@ def update_proposal(
     response_model=ApiResponse[ProposalResponse],
     status_code=status.HTTP_200_OK,
     summary="요청 취소",
-    description="본인이 등록한 요청을 취소합니다.",
+    description=(
+        "본인이 등록한 요청을 취소합니다. 입금 확인 전 `HOLDING`은 `CANCELLED`, "
+        "입금 확인 후 `POSTED`/`OFFERED`는 환불을 생성하고 `REFUND_PENDING`이 됩니다."
+    ),
     responses={
         200: success_response(PROPOSAL_CANCEL_EXAMPLE),
         **error_responses(

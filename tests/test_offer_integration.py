@@ -56,6 +56,7 @@ def notification_count(db, user_id: str, notification_type: NotificationType, re
 
 def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, db, factory, sample_user):
     runner = factory.user("01077770001", name="Runner One")
+    factory.settlement_account(runner)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
     response = client.post(
@@ -101,9 +102,27 @@ def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, d
     assert proposal.resolved_at is None
 
 
+def test_create_offer_requires_runner_settlement_account(client, db, factory, sample_user):
+    runner = factory.user("01077770034", name="계좌 없는 러너")
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+
+    response = client.post(
+        "/v1/offer",
+        json=offer_payload(proposal.id),
+        headers=factory.headers_for(runner),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "SETTLEMENT_ACCOUNT_REQUIRED"
+    assert db.query(Offer).filter(Offer.proposal_id == proposal.id, Offer.runner_id == runner.id).first() is None
+    db.refresh(proposal)
+    assert proposal.status == ProposalStatus.POSTED
+
+
 def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770031", name="Runner Notify")
+    factory.settlement_account(runner)
     runner.alarm_enabled = True
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
     db.commit()
@@ -128,6 +147,7 @@ def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, 
 
 def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, db, factory, sample_user):
     runner = factory.user("01077770032")
+    factory.settlement_account(runner)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
     response = client.post(
@@ -164,6 +184,7 @@ def test_create_offer_queues_only_notifications_created_by_current_event(
 
     sample_user.alarm_enabled = True
     runner = factory.user("01077770033")
+    factory.settlement_account(runner)
     runner.alarm_enabled = True
     stale = factory.notification(sample_user.id, status=NotificationStatus.PENDING)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -194,6 +215,8 @@ def test_create_offer_queues_only_notifications_created_by_current_event(
 def test_create_second_offer_keeps_proposal_offered(client, db, factory, sample_user):
     runner1 = factory.user("01077770002")
     runner2 = factory.user("01077770003")
+    factory.settlement_account(runner1)
+    factory.settlement_account(runner2)
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
 
     first = client.post("/v1/offer", json=offer_payload(proposal.id), headers=factory.headers_for(runner1))
@@ -374,7 +397,6 @@ def test_get_own_offers_orders_by_badge_then_latest(client, db, factory, sample_
         (OfferStatus.DISPUTED, 50),
         (OfferStatus.RUNNER_COMPLETED, 20),
         (OfferStatus.REJECTED, 70),
-        (OfferStatus.RESOLVED, 60),
     ]
     for status, minutes in rows:
         proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -395,7 +417,7 @@ def test_get_own_offers_orders_by_badge_then_latest(client, db, factory, sample_
         "ACCEPTED", "RUNNER_COMPLETED",
         "DISPUTED",
         "ALL_COMPLETED",
-        "REJECTED", "RESOLVED", "CANCELLED",
+        "REJECTED", "CANCELLED",
     ]
 
 
@@ -895,6 +917,7 @@ def test_complete_delivery_forbidden_and_wrong_status_errors(client, db, factory
 
 def test_offer_validation_and_domain_errors(client, db, factory, sample_user):
     runner = factory.user("01077770018")
+    factory.settlement_account(runner)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
     closed_proposal = factory.proposal(sample_user.id, ProposalStatus.MATCHED)
 

@@ -73,6 +73,12 @@ wait_for_health() {
 }
 
 "${compose_cmd[@]}" pull "$app_service"
+
+# 마이그레이션을 새 앱보다 먼저 돌린다. 새 이미지가 아직 없는 컬럼을 읽어
+# 요청이 실패하는 구간을 없애기 위해서다. 실패하면 돌던 앱을 그대로 두고 멈춘다.
+echo "Running database migrations..."
+"${compose_cmd[@]}" run --rm -T --no-deps "$app_service" alembic upgrade head
+
 if [[ -n "$deploy_target" ]]; then
   "${compose_cmd[@]}" up -d --build --remove-orphans "$app_service"
 else
@@ -83,8 +89,5 @@ if ! wait_for_health "$app_container"; then
   "${compose_cmd[@]}" logs --tail=100 "$app_service" || true
   exit 1
 fi
-
-echo "Running database migrations..."
-docker exec "$app_container" alembic upgrade head
 
 "${compose_cmd[@]}" ps

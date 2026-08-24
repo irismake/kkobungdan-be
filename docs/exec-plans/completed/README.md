@@ -22,3 +22,6 @@
 - [`2026-08-18-notification-copy-revision.md`](./2026-08-18-notification-copy-revision.md): 알림 문구 개정(행님/꼬붕 호칭, 수행비 표기) 반영
 - [`2026-08-20-error-code-client-mapping.md`](./2026-08-20-error-code-client-mapping.md): 에러 응답 봉투 전면 적용, 메시지 한국어화·용어 통일, 클라이언트 매핑 문서화
 - [`2026-08-20-login-send-user-not-found.md`](./2026-08-20-login-send-user-not-found.md): 로그인 인증번호 발송의 미가입 번호 응답을 401 `INVALID_CREDENTIALS`에서 404 `USER_NOT_FOUND`로 전환
+- [`2026-08-22-mission-entity.md`](./2026-08-22-mission-entity.md): 미션 엔티티 도입과 관리자 분쟁 판정·정산·환불 기록
+- [`2026-08-24-admin-response-name-fields.md`](./2026-08-24-admin-response-name-fields.md): 미션·신고 관리자 응답에 행님·꼬붕·신고자 이름 노출
+- [`2026-08-24-openapi-nullable-examples.md`](./2026-08-24-openapi-nullable-examples.md): OpenAPI 예시에서 사라지던 nullable 필드 복원

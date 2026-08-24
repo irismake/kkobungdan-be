@@ -42,10 +42,11 @@
 | 3 | 진행중 | `MATCHED`, `ORDER_COMPLETED` |
 | 4 | 분쟁중 | `DISPUTED` |
 | 5 | 완료 | `ALL_COMPLETED` |
-| 6 | 취소 | `CANCELLED`, `REPORTED`, `RESOLVED` |
+| 6 | 취소 | `CANCELLED`, `REFUND_PENDING`, `REFUNDED`, `REPORTED` |
 
-`REPORTED`(관리자 신고 승인)와 `RESOLVED`(분쟁 해결)는 별도 배지가 없어 취소 그룹으로 묶는다.
-`RESOLVED`는 분쟁 처리로 종결된 건이라 정상 완료(`ALL_COMPLETED`)와 구분해 취소에 넣는다.
+`REPORTED`(관리자 신고 승인)와 환불 상태 두 개는 별도 배지가 없어 취소 그룹으로 묶는다.
+`REFUND_PENDING`/`REFUNDED`는 취소가 확정된 뒤의 환불 진행 단계라 정상 완료(`ALL_COMPLETED`)와
+구분해 취소에 넣는다. (2026-08-24 환불 수명주기 개편으로 `RESOLVED`를 대체했다.)
 
 ### 수행 기록 (Offer)
 
@@ -55,7 +56,7 @@
 | 2 | 진행중 | `ACCEPTED`, `RUNNER_COMPLETED` |
 | 3 | 분쟁중 | `DISPUTED` |
 | 4 | 완료 | `ALL_COMPLETED` |
-| 5 | 취소 | `REJECTED`, `CANCELLED`, `RESOLVED` |
+| 5 | 취소 | `REJECTED`, `CANCELLED` |
 
 ## 정렬 규칙
 
