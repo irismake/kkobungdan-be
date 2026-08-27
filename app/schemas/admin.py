@@ -114,6 +114,29 @@ class AdminNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
+class AdminRefundVoidRequest(BaseModel):
+    """입금 대조 결과 입금이 없어 환불 없이 종결하는 요청.
+
+    돈을 지급하지 않고 종결하는 유일한 경로라 근거를 남기도록 메모를 필수로 받는다.
+    """
+
+    admin_note: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        validation_alias="adminNote",
+        description="입금이 없다고 판단한 근거",
+    )
+    admin_id: str | None = Field(
+        None,
+        max_length=36,
+        validation_alias="adminId",
+        description="처리한 관리자 식별자",
+    )
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
 class AdminDisputeResolveRequest(BaseModel):
     """분쟁 판정 요청."""
 
@@ -256,8 +279,9 @@ class AdminDisputeDetailResponse(BaseModel):
         description="상대방 이름. 이름이 없으면 관리자 표시용 '탈퇴한 사용자'를 반환한다.",
     )
     target_role: str = Field(..., serialization_alias="targetRole")
-    survey_question_id: int = Field(..., serialization_alias="surveyQuestionId")
-    reason: str
+    reason_question_id: int = Field(..., serialization_alias="reasonQuestionId")
+    reason_question_text: str = Field(..., serialization_alias="reasonQuestionText")
+    detail_reason: str | None = Field(None, serialization_alias="detailReason")
     proposal_status: ProposalStatus = Field(..., serialization_alias="proposalStatus")
     offer_status: OfferStatus = Field(..., serialization_alias="offerStatus")
     admin_note: str | None = Field(None, serialization_alias="adminNote")
@@ -360,12 +384,33 @@ class AdminPayoutDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
+class AdminUserSummaryResponse(BaseModel):
+    """관리자 사용자 목록 항목. 관리자 계정은 목록에 넣지 않는다."""
+
+    id: str = Field(..., description="사용자 ID")
+    name: str = Field(
+        ...,
+        description="사용자 이름. 이름이 없으면 관리자 표시용 '탈퇴한 사용자'를 반환한다.",
+    )
+    created_at: datetime = Field(..., serialization_alias="createdAt", description="회원 가입일")
+    mission_count: int = Field(
+        ...,
+        serialization_alias="missionCount",
+        description="임무 수행 횟수. 성공 완료한 러너 지원 수(users.level)와 같은 값이다.",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AdminSummaryResponse(BaseModel):
     """대시보드 미처리 건수 집계."""
 
     unpaid_count: int = Field(..., serialization_alias="unpaidCount", description="입금 확인이 필요한 요청 수")
     dispute_count: int = Field(..., serialization_alias="disputeCount", description="미처리 분쟁 수")
     refund_count: int = Field(..., serialization_alias="refundCount", description="미처리 환불 수")
+    deposit_review_count: int = Field(
+        ..., serialization_alias="depositReviewCount", description="입금 대조 대기 환불 수"
+    )
     settlement_count: int = Field(..., serialization_alias="settlementCount", description="미처리 수행비 지급 수")
     report_count: int = Field(..., serialization_alias="reportCount", description="미처리 신고 수")
 
@@ -386,8 +431,10 @@ __all__ = [
     "AdminProposalDetailResponse",
     "AdminProposalSummaryResponse",
     "AdminRefundDetailResponse",
+    "AdminRefundVoidRequest",
     "AdminRefundSummaryResponse",
     "AdminSummaryResponse",
+    "AdminUserSummaryResponse",
     "ORDERER_ROLE",
     "RUNNER_ROLE",
 ]

@@ -14,5 +14,10 @@ class DisputeSurveyQuestionResponse(BaseModel):
     target_type: DisputeSurveyTargetType = Field(..., serialization_alias="targetType", description="질문 대상")
     question_text: str = Field(..., serialization_alias="questionText", description="질문 내용")
     display_order: int = Field(..., serialization_alias="displayOrder", description="클라이언트 표시 순서")
+    requires_detail: bool = Field(
+        ...,
+        serialization_alias="requiresDetail",
+        description="상세 사유 필수 여부. 기타 문항만 true다.",
+    )
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

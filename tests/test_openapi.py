@@ -415,22 +415,24 @@ def test_offer_accept_has_no_request_body_or_amount_response_fields():
     assert {"runFee", "itemPrice", "totalAmount"}.isdisjoint(accept_schema["properties"])
 
 
-def test_dispute_requests_require_survey_question_id_and_reason():
+def test_dispute_requests_require_reason_question_id_only():
+    """사유 선택은 필수이고 상세 사유는 기타 사유에서만 필수라 스키마 required에는 사유만 남는다."""
     schema = app.openapi()
     targets = [
         ("/v1/proposal/{proposal_id}/dispute", "post"),
         ("/v1/offer/{offer_id}/dispute", "post"),
+        ("/v1/proposal/{proposal_id}/reports", "post"),
+        ("/v1/user", "delete"),
     ]
 
     for path, method in targets:
         operation = schema["paths"][path][method]
         request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
-        request_ref = request_schema["$ref"]
-        request_name = request_ref.rsplit("/", 1)[-1]
+        request_name = request_schema["$ref"].rsplit("/", 1)[-1]
         body_schema = schema["components"]["schemas"][request_name]
 
-        assert set(body_schema["required"]) == {"surveyQuestionId", "disputeReason"}
-        assert body_schema["properties"]["surveyQuestionId"]["minimum"] == 1
+        assert set(body_schema["required"]) == {"reasonQuestionId"}
+        assert body_schema["properties"]["reasonQuestionId"]["minimum"] == 1
 
 
 def test_dispute_evidence_lookup_is_documented_with_exclusive_query_params():
@@ -445,8 +447,9 @@ def test_dispute_evidence_lookup_is_documented_with_exclusive_query_params():
         "proposalId": 1,
         "offerId": 10,
         "actorId": "550e8400-e29b-41d4-a716-446655440001",
-        "reason": "배송 중 파손",
-        "surveyQuestionId": 3,
+        "reasonQuestionId": 3,
+        "reasonQuestionText": "물건이 파손되었어요",
+        "detailReason": "배송 중 파손",
         "createdAt": "2026-06-01T12:00:00+09:00",
     }
 

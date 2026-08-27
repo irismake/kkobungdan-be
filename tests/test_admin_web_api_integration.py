@@ -9,8 +9,9 @@ from app.models.mission import Mission, MissionStatus
 from app.models.offer import OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.proposal_report import ProposalReport, ProposalReportStatus
-from app.models.refund import Refund, RefundReason
+from app.models.refund import Refund, RefundReason, RefundStatus
 from app.models.settlement import SettlementAccount
+from tests.factories import utcnow_naive
 
 
 @pytest.fixture
@@ -154,6 +155,18 @@ def test_list_offers_reports_amount_accepted_and_dispute_flags(client, factory, 
     assert item["runnerName"] == runner.name
 
 
+def test_list_offers_returns_proposal_open_chat_url(client, db, factory, sample_user, runner, admin_headers):
+    """오픈채팅방 URL은 관리자가 입금 확인 때 요청에 저장한 값을 그대로 내려준다."""
+    proposal, offer = factory.execution(sample_user, runner)
+    proposal.open_chat_url = "https://open.kakao.com/o/proposal"
+    db.commit()
+
+    response = client.get("/v1/admin/offer", params={"proposalId": proposal.id}, headers=admin_headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"]["content"][0]["openChatUrl"] == "https://open.kakao.com/o/proposal"
+
+
 def test_list_offers_filters_by_dispute_absence(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner)
 
@@ -244,21 +257,6 @@ def test_resolve_dispute_with_failed_outcome_marks_mission_failed(client, db, fa
     assert refund.reason_detail == evidence.reason
 
 
-def test_reject_dispute_leaves_other_statuses_untouched(client, db, factory, sample_user, runner, admin_headers):
-    proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
-    mission = factory.mission(proposal, offer, MissionStatus.DISPUTED)
-    evidence = factory.dispute_evidence(proposal, offer, sample_user.id)
-
-    response = client.post(f"/v1/admin/dispute/{evidence.id}/reject", json={"adminNote": "증빙 부족"}, headers=admin_headers)
-
-    assert response.status_code == 200
-    assert response.json()["data"]["status"] == "REJECTED"
-    db.refresh(mission)
-    db.refresh(proposal)
-    assert mission.status == MissionStatus.DISPUTED.value
-    assert proposal.status == ProposalStatus.DISPUTED
-
-
 def test_resolve_dispute_rejects_already_reviewed(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
     factory.mission(proposal, offer, MissionStatus.DISPUTED)
@@ -340,6 +338,100 @@ def test_complete_refund_records_and_cancels_proposal(client, db, factory, sampl
     assert proposal.status == ProposalStatus.REFUNDED
 
 
+def test_cancel_unpaid_proposal_leaves_a_deposit_review_refund(client, db, factory, sample_user, admin_headers):
+    proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
+
+    response = client.post(
+        f"/v1/admin/proposal/{proposal.id}/cancel",
+        json={"adminNote": "운영 취소"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "CANCELLED"
+    refund = db.query(Refund).filter(Refund.proposal_id == proposal.id).one()
+    assert refund.status == RefundStatus.REVIEW.value
+    assert refund.reason == RefundReason.ADMIN_CANCELLED.value
+
+
+def test_confirm_deposit_promotes_review_refund_and_reopens_refund_pending(
+    client, db, factory, sample_user, admin_headers
+):
+    proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
+    refund = factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
+
+    response = client.post(f"/v1/admin/refund/{refund.id}/confirm-deposit", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "PENDING"
+    assert data["proposalStatus"] == "REFUND_PENDING"
+    db.refresh(proposal)
+    assert proposal.status == ProposalStatus.REFUND_PENDING
+
+    # 확정 이후에는 기존 환불 완료 흐름을 그대로 탄다.
+    completed = client.post(f"/v1/admin/refund/{refund.id}/complete", json={}, headers=admin_headers)
+    assert completed.status_code == 200
+    assert completed.json()["data"]["status"] == "COMPLETED"
+    db.refresh(proposal)
+    assert proposal.status == ProposalStatus.REFUNDED
+
+
+def test_void_refund_closes_review_without_touching_the_cancelled_proposal(
+    client, db, factory, sample_user, admin_headers
+):
+    proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
+    refund = factory.refund(proposal, reason=RefundReason.PAYMENT_EXPIRED, status=RefundStatus.REVIEW)
+
+    response = client.post(
+        f"/v1/admin/refund/{refund.id}/void",
+        json={"adminNote": "2026-06-01 입금 내역 없음"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "VOIDED"
+    assert data["proposalStatus"] == "CANCELLED"
+    assert data["adminNote"] == "2026-06-01 입금 내역 없음"
+    db.refresh(proposal)
+    assert proposal.status == ProposalStatus.CANCELLED
+
+
+def test_void_refund_requires_an_admin_note(client, db, factory, sample_user, admin_headers):
+    proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
+    refund = factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
+
+    response = client.post(f"/v1/admin/refund/{refund.id}/void", json={}, headers=admin_headers)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_review_refund_cannot_skip_deposit_confirmation(client, db, factory, sample_user, admin_headers):
+    proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
+    refund = factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
+
+    response = client.post(f"/v1/admin/refund/{refund.id}/complete", json={}, headers=admin_headers)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "REFUND_NOT_PROCESSABLE"
+
+
+def test_settled_refund_rejects_deposit_review_actions(client, db, factory, sample_user, runner, admin_headers):
+    proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
+    mission = factory.mission(proposal, offer, MissionStatus.FAILED)
+    refund = factory.refund(proposal, mission)
+
+    confirmed = client.post(f"/v1/admin/refund/{refund.id}/confirm-deposit", headers=admin_headers)
+    voided = client.post(f"/v1/admin/refund/{refund.id}/void", json={"adminNote": "메모"}, headers=admin_headers)
+
+    assert confirmed.status_code == 409
+    assert confirmed.json()["error"]["code"] == "REFUND_NOT_PROCESSABLE"
+    assert voided.status_code == 409
+    assert voided.json()["error"]["code"] == "REFUND_NOT_PROCESSABLE"
+
+
 def test_list_payouts_returns_completed_missions(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
     mission = factory.mission(proposal, offer, MissionStatus.COMPLETED)
@@ -409,6 +501,9 @@ def test_summary_counts_pending_work_per_domain(client, db, factory, sample_user
     failed_mission = factory.mission(failed_proposal, failed_offer, MissionStatus.FAILED)
     factory.refund(failed_proposal, failed_mission)
 
+    review_proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
+    factory.refund(review_proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
+
     completed_proposal, completed_offer = factory.execution(
         sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED
     )
@@ -431,6 +526,60 @@ def test_summary_counts_pending_work_per_domain(client, db, factory, sample_user
         "unpaidCount": 1,
         "disputeCount": 1,
         "refundCount": 1,
+        "depositReviewCount": 1,
         "settlementCount": 1,
         "reportCount": 1,
     }
+
+
+# ----------------------------------------------------------------- 사용자
+
+
+def test_list_users_returns_signup_profile_and_excludes_admin_accounts(
+    client, db, factory, sample_user, runner, admin_headers, admin_user
+):
+    runner.level = 3
+    db.commit()
+
+    response = client.get("/v1/admin/user", headers=admin_headers)
+
+    assert response.status_code == 200
+    content = response.json()["data"]["content"]
+    assert {item["id"] for item in content} == {sample_user.id, runner.id}
+    assert admin_user.id not in {item["id"] for item in content}
+
+    listed = {item["id"]: item for item in content}
+    assert set(listed[runner.id]) == {"id", "name", "createdAt", "missionCount"}
+    assert listed[runner.id]["name"] == "꼬붕"
+    assert listed[runner.id]["missionCount"] == 3
+    assert listed[sample_user.id]["missionCount"] == 0
+    assert listed[sample_user.id]["createdAt"] is not None
+
+
+def test_list_users_keyword_matches_name_and_user_id(client, factory, sample_user, runner, admin_headers):
+    by_name = client.get("/v1/admin/user", params={"keyword": "꼬붕"}, headers=admin_headers)
+    by_id = client.get("/v1/admin/user", params={"keyword": sample_user.id}, headers=admin_headers)
+
+    assert [item["id"] for item in by_name.json()["data"]["content"]] == [runner.id]
+    assert [item["id"] for item in by_id.json()["data"]["content"]] == [sample_user.id]
+
+
+def test_list_users_shows_withdrawn_placeholder_name(client, db, factory, sample_user, runner, admin_headers):
+    runner.withdraw(utcnow_naive())
+    db.commit()
+
+    response = client.get("/v1/admin/user", headers=admin_headers)
+
+    listed = {item["id"]: item for item in response.json()["data"]["content"]}
+    assert listed[runner.id]["name"] == "탈퇴한 사용자"
+
+
+def test_list_users_paginates_by_page_and_size(client, factory, sample_user, runner, admin_headers):
+    response = client.get("/v1/admin/user", params={"page": 0, "size": 1}, headers=admin_headers)
+
+    page = response.json()["data"]
+    assert len(page["content"]) == 1
+    assert page["totalElements"] == 2
+    assert page["totalPages"] == 2
+    assert page["first"] is True
+    assert page["last"] is False

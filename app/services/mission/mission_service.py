@@ -164,7 +164,7 @@ class MissionService:
     ) -> PageResponse[MissionResponse]:
         query = db.query(Mission)
         if statuses:
-            query = query.filter(Mission.status.in_([status.value for status in statuses]))
+            query = query.filter(Mission.status.in_(statuses))
 
         total = query.count()
         missions = (
@@ -208,8 +208,8 @@ class MissionService:
     def _offer_details(db: Session, offer_ids: list[int]) -> dict[int, tuple]:
         """완료 확인 시각과 오픈채팅 URL을 지원·요청에서 한 번에 읽어 온다.
 
-        미션에 복제해 저장하지 않고 조회 시점에 합친다. 수락 이후 지원에 저장된 URL을
-        우선하고, 지원에 없으면 입금 확인 때 요청에 저장한 URL을 사용한다.
+        미션에 복제해 저장하지 않고 조회 시점에 합친다. 오픈채팅방 URL은 관리자가
+        입금을 확인할 때 요청에 저장한다.
         """
         if not offer_ids:
             return {}
@@ -218,14 +218,13 @@ class MissionService:
                 Offer.id,
                 Offer.runner_confirmed_at,
                 Offer.orderer_confirmed_at,
-                Offer.open_chat_url,
                 Proposal.open_chat_url,
             )
             .join(Proposal, Proposal.id == Offer.proposal_id)
             .filter(Offer.id.in_(offer_ids))
             .all()
         )
-        return {row[0]: (row[1], row[2], row[3] or row[4]) for row in rows}
+        return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
     @staticmethod
     def _to_response(

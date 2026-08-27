@@ -122,7 +122,8 @@ class OfferService:
             offer.status in OPEN_CHAT_OFFER_STATUSES
             and viewer_id in {fields["orderer_id"], offer.runner_id}
         ):
-            open_chat_url = offer.open_chat_url
+            # 오픈채팅방 URL은 관리자가 입금을 확인할 때 요청에 저장한다.
+            open_chat_url = OfferService._get_proposal(db, offer.proposal_id).open_chat_url
         return OfferDetailResponse(**fields, open_chat_url=open_chat_url)
 
     @staticmethod
@@ -361,8 +362,8 @@ class OfferService:
         db: Session,
         offer_id: int,
         runner_id: str,
-        survey_question_id: int,
-        dispute_reason: str,
+        reason_question_id: int,
+        detail_reason: str | None = None,
     ) -> OfferResponse:
         offer = OfferService._get_offer(db, offer_id)
         if offer.runner_id != runner_id:
@@ -372,7 +373,7 @@ class OfferService:
         if not offer.can_raise_dispute() or not proposal.can_raise_dispute():
             raise api_error(AppError.OFFER_NOT_UPDATABLE, f"status: {offer.status.value}")
 
-        DisputeSurveyService.ensure_active_question(db, survey_question_id, DisputeSurveyTargetType.RUNNER)
+        DisputeSurveyService.resolve_reason(db, reason_question_id, detail_reason, DisputeSurveyTargetType.RUNNER)
         offer.raise_dispute()
         proposal.raise_dispute()
         mission = MissionService.sync_from_offer_and_proposal(db, offer, proposal)
@@ -383,8 +384,8 @@ class OfferService:
             offer_id=offer.id,
             mission_id=mission.id,
             actor_id=runner_id,
-            survey_question_id=survey_question_id,
-            reason=dispute_reason,
+            survey_question_id=reason_question_id,
+            reason=detail_reason,
         ))
         db.flush()
         EventBus.publish(DisputeRaisedByRunnerEvent(

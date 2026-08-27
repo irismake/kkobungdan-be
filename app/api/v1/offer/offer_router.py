@@ -233,7 +233,7 @@ def complete_delivery(
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
     summary="러너 분쟁 접수",
-    description="러너가 수락된 지원의 분쟁을 접수합니다.",
+    description="러너가 수락된 지원의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
     responses={
         200: success_response(OFFER_DISPUTE_EXAMPLE),
         **error_responses(
@@ -256,8 +256,8 @@ def raise_offer_dispute(
         db,
         offer_id=offer_id,
         runner_id=current_user.id,
-        survey_question_id=request.survey_question_id,
-        dispute_reason=request.dispute_reason,
+        reason_question_id=request.reason_question_id,
+        detail_reason=request.detail_reason,
     )
     _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=offer, message="분쟁이 접수되었습니다.")

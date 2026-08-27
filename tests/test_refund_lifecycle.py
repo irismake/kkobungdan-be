@@ -14,7 +14,8 @@ def test_removed_legacy_and_rejection_statuses_are_not_in_contract():
     assert "RESOLVED" not in {status.value for status in ProposalStatus}
     assert "RESOLVED" not in {status.value for status in OfferStatus}
     assert "REFUNDED" not in {status.value for status in MissionStatus}
-    assert {status.value for status in RefundStatus} == {"PENDING", "COMPLETED"}
+    # REVIEW는 환불 확정 이전 단계이고 VOIDED는 받은 돈이 없다는 뜻이라 반려 부활이 아니다.
+    assert {status.value for status in RefundStatus} == {"REVIEW", "PENDING", "COMPLETED", "VOIDED"}
 
 
 def test_completed_dispute_moves_proposal_and_offer_to_all_completed():
@@ -76,3 +77,44 @@ def test_processed_refund_cannot_be_processed_again():
 
     with pytest.raises(ValueError, match="not pending"):
         refund.complete(admin_id=None, admin_note=None)
+
+
+def test_deposit_review_confirms_into_a_pending_refund():
+    proposal = Proposal(status=ProposalStatus.CANCELLED)
+    refund = Refund(status=RefundStatus.REVIEW.value)
+
+    refund.confirm_deposit()
+    proposal.confirm_late_deposit()
+
+    assert refund.status == RefundStatus.PENDING.value
+    assert proposal.status == ProposalStatus.REFUND_PENDING
+
+
+def test_deposit_review_voids_without_touching_the_cancelled_proposal():
+    proposal = Proposal(status=ProposalStatus.CANCELLED)
+    refund = Refund(status=RefundStatus.REVIEW.value)
+
+    refund.void(admin_id="admin", admin_note="입금 내역 없음")
+
+    assert refund.status == RefundStatus.VOIDED.value
+    assert refund.processed_by_admin_id == "admin"
+    assert refund.admin_note == "입금 내역 없음"
+    assert refund.processed_at is not None
+    assert proposal.status == ProposalStatus.CANCELLED
+
+
+def test_review_refund_cannot_be_completed_before_deposit_is_confirmed():
+    refund = Refund(status=RefundStatus.REVIEW.value)
+
+    with pytest.raises(ValueError, match="not pending"):
+        refund.complete(admin_id=None, admin_note=None)
+
+
+@pytest.mark.parametrize("status", [RefundStatus.PENDING, RefundStatus.COMPLETED, RefundStatus.VOIDED])
+def test_deposit_review_actions_reject_refunds_past_the_review_step(status):
+    refund = Refund(status=status.value)
+
+    with pytest.raises(ValueError, match="not awaiting deposit review"):
+        refund.confirm_deposit()
+    with pytest.raises(ValueError, match="not awaiting deposit review"):
+        refund.void(admin_id=None, admin_note="메모")

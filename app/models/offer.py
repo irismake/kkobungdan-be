@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import BigInteger, Column, DateTime, Enum, String, UniqueConstraint
+from sqlalchemy import BigInteger, Column, DateTime, String, UniqueConstraint
 
 from app.core.time import utcnow_naive
 from app.core.database import Base
+from app.models.enum_type import enum_column
 
 
 class OfferStatus(str, enum.Enum):
@@ -30,7 +31,7 @@ class Offer(Base):
     id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     proposal_id = Column(BigInteger, nullable=False, index=True)
     runner_id = Column(String(36), nullable=False, index=True)
-    status = Column(Enum(OfferStatus), nullable=False, default=OfferStatus.WAITING, index=True)
+    status = Column(enum_column(OfferStatus, 20, table="offers", column="status"), nullable=False, default=OfferStatus.WAITING, index=True)
     open_chat_url = Column(String(500), nullable=True)
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)

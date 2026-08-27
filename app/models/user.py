@@ -6,11 +6,12 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Enum, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class PhoneVerificationPurpose(str, enum.Enum):
@@ -80,12 +81,12 @@ class AuthPhoneVerification(Base):
     __tablename__ = "auth_phone_verifications"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    purpose = Column(Enum(PhoneVerificationPurpose), nullable=False, index=True)
+    purpose = Column(enum_column(PhoneVerificationPurpose, 10, table="auth_phone_verifications", column="purpose"), nullable=False, index=True)
     phone = Column(String(20), nullable=False, index=True)
     name = Column(String(100), nullable=True)
     carrier = Column(String(50), nullable=True)
     code_hash = Column(String(100), nullable=False)
-    status = Column(Enum(PhoneVerificationStatus), nullable=False, default=PhoneVerificationStatus.PENDING)
+    status = Column(enum_column(PhoneVerificationStatus, 20, table="auth_phone_verifications", column="status"), nullable=False, default=PhoneVerificationStatus.PENDING)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     sent_at = Column(DateTime(timezone=True), nullable=False)
     verified_at = Column(DateTime(timezone=True), nullable=True)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import AppError, api_error
 from app.models.dispute_evidence import DisputeEvidence, DisputeProcessStatus
+from app.models.dispute_survey import DisputeSurveyQuestion
 from app.models.mission import Mission, MissionStatus, PayoutStatus
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
@@ -29,6 +30,7 @@ from app.schemas.admin import (
     AdminRefundDetailResponse,
     AdminRefundSummaryResponse,
     AdminSummaryResponse,
+    AdminUserSummaryResponse,
 )
 from app.schemas.common import PageResponse
 from app.schemas.mission import MissionResponse
@@ -151,8 +153,8 @@ class AdminQueryService:
             orderer_level=levels.get(proposal.orderer_id, 0),
             status=proposal.status,
             created_at=proposal.created_at,
-            # 수락 이후에는 지원에 붙은 URL이 정본이고, 그 전에는 입금 확인 때 받은 값을 쓴다.
-            open_chat_url=(accepted_offer.open_chat_url if accepted_offer else None) or proposal.open_chat_url,
+            # 오픈채팅방 URL은 관리자가 입금을 확인할 때 요청에 저장한다.
+            open_chat_url=proposal.open_chat_url,
             accepted_offer_id=accepted_offer.id if accepted_offer else None,
             accepted_runner_name=_name(names, accepted_offer.runner_id) if accepted_offer else None,
             mission_id=mission.id if mission else None,
@@ -238,7 +240,7 @@ class AdminQueryService:
 
         names = _names(db, [offer.runner_id for offer in offers])
         levels = _levels(db, [offer.runner_id for offer in offers])
-        fees = AdminQueryService._errand_fees(db, [offer.proposal_id for offer in offers])
+        proposal_fields = AdminQueryService._proposal_fees_and_chat_urls(db, [offer.proposal_id for offer in offers])
         disputed_offer_ids = AdminQueryService._disputed_offer_ids(db, [offer.id for offer in offers])
         offer_ids = [offer.id for offer in offers]
         accepted_offer_ids = {
@@ -256,8 +258,9 @@ class AdminQueryService:
                 status=offer.status,
                 accepted=offer.id in accepted_offer_ids or offer.status in ACCEPTED_OFFER_STATUSES,
                 has_dispute=offer.id in disputed_offer_ids,
-                amount=fees.get(offer.proposal_id, 0),
-                open_chat_url=offer.open_chat_url,
+                amount=proposal_fields.get(offer.proposal_id, (0, None))[0],
+                # 오픈채팅방 URL은 관리자가 입금을 확인할 때 요청에 저장한다.
+                open_chat_url=proposal_fields.get(offer.proposal_id, (0, None))[1],
                 created_at=offer.created_at,
             )
             for offer in offers
@@ -265,12 +268,17 @@ class AdminQueryService:
         return PageResponse.of(content=content, page_number=page, page_size=size, total_elements=total)
 
     @staticmethod
-    def _errand_fees(db: Session, proposal_ids: list[int]) -> dict[int, int]:
+    def _proposal_fees_and_chat_urls(db: Session, proposal_ids: list[int]) -> dict[int, tuple[int, str | None]]:
+        """지원 목록에 필요한 요청 값(심부름비, 오픈채팅방 URL)을 한 번에 읽어 온다."""
         unique_ids = set(proposal_ids)
         if not unique_ids:
             return {}
-        rows = db.query(Proposal.id, Proposal.errand_fee).filter(Proposal.id.in_(unique_ids)).all()
-        return {row[0]: row[1] for row in rows}
+        rows = (
+            db.query(Proposal.id, Proposal.errand_fee, Proposal.open_chat_url)
+            .filter(Proposal.id.in_(unique_ids))
+            .all()
+        )
+        return {row[0]: (row[1], row[2]) for row in rows}
 
     @staticmethod
     def _disputed_offer_ids(db: Session, offer_ids: list[int]) -> set[int]:
@@ -297,7 +305,7 @@ class AdminQueryService:
     ) -> PageResponse[AdminDisputeSummaryResponse]:
         query = db.query(DisputeEvidence)
         if statuses:
-            query = query.filter(DisputeEvidence.status.in_([status.value for status in statuses]))
+            query = query.filter(DisputeEvidence.status.in_(statuses))
         if proposal_id is not None:
             query = query.filter(DisputeEvidence.proposal_id == proposal_id)
         if keyword:
@@ -353,6 +361,9 @@ class AdminQueryService:
         requester_is_orderer = evidence.actor_id == proposal.orderer_id
         target_id = offer.runner_id if requester_is_orderer else proposal.orderer_id
         names = _names(db, [evidence.actor_id, target_id])
+        question = (
+            db.query(DisputeSurveyQuestion).filter(DisputeSurveyQuestion.id == evidence.survey_question_id).one()
+        )
 
         return AdminDisputeDetailResponse(
             id=evidence.id,
@@ -367,8 +378,9 @@ class AdminQueryService:
             target_id=target_id,
             target_name=_name(names, target_id),
             target_role=RUNNER_ROLE if requester_is_orderer else ORDERER_ROLE,
-            survey_question_id=evidence.survey_question_id,
-            reason=evidence.reason,
+            reason_question_id=evidence.survey_question_id,
+            reason_question_text=question.question_text,
+            detail_reason=evidence.reason,
             proposal_status=proposal.status,
             offer_status=offer.status,
             admin_note=evidence.admin_note,
@@ -393,8 +405,8 @@ class AdminQueryService:
 
         paid_at = Mission.settlement_paid_at
         rejected_at = Mission.settlement_rejected_at
-        pending_status = MissionStatus.COMPLETED.value
-        done_status = MissionStatus.PAID.value
+        pending_status = MissionStatus.COMPLETED
+        done_status = MissionStatus.PAID
 
         conditions = []
         for status in statuses:
@@ -420,7 +432,7 @@ class AdminQueryService:
     ) -> PageResponse[AdminRefundSummaryResponse]:
         query = db.query(Refund)
         if statuses:
-            query = query.filter(Refund.status.in_([status.value for status in statuses]))
+            query = query.filter(Refund.status.in_(statuses))
         if requested_from is not None:
             query = query.filter(Refund.requested_at >= datetime.combine(requested_from, time.min))
         if proposal_id is not None:
@@ -494,7 +506,7 @@ class AdminQueryService:
         size: int,
     ) -> PageResponse[MissionResponse]:
         query = db.query(Mission).filter(
-            Mission.status.in_([MissionStatus.COMPLETED.value, MissionStatus.PAID.value])
+            Mission.status.in_([MissionStatus.COMPLETED, MissionStatus.PAID])
         )
         query = AdminQueryService._payout_status_filter(query, statuses)
         if proposal_id is not None:
@@ -555,6 +567,38 @@ class AdminQueryService:
         rows = db.query(Proposal.id, Proposal.status).filter(Proposal.id.in_(unique_ids)).all()
         return {row[0]: row[1] for row in rows}
 
+    # ------------------------------------------------------------- 사용자
+
+    @staticmethod
+    def list_users(
+        db: Session,
+        keyword: str | None,
+        page: int,
+        size: int,
+    ) -> PageResponse[AdminUserSummaryResponse]:
+        """앱 사용자 목록. 관리자 콘솔 계정은 관리 대상이 아니라 제외한다."""
+        query = db.query(User).filter(User.is_admin.is_(False))
+        if keyword:
+            # 사용자 ID는 UUID라 부분 일치가 의미 없어 완전 일치로만 찾는다.
+            query = query.filter(or_(User.name.ilike(f"%{keyword}%"), User.id == keyword))
+
+        total = query.count()
+        users = (
+            query.order_by(User.created_at.desc(), User.id.desc()).offset(page * size).limit(size).all()
+        )
+
+        content = [
+            AdminUserSummaryResponse(
+                id=user.id,
+                # 탈퇴하면 이름이 지워지므로 다른 관리자 응답과 같은 표시 문자열을 쓴다.
+                name=user.name or WITHDRAWN_USER_NAME,
+                created_at=user.created_at,
+                mission_count=user.level or 0,
+            )
+            for user in users
+        ]
+        return PageResponse.of(content=content, page_number=page, page_size=size, total_elements=total)
+
     # ------------------------------------------------------------- 대시보드
 
     @staticmethod
@@ -562,14 +606,15 @@ class AdminQueryService:
         unpaid = db.query(func.count(Proposal.id)).filter(Proposal.status == ProposalStatus.HOLDING).scalar()
         disputes = (
             db.query(func.count(DisputeEvidence.id))
-            .filter(DisputeEvidence.status == DisputeProcessStatus.PENDING.value)
+            .filter(DisputeEvidence.status == DisputeProcessStatus.PENDING)
             .scalar()
         )
-        refunds = db.query(func.count(Refund.id)).filter(Refund.status == RefundStatus.PENDING.value).scalar()
+        refunds = db.query(func.count(Refund.id)).filter(Refund.status == RefundStatus.PENDING).scalar()
+        deposit_reviews = db.query(func.count(Refund.id)).filter(Refund.status == RefundStatus.REVIEW).scalar()
         settlements = (
             db.query(func.count(Mission.id))
             .filter(
-                Mission.status == MissionStatus.COMPLETED.value,
+                Mission.status == MissionStatus.COMPLETED,
                 Mission.settlement_paid_at.is_(None),
                 Mission.settlement_rejected_at.is_(None),
             )
@@ -584,6 +629,7 @@ class AdminQueryService:
             unpaid_count=unpaid or 0,
             dispute_count=disputes or 0,
             refund_count=refunds or 0,
+            deposit_review_count=deposit_reviews or 0,
             settlement_count=settlements or 0,
             report_count=reports or 0,
         )

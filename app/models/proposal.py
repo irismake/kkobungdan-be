@@ -5,11 +5,12 @@ from __future__ import annotations
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Column, DateTime, Enum, Index, Integer, String
+from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String
 
 from app.core.database import Base
 from app.core.errors import AppError, api_error
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class ProposalStatus(str, enum.Enum):
@@ -39,7 +40,7 @@ class Proposal(Base):
     content = Column(String(500), nullable=False)
     deadline = Column(DateTime(timezone=True), nullable=False)
     errand_fee = Column(Integer, nullable=False)
-    status = Column(Enum(ProposalStatus), nullable=False, default=ProposalStatus.HOLDING, index=True)
+    status = Column(enum_column(ProposalStatus, 20, table="proposals", column="status"), nullable=False, default=ProposalStatus.HOLDING, index=True)
     # 입금 확인 시 관리자가 입력한다. 수락된 지원이 생기기 전 단계라 지원에 둘 수 없다.
     open_chat_url = Column(String(500), nullable=True)
     admin_note = Column(String(500), nullable=True)
@@ -127,6 +128,12 @@ class Proposal(Base):
         self.status = ProposalStatus.REFUND_PENDING
         if admin_note is not None:
             self.admin_note = admin_note
+
+    def confirm_late_deposit(self) -> None:
+        """입금 확인 전 취소된 요청에서 뒤늦게 입금이 확인되면 환불 대상으로 되돌린다."""
+        if self.status != ProposalStatus.CANCELLED:
+            raise ValueError("Proposal is not cancelled")
+        self.status = ProposalStatus.REFUND_PENDING
 
     def mark_refunded(self) -> None:
         if self.status != ProposalStatus.REFUND_PENDING:

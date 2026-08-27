@@ -27,6 +27,7 @@ from app.schemas.user import (
     UserNameUpdateRequest,
     UserWithdrawalReasonQuestionResponse,
     UserWithdrawalRequest,
+    UserWithdrawalResponse,
 )
 from app.services.user_auth.user_profile_service import UserProfileService
 from app.services.user_auth.user_withdrawal_service import UserWithdrawalService
@@ -127,8 +128,9 @@ def list_withdrawal_reasons(
 
 @router.delete(
     "",
+    response_model=ApiResponse[UserWithdrawalResponse],
     summary="회원 탈퇴",
-    description="현재 사용자의 개인정보를 삭제합니다. 탈퇴 사유와 상세 사유를 선택 입력으로 받을 수 있습니다. 매칭 이후 진행 중인 거래, 분쟁 또는 정산이 있으면 탈퇴할 수 없습니다.",
+    description="현재 사용자의 개인정보를 삭제합니다. 탈퇴 사유는 필수이고, 해당 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유도 필수입니다. 매칭 이후 진행 중인 거래, 분쟁 또는 정산이 있으면 탈퇴할 수 없습니다.",
     responses={
         200: success_response(USER_WITHDRAWAL_EXAMPLE),
         **error_responses(
@@ -140,9 +142,9 @@ def list_withdrawal_reasons(
     },
 )
 def withdraw_user(
-    payload: UserWithdrawalRequest | None = Body(None),
+    payload: UserWithdrawalRequest = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    UserWithdrawalService.withdraw_user(db, current_user, payload)
-    return {"success": True, "data": None, "message": "회원 탈퇴가 완료되었습니다."}
+    withdrawal = UserWithdrawalService.withdraw_user(db, current_user, payload)
+    return ApiResponse(success=True, data=withdrawal, message="회원 탈퇴가 완료되었습니다.")

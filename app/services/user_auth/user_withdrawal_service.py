@@ -11,7 +11,7 @@ from app.models.notification import Notification
 from app.models.mission import Mission, MissionStatus
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
-from app.models.refund import Refund, RefundStatus
+from app.models.refund import Refund, RefundReason, RefundStatus
 from app.models.settlement import SettlementAccount
 from app.models.user import (
     AuthPhoneVerification,
@@ -20,7 +20,12 @@ from app.models.user import (
     UserWithdrawal,
     UserWithdrawalReasonQuestion,
 )
-from app.schemas.user import UserWithdrawalReasonQuestionResponse, UserWithdrawalRequest
+from app.schemas.user import (
+    UserWithdrawalReasonQuestionResponse,
+    UserWithdrawalRequest,
+    UserWithdrawalResponse,
+)
+from app.services.refund.refund_service import RefundService
 
 
 WITHDRAWAL_BLOCKING_PROPOSAL_STATUSES = {
@@ -53,7 +58,7 @@ class UserWithdrawalService:
         return [UserWithdrawalReasonQuestionResponse.model_validate(question) for question in questions]
 
     @staticmethod
-    def withdraw_user(db: Session, user: User, request: UserWithdrawalRequest | None = None) -> None:
+    def withdraw_user(db: Session, user: User, request: UserWithdrawalRequest | None = None) -> UserWithdrawalResponse:
         fresh_user = db.query(User).filter(User.id == str(user.id), User.deleted.is_(False)).first()
         if fresh_user is None:
             raise api_error(AppError.USER_NOT_FOUND)
@@ -63,18 +68,21 @@ class UserWithdrawalService:
             raise api_error(AppError.USER_WITHDRAWAL_BLOCKED)
 
         reason_question = UserWithdrawalService._validate_request(db, request)
+        # 커밋 뒤에는 인스턴스가 만료되므로 응답에 쓸 값을 미리 읽어 둔다.
+        reason_question_id = reason_question.id
+        reason_question_text = reason_question.question_text
+        detail_reason = request.detail_reason if request is not None else None
         original_phone = fresh_user.phone
         withdrawn_at = utcnow_naive()
         try:
             UserWithdrawalService._auto_cancel_pre_match_activity(db, user_id)
-            db.add(
-                UserWithdrawal(
-                    user_id=user_id,
-                    reason_question_id=reason_question.id if reason_question is not None else None,
-                    detail_reason=request.detail_reason if request is not None else None,
-                    withdrawn_at=withdrawn_at,
-                )
+            withdrawal = UserWithdrawal(
+                user_id=user_id,
+                reason_question_id=reason_question_id,
+                detail_reason=detail_reason,
+                withdrawn_at=withdrawn_at,
             )
+            db.add(withdrawal)
             if original_phone is not None:
                 db.query(AuthPhoneVerification).filter(AuthPhoneVerification.phone == original_phone).delete(
                     synchronize_session=False
@@ -90,12 +98,22 @@ class UserWithdrawalService:
             db.rollback()
             raise
 
+        return UserWithdrawalResponse(
+            id=withdrawal.id,
+            user_id=user_id,
+            reason_question_id=reason_question_id,
+            reason_question_text=reason_question_text,
+            detail_reason=detail_reason,
+            withdrawn_at=withdrawn_at,
+        )
+
     @staticmethod
     def _validate_request(
         db: Session, request: UserWithdrawalRequest | None
-    ) -> UserWithdrawalReasonQuestion | None:
-        if request is None or request.reason_question_id is None:
-            return None
+    ) -> UserWithdrawalReasonQuestion:
+        """탈퇴 사유를 검증한다. 신고·분쟁과 같이 사유는 필수이고 기타 사유만 상세 사유를 요구한다."""
+        if request is None:
+            raise api_error(AppError.VALIDATION_ERROR, "reasonQuestionId")
 
         question = (
             db.query(UserWithdrawalReasonQuestion)
@@ -140,7 +158,7 @@ class UserWithdrawalService:
         # 종료된 요청·지원 상태에서도 실제 환불·지급이 남아 있으면 계좌를 삭제할 수 없다.
         has_pending_refund = (
             db.query(Refund.id)
-            .filter(Refund.orderer_id == user_id, Refund.status == RefundStatus.PENDING.value)
+            .filter(Refund.orderer_id == user_id, Refund.status == RefundStatus.PENDING)
             .first()
             is not None
         )
@@ -152,7 +170,7 @@ class UserWithdrawalService:
             .filter(
                 and_(
                     Mission.runner_id == user_id,
-                    Mission.status == MissionStatus.COMPLETED.value,
+                    Mission.status == MissionStatus.COMPLETED,
                     Mission.settlement_paid_at.is_(None),
                     Mission.settlement_rejected_at.is_(None),
                 )
@@ -185,6 +203,8 @@ class UserWithdrawalService:
                 offer.cancel()
             for proposal in proposals:
                 proposal.cancel()
+                # 탈퇴 취소도 입금 확인 전이라 입금 여부를 알 수 없다. 대조 대기를 남긴다.
+                RefundService.create_review(db, proposal, RefundReason.USER_CANCELLED)
 
         runner_offers = (
             db.query(Offer)

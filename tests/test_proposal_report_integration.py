@@ -13,11 +13,17 @@ REASONS = (
     "부적절한 사진이나 내용이에요",
     "기타",
 )
+ETC_REASON_INDEX = REASONS.index("기타")
 
 
 def seed_reasons(db) -> list[ProposalReportReasonQuestion]:
     reasons = [
-        ProposalReportReasonQuestion(question_text=text, display_order=index, is_active=True)
+        ProposalReportReasonQuestion(
+            question_text=text,
+            display_order=index,
+            is_active=True,
+            requires_detail=text == "기타",
+        )
         for index, text in enumerate(REASONS, start=1)
     ]
     db.add_all(reasons)
@@ -34,7 +40,12 @@ def test_list_proposal_report_reasons_returns_active_ordered_questions(client, d
 
     assert response.status_code == 200
     assert response.json()["data"] == [
-        {"id": reason.id, "questionText": reason.question_text, "displayOrder": reason.display_order}
+        {
+            "id": reason.id,
+            "questionText": reason.question_text,
+            "displayOrder": reason.display_order,
+            "requiresDetail": reason.question_text == "기타",
+        }
         for reason in reasons
     ]
 
@@ -73,6 +84,48 @@ def test_create_proposal_report_validates_public_target_reporter_and_duplicate(c
 
     invalid_reason = client.post(f"/v1/proposal/{proposal.id}/reports", headers=factory.headers_for(factory.user("01055550002")), json={"reasonQuestionId": 999})
     assert invalid_reason.status_code == 400
+
+
+def test_create_proposal_report_requires_detail_only_for_etc_reason(client, db, factory, sample_user):
+    """사유는 필수이고, 기타 사유를 고를 때만 상세 사유가 필수다. 분쟁·탈퇴와 같은 정책이다."""
+    reasons = seed_reasons(db)
+    etc_reason = reasons[ETC_REASON_INDEX]
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+
+    missing_reason = client.post(
+        f"/v1/proposal/{proposal.id}/reports",
+        headers=factory.headers_for(factory.user("01055550020")),
+        json={"detailReason": "사유를 고르지 않았습니다."},
+    )
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    missing_detail = client.post(
+        f"/v1/proposal/{proposal.id}/reports",
+        headers=factory.headers_for(factory.user("01055550021")),
+        json={"reasonQuestionId": etc_reason.id},
+    )
+    assert missing_detail.status_code == 400
+    assert missing_detail.json()["error"]["details"] == "detailReason"
+
+    with_detail = client.post(
+        f"/v1/proposal/{proposal.id}/reports",
+        headers=factory.headers_for(factory.user("01055550022")),
+        json={"reasonQuestionId": etc_reason.id, "detailReason": "그 밖의 사유입니다."},
+    )
+    assert with_detail.status_code == 201
+    assert with_detail.json()["data"]["reasonQuestionText"] == "기타"
+
+    # 기타가 아닌 사유는 상세 사유 없이 신고된다.
+    without_detail = client.post(
+        f"/v1/proposal/{proposal.id}/reports",
+        headers=factory.headers_for(factory.user("01055550023")),
+        json={"reasonQuestionId": reasons[0].id},
+    )
+    assert without_detail.status_code == 201
+    data = without_detail.json()["data"]
+    assert data["reasonQuestionId"] == reasons[0].id
+    assert data["detailReason"] is None
 
 
 def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offers(client, db, factory, sample_user, admin_headers):

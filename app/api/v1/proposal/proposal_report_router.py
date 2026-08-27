@@ -23,7 +23,7 @@ router = APIRouter(prefix="/proposal-report-reasons", tags=["게시글 신고"])
     summary="게시글 신고 사유 조회",
     description="게시글 신고 화면에 표시할 활성 신고 사유를 조회합니다.",
     responses={
-        200: success_response({"success": True, "data": [{"id": 1, "questionText": "광고 또는 스팸이에요", "displayOrder": 1}], "message": "Success"}),
+        200: success_response({"success": True, "data": [{"id": 1, "questionText": "광고 또는 스팸이에요", "displayOrder": 1, "requiresDetail": False}], "message": "Success"}),
         **error_responses(AppError.INVALID_TOKEN),
     },
 )

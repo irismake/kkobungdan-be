@@ -267,7 +267,7 @@ Custom exceptions are defined in `app/core/exceptions.py`. Use standard FastAPI 
 3. **MySQL only**: Tests, staging, and production all use MySQL
 4. **Baseline first**: Existing staging databases should be stamped to `0001_baseline` before new migrations
 5. **Document first**: Code changes without documentation will be rejected
-6. **No MySQL ENUM types**: DB 컬럼에 MySQL ENUM 타입을 사용하지 않는다. 대신 `VARCHAR`를 사용한다. SQLAlchemy 모델에서도 `Enum(PythonEnum)`을 컬럼 타입으로 사용하지 않고 `String(n)`을 사용한다. Python 열거형은 애플리케이션 레이어에서만 사용한다. (이유: ENUM은 값 추가 시 ALTER TABLE이 필요하고, 마이그레이션이 복잡해지며, MySQL 버전별 동작 차이가 있다.)
+6. **No MySQL native ENUM types**: DB 컬럼에는 MySQL native `ENUM` 타입을 사용하지 않는다. 상태값은 Python Enum으로 정의하고, SQLAlchemy 모델에서는 `Enum(PythonEnum, native_enum=False, create_constraint=True, name="ck_<table>_<column>_values", values_callable=lambda enum_class: [member.value for member in enum_class], length=n)`과 같은 non-native Enum 매핑을 사용한다. DB에는 `VARCHAR`로 저장하되 명시적으로 이름 붙인 `CHECK` 제약조건으로 허용된 값만 저장되게 하고, 애플리케이션에는 Python Enum을 반환한다. 외부 입력은 Pydantic 등 애플리케이션 레이어에서도 검증한다. 상태값을 추가·제거·변경할 때는 해당 `CHECK` 제약조건을 갱신하는 Alembic 마이그레이션을 반드시 함께 작성한다. (이유: MySQL native `ENUM`에 종속되지 않으면서 DB 무결성, 애플리케이션 타입 안전성, Enum 사용 편의성을 함께 유지하기 위해서다.)
 
 ## Git Workflow
 

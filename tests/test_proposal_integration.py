@@ -10,7 +10,7 @@ from app.models.dispute_evidence import DisputeEvidence
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
-from app.models.refund import Refund, RefundReason
+from app.models.refund import Refund, RefundReason, RefundStatus
 from app.models.settlement import SettlementAccount
 
 
@@ -34,12 +34,14 @@ def dispute_question(
     question_text: str = "분쟁 사유를 선택해주세요.",
     display_order: int = 1,
     is_active: bool = True,
+    requires_detail: bool = False,
 ) -> DisputeSurveyQuestion:
     return DisputeSurveyQuestion(
         target_type=target_type,
         question_text=question_text,
         display_order=display_order,
         is_active=is_active,
+        requires_detail=requires_detail,
     )
 
 
@@ -175,12 +177,13 @@ def test_detail_returns_state_timestamps_when_matched(client, db, factory, auth_
 
 
 def test_detail_returns_open_chat_url_only_to_matched_participants(client, db, factory, auth_headers, sample_user):
+    """오픈채팅방 URL은 관리자가 입금 확인 때 요청에 저장한 값을 매칭 당사자에게만 내려준다."""
     runner = factory.user("01055550004", name="Chat Runner")
     stranger = factory.user("01055550005", name="Chat Stranger")
     proposal = factory.proposal(sample_user.id, ProposalStatus.MATCHED)
+    proposal.open_chat_url = "https://open.kakao.com/o/example"
     offer = Offer(proposal_id=proposal.id, runner_id=runner.id, status=OfferStatus.ACCEPTED)
     offer.accepted_at = datetime.now(timezone.utc)
-    offer.open_chat_url = "https://open.kakao.com/o/example"
     proposal.matched_at = offer.accepted_at
     db.add(offer)
     db.commit()
@@ -200,8 +203,8 @@ def test_detail_returns_open_chat_url_only_to_matched_participants(client, db, f
 def test_detail_masks_open_chat_url_before_matched_status(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550006", name="Waiting Chat Runner")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
+    proposal.open_chat_url = "https://open.kakao.com/o/example"
     offer = Offer(proposal_id=proposal.id, runner_id=runner.id, status=OfferStatus.WAITING)
-    offer.open_chat_url = "https://open.kakao.com/o/example"
     db.add(offer)
     db.commit()
 
@@ -412,8 +415,13 @@ def test_cancel_proposal_author_status_rules_and_rejects_waiting_offers(client, 
         assert response.json()["data"]["status"] == expected_status
 
     refunds = db.query(Refund).order_by(Refund.proposal_id).all()
-    assert [refund.proposal_id for refund in refunds] == [posted.id, offered.id]
+    assert [refund.proposal_id for refund in refunds] == [holding.id, posted.id, offered.id]
     assert {refund.reason for refund in refunds} == {RefundReason.USER_CANCELLED.value}
+    # 입금 확인 전 취소는 실제 입금 여부를 모르므로 관리자 대조 대기로 남는다.
+    statuses = {refund.proposal_id: refund.status for refund in refunds}
+    assert statuses[holding.id] == RefundStatus.REVIEW.value
+    assert statuses[posted.id] == RefundStatus.PENDING.value
+    assert statuses[offered.id] == RefundStatus.PENDING.value
 
     db.refresh(waiting_offer)
     db.refresh(cancelled_offer)
@@ -548,13 +556,14 @@ def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db,
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
     offer.accepted_at = datetime.now(timezone.utc)
     proposal.matched_at = offer.accepted_at
+    factory.mission(proposal, offer)
     question = dispute_question(DisputeSurveyTargetType.ORDER)
     db.add(question)
     db.commit()
 
     response = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"surveyQuestionId": question.id, "disputeReason": "물품 상태 불량"},
+        json={"reasonQuestionId": question.id, "detailReason": "물품 상태 불량"},
         headers=auth_headers,
     )
 
@@ -605,7 +614,7 @@ def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, fact
 
     wrong_target = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"surveyQuestionId": runner_question.id, "disputeReason": "러너 질문은 불가"},
+        json={"reasonQuestionId": runner_question.id, "detailReason": "러너 질문은 불가"},
         headers=auth_headers,
     )
     assert wrong_target.status_code == 400
@@ -613,19 +622,87 @@ def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, fact
 
     inactive = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"surveyQuestionId": inactive_order_question.id, "disputeReason": "비활성 질문은 불가"},
+        json={"reasonQuestionId": inactive_order_question.id, "detailReason": "비활성 질문은 불가"},
         headers=auth_headers,
     )
     assert inactive.status_code == 400
     assert inactive.json()["error"]["code"] == "VALIDATION_ERROR"
 
-    missing = client.post(
+    missing_reason = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"disputeReason": "질문 없음"},
+        json={"detailReason": "질문 없음"},
         headers=auth_headers,
     )
-    assert missing.status_code == 400
-    assert missing.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    blank_detail = client.post(
+        f"/v1/proposal/{proposal.id}/dispute",
+        json={"reasonQuestionId": inactive_order_question.id, "detailReason": "   "},
+        headers=auth_headers,
+    )
+    assert blank_detail.status_code == 400
+    assert blank_detail.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_raise_proposal_dispute_requires_detail_only_for_etc_reason(client, db, factory, auth_headers, sample_user):
+    """사유는 필수이고, 기타 사유를 고를 때만 상세 사유가 필수다. 신고·탈퇴와 같은 정책이다."""
+    runner = factory.user("01055550035")
+    proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
+    offer.accepted_at = datetime.now(timezone.utc)
+    factory.mission(proposal, offer)
+    plain_question = dispute_question(DisputeSurveyTargetType.ORDER)
+    etc_question = dispute_question(
+        DisputeSurveyTargetType.ORDER,
+        question_text="기타",
+        display_order=2,
+        requires_detail=True,
+    )
+    db.add_all([plain_question, etc_question])
+    db.commit()
+
+    missing_detail = client.post(
+        f"/v1/proposal/{proposal.id}/dispute",
+        json={"reasonQuestionId": etc_question.id},
+        headers=auth_headers,
+    )
+    assert missing_detail.status_code == 400
+    assert missing_detail.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert missing_detail.json()["error"]["details"] == "detailReason"
+
+    # 기타가 아닌 사유는 상세 사유 없이 접수된다.
+    response = client.post(
+        f"/v1/proposal/{proposal.id}/dispute",
+        json={"reasonQuestionId": plain_question.id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "DISPUTED"
+    evidence = db.query(DisputeEvidence).filter(DisputeEvidence.proposal_id == proposal.id).one()
+    assert evidence.survey_question_id == plain_question.id
+    assert evidence.reason is None
+
+
+def test_raise_proposal_dispute_accepts_etc_reason_with_detail(client, db, factory, auth_headers, sample_user):
+    runner = factory.user("01055550036")
+    proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
+    offer.accepted_at = datetime.now(timezone.utc)
+    factory.mission(proposal, offer)
+    etc_question = dispute_question(DisputeSurveyTargetType.ORDER, question_text="기타", requires_detail=True)
+    db.add(etc_question)
+    db.commit()
+
+    response = client.post(
+        f"/v1/proposal/{proposal.id}/dispute",
+        json={"reasonQuestionId": etc_question.id, "detailReason": "연락이 되지 않아요"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    evidence = db.query(DisputeEvidence).filter(DisputeEvidence.proposal_id == proposal.id).one()
+    assert evidence.survey_question_id == etc_question.id
+    assert evidence.reason == "연락이 되지 않아요"
 
 
 def test_raise_proposal_dispute_rejects_all_completed(client, db, factory, auth_headers, sample_user):
@@ -639,7 +716,7 @@ def test_raise_proposal_dispute_rejects_all_completed(client, db, factory, auth_
 
     response = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"surveyQuestionId": question.id, "disputeReason": "완료 후 분쟁"},
+        json={"reasonQuestionId": question.id, "detailReason": "완료 후 분쟁"},
         headers=auth_headers,
     )
 

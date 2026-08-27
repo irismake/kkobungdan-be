@@ -72,6 +72,18 @@ wait_for_health() {
   return 1
 }
 
+# 배포마다 직전 이미지가 dangling 상태로 남고 빌드 캐시가 쌓여 EC2 디스크가 가득 찬다.
+# pull 전에 정리해 공간을 먼저 확보한다. 실행 중인 컨테이너가 쓰는 이미지는 태그가
+# 붙어 있어 dangling 대상이 아니므로 지워지지 않는다.
+prune_docker_storage() {
+  docker image prune -f || true
+  docker builder prune -f || true
+}
+
+echo "Disk usage before deploy:"
+df -h / | tail -1
+prune_docker_storage
+
 "${compose_cmd[@]}" pull "$app_service"
 
 # 마이그레이션을 새 앱보다 먼저 돌린다. 새 이미지가 아직 없는 컬럼을 읽어
@@ -89,5 +101,10 @@ if ! wait_for_health "$app_container"; then
   "${compose_cmd[@]}" logs --tail=100 "$app_service" || true
   exit 1
 fi
+
+# 새 이미지로 교체되며 dangling이 된 직전 이미지를 즉시 회수한다.
+prune_docker_storage
+echo "Disk usage after deploy:"
+df -h / | tail -1
 
 "${compose_cmd[@]}" ps

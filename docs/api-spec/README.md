@@ -161,12 +161,26 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 
 ### UserWithdrawalRequest
 
-`DELETE /v1/user`에서 선택적으로 전달할 수 있다. body를 보내지 않아도 기존처럼 탈퇴 요청은 처리된다.
+`DELETE /v1/user`에 반드시 전달한다. 사유 선택은 필수라 body 없이 호출하면 `VALIDATION_ERROR`다.
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| reasonQuestionId | number | X | 활성 탈퇴 사유 ID |
+| reasonQuestionId | number | O | 활성 탈퇴 사유 ID |
 | detailReason | string | X | 선택 상세 사유. 최대 500자. 해당 사유의 `requiresDetail`이 `true`이면 필수 |
+
+### UserWithdrawalResponse
+
+`DELETE /v1/user`의 응답이다. 신고(`ProposalReportResponse`)·분쟁(`DisputeEvidenceResponse`)과 사유 3종 필드명을 공유한다.
+탈퇴 사유는 필수 입력이라 사유 3종 중 `detailReason`만 `null`일 수 있다.
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 탈퇴 이력 ID |
+| userId | string | 탈퇴한 사용자 ID |
+| reasonQuestionId | number | 선택한 탈퇴 사유 ID |
+| reasonQuestionText | string | 선택한 탈퇴 사유 문구 |
+| detailReason | string \| null | 입력한 상세 사유 |
+| withdrawnAt | string | 탈퇴 처리 시각 |
 
 ### ProposalResponse
 
@@ -317,9 +331,12 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | proposalId | number | 연결된 Proposal ID |
 | offerId | number | 연결된 Offer ID |
 | actorId | string | 분쟁을 접수한 사용자 ID |
-| reason | string | 분쟁 사유 |
-| surveyQuestionId | number | 선택한 분쟁 설문 질문 ID |
+| reasonQuestionId | number | 선택한 분쟁 사유 질문 ID |
+| reasonQuestionText | string | 선택한 분쟁 사유 질문 내용 |
+| detailReason | string, null | 입력한 상세 사유 |
 | createdAt | string | 분쟁 증빙 생성 시각 |
+
+신고(`ProposalReportResponse`)·탈퇴(`UserWithdrawalResponse`)와 사유 3종(`reasonQuestionId`, `reasonQuestionText`, `detailReason`) 필드명과 입력 정책을 공유한다. 사유 선택은 필수이고 상세 사유는 `requiresDetail`이 `true`인 사유(기타)에서만 필수라, `detailReason`만 `null`일 수 있다.
 
 ### SettlementAccountResponse
 
@@ -354,6 +371,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | targetType | string | 질문 대상. `ORDER` 또는 `RUNNER` |
 | questionText | string | 질문 내용 |
 | displayOrder | number | 클라이언트 표시 순서 |
+| requiresDetail | boolean | 상세 사유 필수 여부. `기타` 문항만 `true` |
 
 ### ProposalReportReasonQuestionResponse
 
@@ -362,6 +380,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | id | number | 신고 사유 ID |
 | questionText | string | 신고 사유 문구 |
 | displayOrder | number | 클라이언트 표시 순서 |
+| requiresDetail | boolean | 상세 사유 필수 여부. `기타` 문항만 `true` |
 
 ### ProposalReportResponse
 
@@ -428,9 +447,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | FCM 토큰 갱신 | `PATCH` | `/v1/user/fcm-token` | 필요 | `200 OK` | `null` |
 | 사용자 프로필 조회 | `GET` | `/v1/user/detail` | 필요 | `200 OK` | `UserDetailResponse` |
 | 회원 탈퇴 사유 조회 | `GET` | `/v1/user/withdrawal-reasons` | 필요 | `200 OK` | `UserWithdrawalReasonQuestionResponse[]` |
-| 회원 탈퇴 | `DELETE` | `/v1/user` | 필요 | `200 OK` | `null` |
+| 회원 탈퇴 | `DELETE` | `/v1/user` | 필요 | `200 OK` | `UserWithdrawalResponse` |
 
-회원 탈퇴는 선택적으로 `UserWithdrawalRequest`를 받아 탈퇴 사유 이력을 저장하고, 개인정보를 즉시 삭제하며, 거래 활동은 작성자를 `탈퇴한 사용자`로 익명화해 유지한다. 매칭 전 Proposal/Offer는 자동 취소하고, 매칭 이후 진행 중인 거래·분쟁·정산이 있으면 `409 USER_WITHDRAWAL_BLOCKED`를 반환한다. 자세한 규칙은 [`../domains/user-auth/withdrawal-policy.md`](../domains/user-auth/withdrawal-policy.md)를 따른다.
+회원 탈퇴는 `UserWithdrawalRequest`로 사유를 필수로 받아 탈퇴 사유 이력을 저장하고, 개인정보를 즉시 삭제하며, 거래 활동은 작성자를 `탈퇴한 사용자`로 익명화해 유지한다. 매칭 전 Proposal/Offer는 자동 취소하고, 매칭 이후 진행 중인 거래·분쟁·정산이 있으면 `409 USER_WITHDRAWAL_BLOCKED`를 반환한다. 자세한 규칙은 [`../domains/user-auth/withdrawal-policy.md`](../domains/user-auth/withdrawal-policy.md)를 따른다.
 
 ### Terms API
 
@@ -484,8 +503,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 별도 Refund ID 기준으로 처리한다.
 미션은 관리자 웹 전용이며 앱 API에는 노출하지 않는다. 상태 정의는
 [`../product-specs/mission.md`](../product-specs/mission.md)를 따른다.
-`MissionResponse.openChatUrl`은 지원에 저장된 링크를 우선하며, 없으면 입금 확인 때
-요청에 저장한 링크를 반환한다. 두 곳 모두 링크가 없으면 `null`이다.
+`MissionResponse.openChatUrl`은 입금 확인 때 요청에 저장한 링크를 반환한다.
+저장된 링크가 없으면 `null`이다.
 `MissionResponse.settlementStatus`는 수행비 지급 처리 상태(`PENDING`, `COMPLETED`, `REJECTED`)다.
 관리자 응답에서 당사자가 반드시 존재하는 사용자 이름 필드는 non-null 문자열이다. 저장된 이름이나
 사용자 row가 없으면 `"탈퇴한 사용자"`를 반환한다. `acceptedRunnerName`처럼 연관 대상 자체가 아직
@@ -510,22 +529,36 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 분쟁 목록 조회 | `GET` | `/v1/admin/dispute?status={status}&proposalId={id}&keyword={keyword}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminDisputeSummaryResponse>` |
 | 분쟁 상세 조회 | `GET` | `/v1/admin/dispute/{disputeId}` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
 | 분쟁 판정 | `POST` | `/v1/admin/dispute/{disputeId}/resolve` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
-| 분쟁 반려 | `POST` | `/v1/admin/dispute/{disputeId}/reject` | 관리자 필요 | `200 OK` | `AdminDisputeDetailResponse` |
 | 수행비 지급 목록 조회 | `GET` | `/v1/admin/payout?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
 | 수행비 지급 상세 조회 | `GET` | `/v1/admin/payout/{payoutId}` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
 | 수행비 지급 완료 | `POST` | `/v1/admin/payout/{payoutId}/complete` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
 | 수행비 지급 반려 | `POST` | `/v1/admin/payout/{payoutId}/reject` | 관리자 필요 | `200 OK` | `AdminPayoutDetailResponse` |
 | 환불 목록 조회 | `GET` | `/v1/admin/refund?status={status}&requestedFrom={date}&keyword={keyword}&proposalId={id}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminRefundSummaryResponse>` |
 | 환불 상세 조회 | `GET` | `/v1/admin/refund/{refundId}` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
+| 입금 확인 | `POST` | `/v1/admin/refund/{refundId}/confirm-deposit` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
+| 입금 없음 종결 | `POST` | `/v1/admin/refund/{refundId}/void` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
 | 환불 완료 | `POST` | `/v1/admin/refund/{refundId}/complete` | 관리자 필요 | `200 OK` | `AdminRefundDetailResponse` |
+| 사용자 목록 조회 | `GET` | `/v1/admin/user?keyword={keyword}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminUserSummaryResponse>` |
 
-`payoutId`는 미션 ID, `refundId`는 Refund ID다. 환불은 확정된 의무라 반려 엔드포인트가 없다.
+`payoutId`는 미션 ID, `refundId`는 Refund ID다. 확정된 환불(`PENDING` 이후)은 의무라 반려
+엔드포인트가 없다.
+
+입금 확인 전 취소된 요청은 `REVIEW` 환불로 남는다. 관리자가 계좌 내역을 대조해 입금이
+있으면 `confirm-deposit`으로 `PENDING`을 확정하고(요청은 `REFUND_PENDING`이 된다) 이후 기존
+`complete`로 이체를 기록한다. 입금이 없으면 `void`로 종결하며, 이는 환불 반려가 아니라 받은
+돈이 없다는 뜻이라 `adminNote`가 필수다.
+
+사용자 목록은 앱 사용자만 반환한다(관리자 콘솔 계정 제외). `AdminUserSummaryResponse`는
+`id`, `name`, `createdAt`(회원 가입일), `missionCount`(임무 수행 횟수)로 이뤄지며 `missionCount`는
+성공 완료한 러너 지원 수(`users.level`)다. 탈퇴한 사용자는 목록에 남고 `name`이 `"탈퇴한 사용자"`가 된다.
+`keyword`는 이름 부분 일치 또는 사용자 ID 완전 일치로 찾는다.
 
 분쟁 판정(`outcome`)은 `COMPLETED` 또는 `FAILED`다. `COMPLETED`면 요청·지원이
 `ALL_COMPLETED`, 미션이 `COMPLETED`가 되고, `FAILED`면 요청이 `REFUND_PENDING`, 지원이
-`CANCELLED`, 미션이 `FAILED`가 되며 환불이 생성된다. 분쟁 반려는 어느 상태도 바꾸지 않는다.
+`CANCELLED`, 미션이 `FAILED`가 되며 환불이 생성된다. 분쟁 반려 엔드포인트는 없다. 판단을
+보류할 때는 판정하지 않고 `PENDING`으로 둔다.
 
-요청 취소는 입금 확인 전(`HOLDING`)이면 `CANCELLED`로 종결하고, 입금 확인 후면
+요청 취소는 입금 확인 전(`HOLDING`)이면 `CANCELLED`로 종결하되 `REVIEW` 환불을 남기고, 입금 확인 후면
 `REFUND_PENDING`으로 전이하며 환불을 생성한다. 수행 중이던 지원은 `CANCELLED`, 미션은
 `FAILED`가 된다. 미션이 이미 `COMPLETED`, `PAID`, `FAILED`면 취소를 거절한다.
 
@@ -635,7 +668,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
 | reasonQuestionId | integer | O | 활성 신고 사유 ID |
-| detailReason | string | X | 입력 시 공백 불가, 최대 500자 |
+| detailReason | string | X | 입력 시 공백 불가, 최대 500자. 해당 사유의 `requiresDetail`이 `true`이면 필수 |
 
 ### Offer
 
@@ -657,8 +690,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
-| surveyQuestionId | number | O | active `RUNNER` 분쟁 설문 질문 ID |
-| disputeReason | string | O | 분쟁 사유 |
+| reasonQuestionId | number | O | active `RUNNER` 분쟁 설문 질문 ID |
+| detailReason | string | X | 입력 시 공백 불가. 해당 사유의 `requiresDetail`이 `true`이면 필수 |
 
 #### `GET /v1/offer`
 
@@ -686,8 +719,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
-| surveyQuestionId | number | O | active `ORDER` 분쟁 설문 질문 ID |
-| disputeReason | string | O | 분쟁 사유 |
+| reasonQuestionId | number | O | active `ORDER` 분쟁 설문 질문 ID |
+| detailReason | string | X | 입력 시 공백 불가. 해당 사유의 `requiresDetail`이 `true`이면 필수 |
 
 #### `GET /v1/dispute-evidence`
 

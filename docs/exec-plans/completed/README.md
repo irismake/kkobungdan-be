@@ -25,3 +25,6 @@
 - [`2026-08-22-mission-entity.md`](./2026-08-22-mission-entity.md): 미션 엔티티 도입과 관리자 분쟁 판정·정산·환불 기록
 - [`2026-08-24-admin-response-name-fields.md`](./2026-08-24-admin-response-name-fields.md): 미션·신고 관리자 응답에 행님·꼬붕·신고자 이름 노출
 - [`2026-08-24-openapi-nullable-examples.md`](./2026-08-24-openapi-nullable-examples.md): OpenAPI 예시에서 사라지던 nullable 필드 복원
+- [`2026-08-26-reason-detail-policy.md`](./2026-08-26-reason-detail-policy.md): 분쟁·신고·탈퇴의 사유 선택을 필수로, 상세 사유는 `기타`에서만 필수로 통일
+- [`2026-08-26-seed-dispute-survey-questions.md`](./2026-08-26-seed-dispute-survey-questions.md): 분쟁 사유 문항을 신고·탈퇴처럼 마이그레이션으로 시드하고 `requires_detail`을 코드 정본으로 고정
+- [`2026-08-26-replace-mysql-enums-with-varchar.md`](./2026-08-26-replace-mysql-enums-with-varchar.md): MySQL native ENUM 컬럼 6개를 VARCHAR로 전환하고, 열거형 컬럼 11개를 non-native Enum 매핑 + 이름 붙인 `CHECK` 제약으로 통일

@@ -7,6 +7,18 @@
 
 현재 코드와 다른 항목은 구현 완료 상태가 아니라 목표 정본 또는 legacy 기준으로 기록한다.
 
+상태·구분 컬럼은 MySQL native `ENUM`을 쓰지 않는다(`CLAUDE.md`). 대신 `VARCHAR` + 이름 붙인
+`CHECK` 제약으로 허용값을 고정한다. 모델에서는 `app/models/enum_type.py`의 `enum_column()`이
+만드는 non-native Enum 매핑을 쓰고, DB에는 문자열이 저장되고 애플리케이션에는 Python Enum이
+돌아온다. 값 검증은 DB(`CHECK`)와 애플리케이션(Pydantic) 양쪽에서 한다.
+
+`CHECK` 제약 이름 규약은 `ck_<table>_<column>_values`다. **상태값을 추가·제거·변경할 때는 해당
+제약을 갱신하는 Alembic 마이그레이션을 반드시 함께 작성해야 한다.** 모델만 바꾸면 DB 제약이
+옛 목록에 머물러 새 값이 거부된다.
+
+native ENUM으로 남아 있던 6개 컬럼은 `0029_replace_mysql_enums_with_varchar`가 VARCHAR로
+전환했고, 열거형 컬럼 11개의 `CHECK` 제약은 `0030_enum_check_constraints`가 걸었다.
+
 ## 전체 테이블
 
 | 테이블 | 담당 도메인 | ORM 매핑 | 세부 문서 | 설명 |
@@ -98,7 +110,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
 |------|------|------|-----------|------|
 | `id` | `bigint` | NO | PK, auto increment | 인증 요청 ID |
-| `purpose` | `varchar(20)` | NO | `idx_auth_phone_verifications_purpose_phone_status_expires`, `idx_auth_phone_verifications_purpose_phone_status` | `SIGNUP`, `LOGIN` |
+| `purpose` | `varchar(10)` | NO | `idx_auth_phone_verifications_purpose_phone_status_expires`, `idx_auth_phone_verifications_purpose_phone_status` | `SIGNUP`, `LOGIN` |
 | `phone` | `varchar(20)` | NO | 같은 복합 인덱스 | 정규화된 전화번호 |
 | `name` | `varchar(100)` | YES |  | 회원가입 요청 이름 |
 | `carrier` | `varchar(50)` | YES |  | 통신사 |
@@ -217,7 +229,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `proposal_id` | `bigint` | NO | UNIQUE `uk_proposal_runner` 일부 | 대상 Proposal ID |
 | `runner_id` | `varchar(36)` | NO | UNIQUE `uk_proposal_runner` 일부, INDEX `idx_offers_runner_id` | 지원자 사용자 ID |
 | `status` | `varchar(20)` | NO |  | `WAITING`, `ACCEPTED`, `RUNNER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REJECTED`, `CANCELLED` |
-| `open_chat_url` | `varchar(500)` | YES |  | 매칭 당사자에게 노출할 카카오톡 오픈채팅방 링크 |
+| `open_chat_url` | `varchar(500)` | YES |  | 미사용. 링크는 `proposals.open_chat_url`이 정본이다 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `accepted_at` | `datetime(6)` | YES |  | 오더가 Offer를 수락한 시각 |
 | `runner_confirmed_at` | `datetime(6)` | YES |  | 러너 완료 확인 시각 |
@@ -280,9 +292,9 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `mission_id` | `bigint` | YES | UNIQUE `uk_refunds_mission_id` | 수락 이후 환불이면 연결된 Mission ID |
 | `orderer_id` | `varchar(36)` | NO | INDEX `ix_refunds_orderer_id` | 환불받을 행님 사용자 ID |
 | `amount` | `integer` | NO |  | 요청의 수행비 전액 |
-| `reason` | `varchar(30)` | NO |  | `USER_CANCELLED`, `ADMIN_CANCELLED`, `DISPUTE_FAILED` |
+| `reason` | `varchar(30)` | NO |  | `USER_CANCELLED`, `ADMIN_CANCELLED`, `DISPUTE_FAILED`, `PAYMENT_EXPIRED` |
 | `reason_detail` | `text` | YES |  | 관리자 취소 메모 또는 사용자 분쟁 사유 |
-| `status` | `varchar(20)` | NO | INDEX `idx_refunds_status_requested` | `PENDING`, `COMPLETED` |
+| `status` | `varchar(20)` | NO | INDEX `idx_refunds_status_requested` | `REVIEW`, `PENDING`, `COMPLETED`, `VOIDED` |
 | `requested_at` | `datetime(6)` | NO | INDEX `idx_refunds_status_requested` | 환불 대상 확정 시각 |
 | `processed_at` | `datetime(6)` | YES |  | 환불 완료 시각 |
 | `processed_by_admin_id` | `varchar(36)` | YES |  | 처리 관리자 ID |
@@ -299,10 +311,10 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `offer_id` | `bigint` | NO | INDEX `ix_dispute_evidences_offer_id` | 연관 Offer ID |
 | `mission_id` | `bigint` | NO | FK `fk_dispute_evidences_mission_id`, INDEX `idx_dispute_evidences_mission_id` | 연관 Mission ID |
 | `actor_id` | `varchar(36)` | NO | INDEX `ix_dispute_evidences_actor_id` | 분쟁 접수 사용자 ID |
-| `reason` | `text` | NO |  | 분쟁 사유 |
+| `reason` | `text` | YES |  | 분쟁 상세 사유. 기타 사유에서만 필수라 nullable |
 | `survey_question_id` | `bigint` | NO | INDEX `idx_dispute_evidences_survey_question_id` | 선택한 분쟁 설문 질문 ID |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
-| `status` | `varchar(20)` | NO | INDEX `idx_dispute_evidences_status` | 관리자 처리 상태. `PENDING`, `RESOLVED`, `REJECTED` |
+| `status` | `varchar(20)` | NO | INDEX `idx_dispute_evidences_status` | 관리자 처리 상태. `PENDING`, `RESOLVED` |
 | `admin_note` | `varchar(500)` | YES |  | 관리자 처리 메모 |
 | `resolved_at` | `datetime(6)` | YES |  | 관리자 처리 시각 |
 | `resolved_by_admin_id` | `varchar(36)` | YES |  | 처리한 관리자 ID |
@@ -318,17 +330,25 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
 |------|------|------|-----------|------|
 | `id` | `bigint` | NO | PK, auto increment | 질문 ID |
-| `target_type` | `varchar(6)` | NO | UNIQUE `uk_dispute_survey_questions_target_order` 일부, INDEX `idx_dispute_survey_questions_lookup` | `ORDER`, `RUNNER` |
+| `target_type` | `varchar(10)` | NO | UNIQUE `uk_dispute_survey_questions_target_order` 일부, INDEX `idx_dispute_survey_questions_lookup` | `ORDER`, `RUNNER` |
 | `question_text` | `varchar(500)` | NO |  | 질문 내용 |
 | `display_order` | `integer` | NO | UNIQUE `uk_dispute_survey_questions_target_order` 일부, INDEX `idx_dispute_survey_questions_lookup` | 클라이언트 표시 순서 |
 | `is_active` | `boolean` | NO | INDEX `idx_dispute_survey_questions_lookup` | 조회 노출 여부 |
+| `requires_detail` | `boolean` | NO |  | 상세 사유 필수 여부. `기타` 문항만 `true` |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
 
 현재 코드 메모:
 
-- 분쟁 접수 API는 `surveyQuestionId`와 `disputeReason`을 필수로 받는다.
+- 분쟁 접수 API는 `reasonQuestionId`를 필수로, `detailReason`을 선택으로 받는다. 저장 컬럼은 각각 `survey_question_id`, `reason`이다.
+  질문의 `requires_detail`이 `true`(=`기타`)일 때만 `detailReason`이 필수다. 신고·탈퇴와 같은 정책이다.
 - `GET /v1/dispute-survey/questions`는 active 질문만 대상별 순서대로 반환한다.
+- 문항은 `0028_seed_dispute_survey_questions`가 코드로 넣는다. 신고(`0015`)·탈퇴(`0018`)와 같은 방식이라
+  환경별로 직접 `INSERT`할 필요가 없다. 정본은 ORDER 5개·RUNNER 5개이고 `기타`만 `requires_detail = 1`이다.
+- 시드는 `target_type`별로 행이 하나도 없을 때만 삽입한다. 문항이 이미 있는 환경은 문구를 건드리지 않고,
+  문구가 정본과 완전히 일치하는 행의 `requires_detail`만 정본 값으로 맞춘다.
+- 문항을 바꿀 때는 손으로 `INSERT`하지 말고 새 마이그레이션을 쓴다. `requires_detail`을 빠뜨리면 컬럼 기본값
+  `0`이 적용돼 목록 응답의 `requiresDetail`이 `false`로 나가고, 클라이언트 가드와 서버 검증이 함께 풀린다.
 
 ## `proposal_report_reason_questions`
 
@@ -338,6 +358,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `question_text` | `varchar(500)` | NO |  | 신고 사유 문구 |
 | `display_order` | `integer` | NO | UNIQUE `uk_proposal_report_reason_questions_display_order`, INDEX `idx_proposal_report_reason_questions_lookup` | 표시 순서 |
 | `is_active` | `boolean` | NO | INDEX `idx_proposal_report_reason_questions_lookup` | 조회 노출 여부 |
+| `requires_detail` | `boolean` | NO |  | 상세 사유 필수 여부. `기타` 문항만 `true` |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
 
@@ -350,7 +371,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `reporter_id` | `varchar(36)` | NO | UNIQUE `uk_proposal_reports_proposal_reporter` 일부, INDEX `idx_proposal_reports_reporter_id` | 신고 사용자 ID |
 | `reason_question_id` | `bigint` | NO |  | 선택한 신고 사유 ID |
 | `detail_reason` | `varchar(500)` | YES |  | 선택 상세 사유 |
-| `status` | `varchar(8)` | NO | INDEX `idx_proposal_reports_proposal_status`, `idx_proposal_reports_status_created` | `PENDING`, `ACCEPTED`, `REJECTED` |
+| `status` | `varchar(20)` | NO | INDEX `idx_proposal_reports_proposal_status`, `idx_proposal_reports_status_created` | `PENDING`, `ACCEPTED`, `REJECTED` |
 | `created_at` | `datetime(6)` | NO | INDEX `idx_proposal_reports_status_created` | 신고 접수 시각 |
 | `reviewed_at` | `datetime(6)` | YES |  | 관리자 검토 시각 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |

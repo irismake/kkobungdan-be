@@ -11,7 +11,6 @@ from app.core.errors import AppError
 from app.core.openapi import (
     ADMIN_DISPUTE_DETAIL_RESPONSE_EXAMPLE,
     ADMIN_DISPUTE_PAGE_EXAMPLE,
-    ADMIN_DISPUTE_REJECTED_EXAMPLE,
     ADMIN_DISPUTE_RESOLVED_EXAMPLE,
     ADMIN_OFFER_PAGE_EXAMPLE,
     ADMIN_PAYOUT_COMPLETED_EXAMPLE,
@@ -22,9 +21,12 @@ from app.core.openapi import (
     ADMIN_PROPOSAL_DETAIL_RESPONSE_EXAMPLE,
     ADMIN_PROPOSAL_PAGE_EXAMPLE,
     ADMIN_REFUND_COMPLETED_EXAMPLE,
+    ADMIN_REFUND_DEPOSIT_CONFIRMED_EXAMPLE,
     ADMIN_REFUND_DETAIL_RESPONSE_EXAMPLE,
     ADMIN_REFUND_PAGE_EXAMPLE,
+    ADMIN_REFUND_VOIDED_EXAMPLE,
     ADMIN_SUMMARY_EXAMPLE,
+    ADMIN_USER_PAGE_EXAMPLE,
     MISSION_DETAIL_EXAMPLES,
     MISSION_PAGE_EXAMPLES,
     MISSION_RESOLVED_EXAMPLES,
@@ -56,7 +58,9 @@ from app.schemas.admin import (
     AdminProposalSummaryResponse,
     AdminRefundDetailResponse,
     AdminRefundSummaryResponse,
+    AdminRefundVoidRequest,
     AdminSummaryResponse,
+    AdminUserSummaryResponse,
 )
 from app.services.admin.admin_command_service import AdminCommandService
 from app.services.admin.admin_query_service import AdminQueryService
@@ -462,35 +466,6 @@ def resolve_admin_dispute(
     )
 
 
-@router.post(
-    "/dispute/{dispute_id}/reject",
-    response_model=ApiResponse[AdminDisputeDetailResponse],
-    summary="분쟁 반려 (관리자 전용)",
-    description="관리자가 분쟁을 반려합니다. 요청·지원·미션 상태는 바뀌지 않습니다.",
-    responses={
-        200: success_response(ADMIN_DISPUTE_REJECTED_EXAMPLE),
-        **error_responses(
-            AppError.DISPUTE_EVIDENCE_NOT_FOUND,
-            AppError.DISPUTE_ALREADY_REVIEWED,
-            AppError.PROPOSAL_NOT_FOUND,
-            AppError.OFFER_NOT_FOUND,
-            AppError.VALIDATION_ERROR,
-        ),
-    },
-)
-def reject_admin_dispute(
-    dispute_id: int,
-    request: AdminNoteRequest | None = None,
-    db: Session = Depends(get_db),
-) -> ApiResponse[AdminDisputeDetailResponse]:
-    payload = request or AdminNoteRequest()
-    return ApiResponse(
-        success=True,
-        data=AdminCommandService.reject_dispute(db, dispute_id, payload.admin_id, payload.admin_note),
-        message="분쟁이 반려되었습니다.",
-    )
-
-
 @router.get(
     "/refund",
     response_model=ApiResponse[PageResponse[AdminRefundSummaryResponse]],
@@ -556,6 +531,64 @@ def complete_admin_refund(
         success=True,
         data=AdminCommandService.complete_refund(db, refund_id, payload.admin_id, payload.admin_note),
         message="환불을 기록했습니다.",
+    )
+
+
+@router.post(
+    "/refund/{refund_id}/confirm-deposit",
+    response_model=ApiResponse[AdminRefundDetailResponse],
+    summary="입금 확인 처리 (관리자 전용)",
+    description=(
+        "입금 확인 전 취소된 요청의 대조 결과 입금이 확인되었을 때 호출한다. "
+        "환불을 `REVIEW`에서 `PENDING`으로 확정하고 요청을 `REFUND_PENDING`으로 되돌린다. "
+        "이후 이체는 기존 환불 완료 API를 그대로 사용한다."
+    ),
+    responses={
+        200: success_response(ADMIN_REFUND_DEPOSIT_CONFIRMED_EXAMPLE),
+        **error_responses(
+            AppError.REFUND_NOT_FOUND,
+            AppError.REFUND_NOT_PROCESSABLE,
+            AppError.PROPOSAL_NOT_FOUND,
+        ),
+    },
+)
+def confirm_admin_refund_deposit(
+    refund_id: int,
+    db: Session = Depends(get_db),
+) -> ApiResponse[AdminRefundDetailResponse]:
+    return ApiResponse(
+        success=True,
+        data=AdminCommandService.confirm_refund_deposit(db, refund_id),
+        message="입금이 확인되어 환불 대상으로 확정했습니다.",
+    )
+
+
+@router.post(
+    "/refund/{refund_id}/void",
+    response_model=ApiResponse[AdminRefundDetailResponse],
+    summary="입금 없음 종결 (관리자 전용)",
+    description=(
+        "대조 결과 입금이 없어 환불 없이 종결한다. 환불 반려가 아니라 받은 돈이 없다는 뜻이며 "
+        "요청은 `CANCELLED`로 남는다. 근거를 남기도록 `adminNote`는 필수다."
+    ),
+    responses={
+        200: success_response(ADMIN_REFUND_VOIDED_EXAMPLE),
+        **error_responses(
+            AppError.REFUND_NOT_FOUND,
+            AppError.REFUND_NOT_PROCESSABLE,
+            AppError.VALIDATION_ERROR,
+        ),
+    },
+)
+def void_admin_refund(
+    refund_id: int,
+    request: AdminRefundVoidRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[AdminRefundDetailResponse]:
+    return ApiResponse(
+        success=True,
+        data=AdminCommandService.void_refund(db, refund_id, request.admin_id, request.admin_note),
+        message="입금이 없어 환불 없이 종결했습니다.",
     )
 
 
@@ -638,3 +671,22 @@ def reject_admin_payout(
         data=AdminCommandService.reject_payout(db, payout_id, payload.admin_id, payload.admin_note),
         message="수행비 지급을 반려했습니다.",
     )
+
+
+@router.get(
+    "/user",
+    response_model=ApiResponse[PageResponse[AdminUserSummaryResponse]],
+    summary="사용자 목록 조회 (관리자 전용)",
+    description=(
+        "가입한 앱 사용자를 최신 가입순으로 조회합니다. 관리자 콘솔 계정은 목록에 포함하지 않습니다. "
+        "`missionCount`는 성공 완료한 러너 지원 수입니다."
+    ),
+    responses={200: success_response(ADMIN_USER_PAGE_EXAMPLE)},
+)
+def list_admin_users(
+    keyword: str | None = Query(None, description="사용자 이름 부분 일치 또는 사용자 ID 완전 일치 검색"),
+    page: int = Query(0, ge=0),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> ApiResponse[PageResponse[AdminUserSummaryResponse]]:
+    return ApiResponse(success=True, data=AdminQueryService.list_users(db, keyword, page, size))

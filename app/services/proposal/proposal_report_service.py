@@ -39,7 +39,12 @@ class ProposalReportService:
         return proposal
 
     @staticmethod
-    def _get_active_reason_question(db: Session, question_id: int) -> ProposalReportReasonQuestion:
+    def _resolve_reason_question(
+        db: Session,
+        question_id: int,
+        detail_reason: str | None,
+    ) -> ProposalReportReasonQuestion:
+        """신고 사유를 검증한다. 사유는 필수이고 기타 사유만 상세 사유를 요구한다. 분쟁·탈퇴와 같은 정책이다."""
         question = (
             db.query(ProposalReportReasonQuestion)
             .filter(
@@ -50,7 +55,18 @@ class ProposalReportService:
         )
         if question is None:
             raise api_error(AppError.VALIDATION_ERROR, "reasonQuestionId")
+        if question.requires_detail and detail_reason is None:
+            raise api_error(AppError.VALIDATION_ERROR, "detailReason")
         return question
+
+    @staticmethod
+    def _question_text(db: Session, question_id: int) -> str:
+        question = (
+            db.query(ProposalReportReasonQuestion)
+            .filter(ProposalReportReasonQuestion.id == question_id)
+            .one()
+        )
+        return question.question_text
 
     @staticmethod
     def _reporter_names(db: Session, reporter_ids: list[str]) -> dict[str, str]:
@@ -101,7 +117,7 @@ class ProposalReportService:
             raise api_error(AppError.PROPOSAL_SELF_REPORT_NOT_ALLOWED)
         if proposal.status not in REPORTABLE_PROPOSAL_STATUSES:
             raise api_error(AppError.PROPOSAL_NOT_REPORTABLE, f"status: {proposal.status.value}")
-        question = ProposalReportService._get_active_reason_question(db, request.reason_question_id)
+        question = ProposalReportService._resolve_reason_question(db, request.reason_question_id, request.detail_reason)
         report = ProposalReport(
             proposal_id=proposal.id,
             reporter_id=reporter_id,
@@ -212,11 +228,11 @@ class ProposalReportService:
         report.reviewed_at = utcnow_naive()
         db.commit()
         db.refresh(report)
-        question = db.query(ProposalReportReasonQuestion).filter(ProposalReportReasonQuestion.id == report.reason_question_id).one()
+        question_text = ProposalReportService._question_text(db, report.reason_question_id)
         reporter_names = ProposalReportService._reporter_names(db, [report.reporter_id])
         return ProposalReportService._to_admin_response(
             report,
-            question.question_text,
+            question_text,
             reporter_name=reporter_names.get(report.reporter_id) or WITHDRAWN_USER_NAME,
         )
 
@@ -228,10 +244,10 @@ class ProposalReportService:
         report.reviewed_at = utcnow_naive()
         db.commit()
         db.refresh(report)
-        question = db.query(ProposalReportReasonQuestion).filter(ProposalReportReasonQuestion.id == report.reason_question_id).one()
+        question_text = ProposalReportService._question_text(db, report.reason_question_id)
         reporter_names = ProposalReportService._reporter_names(db, [report.reporter_id])
         return ProposalReportService._to_admin_response(
             report,
-            question.question_text,
+            question_text,
             reporter_name=reporter_names.get(report.reporter_id) or WITHDRAWN_USER_NAME,
         )

@@ -10,6 +10,7 @@
 - [`2026-08-22-admin-web-api.md`](./2026-08-22-admin-web-api.md): 관리자 웹 요청·지원·분쟁·환불·지급 API 구축
 - [`2026-08-22-admin-auth.md`](./2026-08-22-admin-auth.md): 관리자 웹 인증·인가
 - [`2026-08-24-refund-lifecycle.md`](./2026-08-24-refund-lifecycle.md): 환불 수명주기와 분쟁 종결 상태 개편
+- [`2026-08-25-admin-user-list-api.md`](./2026-08-25-admin-user-list-api.md): 관리자 사용자 목록 조회 API
 
 ## 운영 규칙
 

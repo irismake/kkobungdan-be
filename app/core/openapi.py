@@ -219,7 +219,18 @@ USER_WITHDRAWAL_REASONS_EXAMPLE = {
     ],
     "message": "Success",
 }
-USER_WITHDRAWAL_EXAMPLE = {"success": True, "data": None, "message": "회원 탈퇴가 완료되었습니다."}
+USER_WITHDRAWAL_EXAMPLE = {
+    "success": True,
+    "data": {
+        "id": 1,
+        "userId": EXAMPLE_USER_ID,
+        "reasonQuestionId": 1,
+        "reasonQuestionText": "원하는 임무가 많지 않았어요.",
+        "detailReason": "제 지역에는 요청이 거의 없었어요.",
+        "withdrawnAt": EXAMPLE_CREATED_AT,
+    },
+    "message": "회원 탈퇴가 완료되었습니다.",
+}
 
 TERMS_AGREEMENT_EXAMPLE = {
     "success": True,
@@ -241,6 +252,7 @@ DISPUTE_SURVEY_QUESTIONS_EXAMPLE = {
             "targetType": "ORDER",
             "questionText": "러너의 수행 결과에 어떤 문제가 있었나요?",
             "displayOrder": 1,
+            "requiresDetail": False,
         }
     ],
     "message": "Success",
@@ -443,8 +455,9 @@ DISPUTE_EVIDENCE_EXAMPLE = {
         "proposalId": 1,
         "offerId": 10,
         "actorId": EXAMPLE_RUNNER_ID,
-        "reason": "배송 중 파손",
-        "surveyQuestionId": 3,
+        "reasonQuestionId": 3,
+        "reasonQuestionText": "물건이 파손되었어요",
+        "detailReason": "배송 중 파손",
         "createdAt": EXAMPLE_CREATED_AT,
     },
     "message": "Success",
@@ -901,8 +914,9 @@ ADMIN_DISPUTE_DETAIL_EXAMPLE = {
     "targetId": EXAMPLE_RUNNER_ID,
     "targetName": EXAMPLE_RUNNER_NAME,
     "targetRole": "RUNNER",
-    "surveyQuestionId": 1,
-    "reason": "약속한 물건과 다른 물건을 전달했습니다.",
+    "reasonQuestionId": 1,
+    "reasonQuestionText": "물건이 파손되었어요",
+    "detailReason": "약속한 물건과 다른 물건을 전달했습니다.",
     "proposalStatus": "DISPUTED",
     "offerStatus": "DISPUTED",
     "adminNote": None,
@@ -925,17 +939,6 @@ ADMIN_DISPUTE_RESOLVED_EXAMPLE = {
     },
     "message": "분쟁이 처리되었습니다.",
 }
-ADMIN_DISPUTE_REJECTED_EXAMPLE = {
-    "success": True,
-    "data": {
-        **ADMIN_DISPUTE_DETAIL_EXAMPLE,
-        "status": "REJECTED",
-        "adminNote": "증빙 부족",
-        "resolvedAt": EXAMPLE_UPDATED_AT,
-    },
-    "message": "분쟁이 반려되었습니다.",
-}
-
 ADMIN_REFUND_SUMMARY_EXAMPLE = {
     "id": 100,
     "proposalId": 1,
@@ -972,6 +975,30 @@ ADMIN_REFUND_COMPLETED_EXAMPLE = {
         "adminNote": "이체 참조번호 20260601-002",
     },
     "message": "환불을 기록했습니다.",
+}
+ADMIN_REFUND_DEPOSIT_CONFIRMED_EXAMPLE = {
+    "success": True,
+    "data": {
+        **ADMIN_REFUND_DETAIL_EXAMPLE,
+        "proposalStatus": "REFUND_PENDING",
+        "status": "PENDING",
+        "reason": "USER_CANCELLED",
+        "reasonDetail": None,
+    },
+    "message": "입금이 확인되어 환불 대상으로 확정했습니다.",
+}
+ADMIN_REFUND_VOIDED_EXAMPLE = {
+    "success": True,
+    "data": {
+        **ADMIN_REFUND_DETAIL_EXAMPLE,
+        "proposalStatus": "CANCELLED",
+        "status": "VOIDED",
+        "reason": "PAYMENT_EXPIRED",
+        "reasonDetail": None,
+        "processedAt": EXAMPLE_UPDATED_AT,
+        "adminNote": "2026-06-01 입금 내역 없음",
+    },
+    "message": "입금이 없어 환불 없이 종결했습니다.",
 }
 ADMIN_PAYOUT_PAGE_EXAMPLE = _admin_page(
     _mission_example(
@@ -1023,12 +1050,20 @@ ADMIN_PAYOUT_REJECTED_EXAMPLE = {
     "message": "수행비 지급을 반려했습니다.",
 }
 
+ADMIN_USER_SUMMARY_EXAMPLE = {
+    "id": EXAMPLE_USER_ID,
+    "name": EXAMPLE_ORDERER_NAME,
+    "createdAt": EXAMPLE_CREATED_AT,
+    "missionCount": EXAMPLE_RUNNER_LEVEL,
+}
+ADMIN_USER_PAGE_EXAMPLE = _admin_page(ADMIN_USER_SUMMARY_EXAMPLE)
 ADMIN_SUMMARY_EXAMPLE = {
     "success": True,
     "data": {
         "unpaidCount": 3,
         "disputeCount": 1,
         "refundCount": 0,
+        "depositReviewCount": 2,
         "settlementCount": 2,
         "reportCount": 1,
     },

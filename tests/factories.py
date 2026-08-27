@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token
 from app.models.dispute_evidence import DisputeEvidence
+from app.models.dispute_survey import DisputeSurveyQuestion, DisputeSurveyTargetType
 from app.models.mission import Mission, MissionStatus
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.offer import Offer, OfferStatus
@@ -129,13 +130,22 @@ class TestDataFactory:
 
     def dispute_evidence(self, proposal: Proposal, offer: Offer, actor_id: str, **overrides) -> DisputeEvidence:
         mission = self.db.query(Mission).filter(Mission.offer_id == offer.id).one()
+        question = DisputeSurveyQuestion(
+            target_type=DisputeSurveyTargetType.ORDER,
+            question_text="물건이 파손되었어요",
+            display_order=1,
+            is_active=True,
+        )
+        self.db.add(question)
+        self.db.commit()
+        self.db.refresh(question)
         evidence = DisputeEvidence(
             proposal_id=proposal.id,
             offer_id=offer.id,
             mission_id=mission.id,
             actor_id=actor_id,
             reason="약속한 물건과 다른 물건을 전달했습니다.",
-            survey_question_id=1,
+            survey_question_id=question.id,
         )
         for key, value in overrides.items():
             setattr(evidence, key, value)

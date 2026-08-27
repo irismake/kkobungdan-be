@@ -23,6 +23,7 @@ from app.models.user import (
     UserWithdrawal,
     UserWithdrawalReasonQuestion,
 )
+from app.schemas.user import UserWithdrawalRequest
 from app.services.sms_service import get_sms_sender
 from app.services.proposal.proposal_service import ProposalService
 from app.services.user_auth.phone_verification import (
@@ -418,6 +419,7 @@ def test_update_user_name_validation_errors(client, factory):
 
 
 def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(client, db, factory):
+    reason = seed_withdrawal_reasons(db)[0]
     user = factory.user(phone="01012340004", name="탈퇴사용자")
     headers = factory.headers_for(user)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -470,9 +472,16 @@ def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(cl
     db.add_all([evidence, fcm_token, settlement, terms, verification, notification])
     db.commit()
 
-    response = client.delete("/v1/user", headers=headers)
+    response = client.delete("/v1/user", headers=headers, json={"reasonQuestionId": reason.id})
     assert response.status_code == 200
-    assert response.json() == {"success": True, "data": None, "message": "회원 탈퇴가 완료되었습니다."}
+    body = response.json()
+    assert body["success"] is True
+    assert body["message"] == "회원 탈퇴가 완료되었습니다."
+    # 기타가 아닌 사유라 상세 사유만 null이다.
+    assert body["data"]["userId"] == user_id
+    assert body["data"]["reasonQuestionId"] == reason.id
+    assert body["data"]["reasonQuestionText"] == reason.question_text
+    assert body["data"]["detailReason"] is None
 
     withdrawn_user = db.query(User).filter(User.id == user_id).first()
     assert withdrawn_user is not None
@@ -512,7 +521,7 @@ def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(cl
     )
     assert signup_send.status_code == 200
     withdrawal = db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user_id).one()
-    assert withdrawal.reason_question_id is None
+    assert withdrawal.reason_question_id == reason.id
     assert withdrawal.detail_reason is None
     assert withdrawal.withdrawn_at == withdrawn_user.deleted_at
 
@@ -543,7 +552,7 @@ def test_list_user_withdrawal_reasons_returns_active_ordered_questions(client, d
     ]
 
 
-def test_withdraw_user_stores_optional_reason_and_detail(client, db, factory):
+def test_withdraw_user_stores_reason_and_detail(client, db, factory):
     reasons = seed_withdrawal_reasons(db)
     reason = reasons[0]
     user = factory.user(phone="01012340104", name="탈퇴사유사용자")
@@ -560,6 +569,13 @@ def test_withdraw_user_stores_optional_reason_and_detail(client, db, factory):
     assert withdrawal.reason_question_id == reason.id
     assert withdrawal.detail_reason == "임무가 부족했습니다."
 
+    # 신고·분쟁과 같은 사유 3종을 응답한다.
+    data = response.json()["data"]
+    assert data["reasonQuestionId"] == reason.id
+    assert data["reasonQuestionText"] == reason.question_text
+    assert data["detailReason"] == "임무가 부족했습니다."
+    assert data["userId"] == user.id
+
 
 def test_withdraw_user_requires_detail_for_other_reason(client, db, factory):
     reasons = seed_withdrawal_reasons(db)
@@ -572,6 +588,24 @@ def test_withdraw_user_requires_detail_for_other_reason(client, db, factory):
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert response.json()["error"]["details"] == "detailReason"
+    db.refresh(user)
+    assert user.deleted is False
+    assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
+
+
+def test_withdraw_user_requires_reason_question_id(client, db, factory):
+    """탈퇴 사유는 필수다. 신고·분쟁과 같은 정책이다."""
+    seed_withdrawal_reasons(db)
+    user = factory.user(phone="01012340107", name="사유없는탈퇴사용자")
+    headers = factory.headers_for(user)
+
+    no_body = client.delete("/v1/user", headers=headers)
+    missing_reason = client.delete("/v1/user", headers=headers, json={"detailReason": "사유는 고르지 않음"})
+
+    assert no_body.status_code == 400
+    assert no_body.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert missing_reason.status_code == 400
+    assert missing_reason.json()["error"]["code"] == "VALIDATION_ERROR"
     db.refresh(user)
     assert user.deleted is False
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
@@ -601,6 +635,7 @@ def test_withdraw_user_rejects_inactive_or_unknown_reason(client, db, factory):
 
 @pytest.mark.parametrize("proposal_status", [ProposalStatus.HOLDING])
 def test_withdraw_user_auto_cancels_pre_match_proposal_and_waiting_offers(db, factory, proposal_status):
+    reason = seed_withdrawal_reasons(db)[0]
     user = factory.user(phone="01012340005", name="요청사용자")
     db.add(UserFCMToken(user_id=user.id, fcm_token="kept-token"))
     proposal = factory.proposal(orderer_id=user.id, status=proposal_status)
@@ -611,7 +646,7 @@ def test_withdraw_user_auto_cancels_pre_match_proposal_and_waiting_offers(db, fa
     )
     db.commit()
 
-    UserWithdrawalService.withdraw_user(db, user)
+    UserWithdrawalService.withdraw_user(db, user, UserWithdrawalRequest(reasonQuestionId=reason.id))
 
     db.refresh(proposal)
     db.refresh(waiting_offer)
@@ -699,6 +734,7 @@ def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
 
 
 def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, factory, monkeypatch):
+    reason = seed_withdrawal_reasons(db)[0]
     user = factory.user(phone="01012340015", name="요청사용자")
     db.add(UserFCMToken(user_id=user.id, fcm_token="rollback-token"))
     proposal = factory.proposal(orderer_id=user.id, status=ProposalStatus.OFFERED)
@@ -711,7 +747,7 @@ def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, facto
     monkeypatch.setattr(User, "withdraw", fail_withdraw)
 
     with pytest.raises(RuntimeError, match="anonymization failed"):
-        UserWithdrawalService.withdraw_user(db, user)
+        UserWithdrawalService.withdraw_user(db, user, UserWithdrawalRequest(reasonQuestionId=reason.id))
 
     db.expire_all()
     assert db.query(User).filter(User.id == user.id, User.deleted.is_(False)).one()

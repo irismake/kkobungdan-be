@@ -41,5 +41,18 @@ class DisputeSurveyService:
             .one_or_none()
         )
         if question is None:
-            raise api_error(AppError.VALIDATION_ERROR, "surveyQuestionId")
+            raise api_error(AppError.VALIDATION_ERROR, "reasonQuestionId")
+        return question
+
+    @staticmethod
+    def resolve_reason(
+        db: Session,
+        question_id: int,
+        detail_reason: str | None,
+        target_type: DisputeSurveyTargetType,
+    ) -> DisputeSurveyQuestion:
+        """분쟁 사유를 검증한다. 사유는 필수이고 기타 사유만 상세 사유를 요구한다. 탈퇴·신고와 같은 정책이다."""
+        question = DisputeSurveyService.ensure_active_question(db, question_id, target_type)
+        if question.requires_detail and detail_reason is None:
+            raise api_error(AppError.VALIDATION_ERROR, "detailReason")
         return question

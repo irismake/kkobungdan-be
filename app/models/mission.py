@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, Uni
 
 from app.core.database import Base
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class MissionStatus(str, enum.Enum):
@@ -55,7 +56,7 @@ class Mission(Base):
     offer_id = Column(BigInteger, nullable=False)
     orderer_id = Column(String(36), nullable=False, index=True)
     runner_id = Column(String(36), nullable=False, index=True)
-    status = Column(String(20), nullable=False, default=MissionStatus.STARTED.value, index=True)
+    status = Column(enum_column(MissionStatus, 20, table="missions", column="status"), nullable=False, default=MissionStatus.STARTED, index=True)
     errand_fee = Column(Integer, nullable=False)
 
     started_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
@@ -63,7 +64,7 @@ class Mission(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     failed_at = Column(DateTime(timezone=True), nullable=True)
 
-    resolution = Column(String(20), nullable=True)
+    resolution = Column(enum_column(MissionResolution, 20, table="missions", column="resolution"), nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     resolved_by_admin_id = Column(String(36), nullable=True)
 
@@ -110,33 +111,33 @@ class Mission(Base):
             orderer_id=orderer_id,
             runner_id=runner_id,
             errand_fee=errand_fee,
-            status=MissionStatus.STARTED.value,
+            status=MissionStatus.STARTED,
             started_at=now,
         )
 
     def is_terminal(self) -> bool:
-        return self.status in {status.value for status in TERMINAL_STATUSES}
+        return self.status in TERMINAL_STATUSES
 
     def mark_disputed(self) -> None:
-        if self.status != MissionStatus.STARTED.value:
+        if self.status != MissionStatus.STARTED:
             return
-        self.status = MissionStatus.DISPUTED.value
+        self.status = MissionStatus.DISPUTED
         self.disputed_at = utcnow_naive()
 
     def mark_completed(self) -> None:
-        if self.status not in {MissionStatus.STARTED.value, MissionStatus.DISPUTED.value}:
+        if self.status not in {MissionStatus.STARTED, MissionStatus.DISPUTED}:
             return
-        self.status = MissionStatus.COMPLETED.value
+        self.status = MissionStatus.COMPLETED
         self.completed_at = utcnow_naive()
 
     def mark_failed(self) -> None:
-        if self.status not in {MissionStatus.STARTED.value, MissionStatus.DISPUTED.value}:
+        if self.status not in {MissionStatus.STARTED, MissionStatus.DISPUTED}:
             return
-        self.status = MissionStatus.FAILED.value
+        self.status = MissionStatus.FAILED
         self.failed_at = utcnow_naive()
 
     def can_resolve(self) -> bool:
-        return self.status == MissionStatus.DISPUTED.value
+        return self.status == MissionStatus.DISPUTED
 
     def can_record_settlement(self) -> bool:
         return self.status == SETTLEABLE_STATUS.value and not self.settlement_paid
@@ -154,7 +155,7 @@ class Mission(Base):
         self.settlement_paid_at = utcnow_naive()
         self.settlement_paid_by_admin_id = admin_id
         self.payout_memo = memo
-        self.status = MissionStatus.PAID.value
+        self.status = MissionStatus.PAID
 
 __all__ = [
     "Mission",

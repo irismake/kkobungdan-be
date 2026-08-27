@@ -55,6 +55,10 @@ Offer 기준:
 
 사용자가 작성한 Proposal이 자동 취소될 때 해당 Proposal에 연결된 대기 Offer도 `CANCELLED` 처리한다.
 
+`HOLDING` 자동 취소도 다른 취소 경로와 같이 대조 대기(`REVIEW`) 환불을 남긴다. 다만 탈퇴는
+개인정보를 하드 삭제하므로, 뒤늦게 입금이 확인되어도 이체할 계좌가 남지 않는다. 기록으로 추적만
+가능하고 지급 경로는 없다. `REVIEW`를 탈퇴 차단 조건에 넣을지는 정책 판단이 남아 있다.
+
 ## 탈퇴 가능 상태
 
 모든 활동이 종료 상태라면 탈퇴를 허용한다.
@@ -117,7 +121,12 @@ Offer 기준:
 - 다른 서비스를 이용하려고 해요.
 - 기타
 
-`DELETE /v1/user`는 `reasonQuestionId`, `detailReason`을 선택 입력으로 받을 수 있다. `reasonQuestionId`가 활성 사유가 아니면 `VALIDATION_ERROR`를 반환한다. 사유의 `requires_detail`이 `true`이면 `detailReason`을 필수로 요구한다.
+`DELETE /v1/user`는 `reasonQuestionId`를 필수로 받고 `detailReason`은 선택으로 받는다. body 없이
+호출하거나 `reasonQuestionId`가 없으면 `VALIDATION_ERROR`다. `reasonQuestionId`가 활성 사유가 아니어도
+`VALIDATION_ERROR`를 반환한다. 사유의 `requires_detail`이 `true`(=`기타`)이면 `detailReason`을 필수로 요구한다.
+
+이 정책은 탈퇴 전용이 아니다. 게시글 신고(`POST /v1/proposal/{id}/reports`)와 분쟁 접수
+(`POST /v1/proposal/{id}/dispute`, `POST /v1/offer/{offerId}/dispute`)도 같은 규칙을 쓴다.
 
 ## API 공개 상태
 

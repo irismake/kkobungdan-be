@@ -139,7 +139,7 @@ def get_proposal(
     response_model=ApiResponse[ProposalReportResponse],
     status_code=status.HTTP_201_CREATED,
     summary="요청 게시글 신고",
-    description="공개 모집 중인 다른 사용자의 요청 게시글을 신고합니다.",
+    description="공개 모집 중인 다른 사용자의 요청 게시글을 신고합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
     responses={
         201: success_response({"success": True, "data": {"id": 1, "proposalId": 1, "reporterId": "550e8400-e29b-41d4-a716-446655440001", "reporterName": None, "reasonQuestionId": 1, "reasonQuestionText": "광고 또는 스팸이에요", "detailReason": "반복 광고입니다.", "status": "PENDING", "createdAt": "2026-06-01T12:00:00+09:00", "reviewedAt": None}, "message": "신고가 접수되었습니다."}),
         **error_responses(
@@ -286,7 +286,7 @@ def confirm_received(
     response_model=ApiResponse[ProposalDetailResponse],
     status_code=status.HTTP_200_OK,
     summary="오더 분쟁 접수",
-    description="오더러가 요청의 분쟁을 접수합니다.",
+    description="오더러가 요청의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
     responses={
         200: success_response(PROPOSAL_DISPUTE_EXAMPLE),
         **error_responses(
@@ -310,8 +310,8 @@ def raise_proposal_dispute(
         db,
         proposal_id=proposal_id,
         orderer_id=current_user.id,
-        survey_question_id=request.survey_question_id,
-        dispute_reason=request.dispute_reason,
+        reason_question_id=request.reason_question_id,
+        detail_reason=request.detail_reason,
     )
     _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=proposal, message="분쟁이 접수되었습니다.")

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Enum, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, Integer, String, UniqueConstraint
 
 from app.core.database import Base
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class DisputeSurveyTargetType(str, enum.Enum):
@@ -23,10 +24,11 @@ class DisputeSurveyQuestion(Base):
     __tablename__ = "dispute_survey_questions"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    target_type = Column(Enum(DisputeSurveyTargetType), nullable=False)
+    target_type = Column(enum_column(DisputeSurveyTargetType, 10, table="dispute_survey_questions", column="target_type"), nullable=False)
     question_text = Column(String(500), nullable=False)
     display_order = Column(Integer, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    requires_detail = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
 

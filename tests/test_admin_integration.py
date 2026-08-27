@@ -6,6 +6,7 @@ from app.tasks import payment_checker
 from app.models.notification import Notification, NotificationStatus, NotificationType
 from app.models.offer import OfferStatus
 from app.models.proposal import ProposalStatus
+from app.models.refund import Refund, RefundReason, RefundStatus
 from app.services.proposal.proposal_service import ProposalService
 
 
@@ -149,6 +150,13 @@ def test_cancel_expired_payment_proposals_only_cancels_holding_after_24_hours(db
     assert boundary_holding.status == ProposalStatus.CANCELLED
     assert fresh_holding.status == ProposalStatus.HOLDING
     assert expired_posted.status == ProposalStatus.POSTED
+
+    # 마감 직전 입금 건이 새어나가지 않도록 자동취소도 관리자 대조 대기를 남긴다.
+    refunds = db.query(Refund).order_by(Refund.proposal_id).all()
+    assert [refund.proposal_id for refund in refunds] == [expired_holding.id, boundary_holding.id]
+    assert {refund.status for refund in refunds} == {RefundStatus.REVIEW.value}
+    assert {refund.reason for refund in refunds} == {RefundReason.PAYMENT_EXPIRED.value}
+    assert {refund.amount for refund in refunds} == {expired_holding.errand_fee}
 
 
 def test_cancel_expired_payment_proposals_notifies_orderer(db, factory, sample_user):

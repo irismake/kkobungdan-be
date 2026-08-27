@@ -20,13 +20,14 @@ def dispute_question(target_type: DisputeSurveyTargetType) -> DisputeSurveyQuest
 def create_runner_dispute(client, db, factory, orderer, runner) -> tuple[int, int, DisputeEvidence]:
     proposal, offer = factory.execution(orderer, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
     offer.accepted_at = datetime.now(timezone.utc)
+    factory.mission(proposal, offer)
     question = dispute_question(DisputeSurveyTargetType.RUNNER)
     db.add(question)
     db.commit()
 
     response = client.post(
         f"/v1/offer/{offer.id}/dispute",
-        json={"surveyQuestionId": question.id, "disputeReason": "배송 중 파손"},
+        json={"reasonQuestionId": question.id, "detailReason": "배송 중 파손"},
         headers=factory.headers_for(runner),
     )
     assert response.status_code == 200
@@ -55,8 +56,9 @@ def test_get_dispute_evidence_by_proposal_id_allows_participants(client, db, fac
         "proposalId": proposal_id,
         "offerId": evidence.offer_id,
         "actorId": runner.id,
-        "reason": "배송 중 파손",
-        "surveyQuestionId": evidence.survey_question_id,
+        "reasonQuestionId": evidence.survey_question_id,
+        "reasonQuestionText": "분쟁 사유를 선택해주세요.",
+        "detailReason": "배송 중 파손",
         "createdAt": orderer_response.json()["data"]["createdAt"],
     }
     assert runner_response.json()["data"]["id"] == evidence.id

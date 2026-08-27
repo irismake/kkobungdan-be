@@ -8,6 +8,7 @@ from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, String, 
 
 from app.core.database import Base
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class DisputeProcessStatus(str, enum.Enum):
@@ -15,7 +16,6 @@ class DisputeProcessStatus(str, enum.Enum):
 
     PENDING = "PENDING"
     RESOLVED = "RESOLVED"
-    REJECTED = "REJECTED"
 
 
 class DisputeEvidence(Base):
@@ -28,14 +28,16 @@ class DisputeEvidence(Base):
     offer_id = Column(BigInteger, nullable=False, index=True)
     mission_id = Column(BigInteger, ForeignKey("missions.id", name="fk_dispute_evidences_mission_id"), nullable=False)
     actor_id = Column(String(36), nullable=False, index=True)
-    reason = Column(Text, nullable=False)
+    # 사유 선택은 필수다. 상세 사유는 사유 마스터의 requires_detail이 true(기타)일 때만 필수다.
+    reason = Column(Text, nullable=True)
     survey_question_id = Column(BigInteger, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
 
     status = Column(
-        String(20),
+        enum_column(DisputeProcessStatus, 20, table="dispute_evidences", column="status"),
         nullable=False,
-        default=DisputeProcessStatus.PENDING.value,
+        default=DisputeProcessStatus.PENDING,
+        # server_default는 DDL 문자열이라 열거형이 아니라 값을 준다.
         server_default=DisputeProcessStatus.PENDING.value,
         index=True,
     )
@@ -49,16 +51,10 @@ class DisputeEvidence(Base):
     )
 
     def is_pending(self) -> bool:
-        return self.status == DisputeProcessStatus.PENDING.value
+        return self.status == DisputeProcessStatus.PENDING
 
     def mark_resolved(self, admin_id: str | None, admin_note: str | None) -> None:
-        self.status = DisputeProcessStatus.RESOLVED.value
-        self.resolved_at = utcnow_naive()
-        self.resolved_by_admin_id = admin_id
-        self.admin_note = admin_note
-
-    def mark_rejected(self, admin_id: str | None, admin_note: str | None) -> None:
-        self.status = DisputeProcessStatus.REJECTED.value
+        self.status = DisputeProcessStatus.RESOLVED
         self.resolved_at = utcnow_naive()
         self.resolved_by_admin_id = admin_id
         self.admin_note = admin_note

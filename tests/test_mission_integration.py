@@ -82,7 +82,7 @@ def test_runner_dispute_moves_mission_to_disputed(client, db, factory, sample_us
     response = client.post(
         f"/v1/offer/{offer.id}/dispute",
         headers=factory.headers_for(runner),
-        json={"surveyQuestionId": question.id, "disputeReason": "행님이 연락을 받지 않습니다."},
+        json={"reasonQuestionId": question.id, "detailReason": "행님이 연락을 받지 않습니다."},
     )
 
     assert response.status_code == 200
@@ -100,7 +100,7 @@ def test_orderer_dispute_moves_mission_to_disputed(client, db, factory, sample_u
     response = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
         headers=factory.headers_for(sample_user),
-        json={"surveyQuestionId": question.id, "disputeReason": "물건을 받지 못했습니다."},
+        json={"reasonQuestionId": question.id, "detailReason": "물건을 받지 못했습니다."},
     )
 
     assert response.status_code == 200
@@ -308,18 +308,17 @@ def test_mission_detail_exposes_proposal_open_chat_url(client, db, factory, samp
     assert data["openChatUrl"] == "https://open.kakao.com/o/proposal"
 
 
-def test_mission_list_prefers_offer_open_chat_url(client, db, factory, sample_user, admin_headers):
-    """지원에 복사되거나 갱신된 링크가 있으면 요청의 이전 링크보다 우선한다."""
+def test_mission_list_returns_proposal_open_chat_url(client, db, factory, sample_user, admin_headers):
+    """목록도 상세와 같이 입금 확인 때 요청에 저장한 링크를 내려준다."""
     runner = factory.user("01055550026")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
     proposal.open_chat_url = "https://open.kakao.com/o/proposal"
-    offer.open_chat_url = "https://open.kakao.com/o/offer"
     factory.mission(proposal, offer)
     db.commit()
 
     item = client.get("/v1/admin/missions", headers=admin_headers).json()["data"]["content"][0]
 
-    assert item["openChatUrl"] == "https://open.kakao.com/o/offer"
+    assert item["openChatUrl"] == "https://open.kakao.com/o/proposal"
 
 
 def test_mission_name_uses_display_text_for_withdrawn_participant(client, db, factory, sample_user, admin_headers):

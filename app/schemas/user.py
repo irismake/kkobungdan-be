@@ -230,7 +230,9 @@ class UserWithdrawalReasonQuestionResponse(BaseModel):
 
 
 class UserWithdrawalRequest(BaseModel):
-    reason_question_id: Optional[int] = Field(None, validation_alias="reasonQuestionId", ge=1)
+    """탈퇴 요청. 신고·분쟁과 같이 사유 선택은 필수이고 상세 사유는 기타 사유에서만 필수다."""
+
+    reason_question_id: int = Field(..., validation_alias="reasonQuestionId", ge=1)
     detail_reason: Optional[str] = Field(None, validation_alias="detailReason", max_length=500)
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -244,6 +246,19 @@ class UserWithdrawalRequest(BaseModel):
         if not stripped:
             raise ValueError("detailReason must not be blank")
         return stripped
+
+
+class UserWithdrawalResponse(BaseModel):
+    """회원 탈퇴 결과. 신고·분쟁과 같은 사유 3종을 반환한다. 상세 사유만 null일 수 있다."""
+
+    id: int
+    user_id: str = Field(..., serialization_alias="userId")
+    reason_question_id: int = Field(..., serialization_alias="reasonQuestionId")
+    reason_question_text: str = Field(..., serialization_alias="reasonQuestionText")
+    detail_reason: Optional[str] = Field(None, serialization_alias="detailReason")
+    withdrawn_at: datetime = Field(..., serialization_alias="withdrawnAt")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class UserAlarmRequest(BaseModel):

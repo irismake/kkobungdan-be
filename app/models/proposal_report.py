@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Enum, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, Integer, String, UniqueConstraint
 
 from app.core.database import Base
 from app.core.time import utcnow_naive
+from app.models.enum_type import enum_column
 
 
 class ProposalReportStatus(str, enum.Enum):
@@ -27,6 +28,7 @@ class ProposalReportReasonQuestion(Base):
     question_text = Column(String(500), nullable=False)
     display_order = Column(Integer, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    requires_detail = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
 
@@ -44,9 +46,10 @@ class ProposalReport(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     proposal_id = Column(BigInteger, nullable=False)
     reporter_id = Column(String(36), nullable=False)
+    # 사유 선택은 필수다. requires_detail이 true인 사유(기타)만 상세 사유를 요구한다.
     reason_question_id = Column(BigInteger, nullable=False)
     detail_reason = Column(String(500), nullable=True)
-    status = Column(Enum(ProposalReportStatus), nullable=False, default=ProposalReportStatus.PENDING)
+    status = Column(enum_column(ProposalReportStatus, 20, table="proposal_reports", column="status"), nullable=False, default=ProposalReportStatus.PENDING)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive, onupdate=utcnow_naive)

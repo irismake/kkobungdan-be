@@ -174,7 +174,8 @@ class ProposalService:
             and proposal.status in OPEN_CHAT_PROPOSAL_STATUSES
             and viewer_id in {proposal.orderer_id, open_chat_offer.runner_id}
         ):
-            open_chat_url = open_chat_offer.open_chat_url
+            # 오픈채팅방 URL은 관리자가 입금을 확인할 때 요청에 저장한다.
+            open_chat_url = proposal.open_chat_url
         return ProposalDetailResponse(
             id=proposal.id,
             title=proposal.title,
@@ -324,6 +325,9 @@ class ProposalService:
         proposal.cancel()
         if paid:
             RefundService.create_pending(db, proposal, RefundReason.USER_CANCELLED)
+        else:
+            # 입금 확인 전이라 실제 입금 여부를 알 수 없다. 관리자 대조 대기로 남긴다.
+            RefundService.create_review(db, proposal, RefundReason.USER_CANCELLED)
         if should_reject_waiting_offers:
             (
                 db.query(Offer)
@@ -385,8 +389,8 @@ class ProposalService:
         db: Session,
         proposal_id: int,
         orderer_id: str,
-        survey_question_id: int,
-        dispute_reason: str,
+        reason_question_id: int,
+        detail_reason: str | None = None,
     ) -> ProposalDetailResponse:
         proposal = ProposalService._get_proposal(db, proposal_id)
         ProposalService._ensure_owner(proposal, orderer_id)
@@ -395,7 +399,7 @@ class ProposalService:
         if not proposal.can_raise_dispute() or not offer.can_raise_dispute():
             raise api_error(AppError.PROPOSAL_NOT_UPDATABLE, f"status: {proposal.status.value}")
 
-        DisputeSurveyService.ensure_active_question(db, survey_question_id, DisputeSurveyTargetType.ORDER)
+        DisputeSurveyService.resolve_reason(db, reason_question_id, detail_reason, DisputeSurveyTargetType.ORDER)
         proposal.raise_dispute()
         offer.raise_dispute()
         mission = MissionService.sync_from_offer_and_proposal(db, offer, proposal)
@@ -406,8 +410,8 @@ class ProposalService:
             offer_id=offer.id,
             mission_id=mission.id,
             actor_id=orderer_id,
-            survey_question_id=survey_question_id,
-            reason=dispute_reason,
+            survey_question_id=reason_question_id,
+            reason=detail_reason,
         ))
         db.flush()
         EventBus.publish(DisputeRaisedByOrdererEvent(
@@ -494,6 +498,8 @@ class ProposalService:
         for proposal in expired:
             proposal.status = ProposalStatus.CANCELLED
             proposal.updated_at = current_time
+            # 마감 직전 입금 건이 새어나가지 않도록 자동취소도 대조 대기를 남긴다.
+            RefundService.create_review(db, proposal, RefundReason.PAYMENT_EXPIRED)
 
         db.flush()
         for proposal in expired:
