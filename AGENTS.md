@@ -51,6 +51,7 @@
 - `staging` → `main`은 squash merge로 반영한다 (staging의 개별 커밋들을 main에 커밋 1개로 합침).
 - `main` → `staging` 동기화는 `git merge`나 `git rebase`를 쓰지 않고, `staging`을 `main` 기준으로 그대로 맞춘다 (`git reset --hard main` 후 `--force-with-lease`로 push).
   - 이유: squash merge 직후에는 `main`과 `staging`의 파일 트리가 이미 동일하다. 이 상태에서 `merge`를 하면 내용은 같지만 계보가 다른 두 히스토리(staging의 개별 커밋들 vs main의 스쿼시 커밋)가 그래프에 중복으로 남는다. `rebase`도 병합 커밋을 평탄화해 개별 커밋을 재적용하는 과정에서 실제 충돌이 발생한다 (내용은 결국 같아도 도달 과정이 다르기 때문). 반면 reset은 이미 동일한 트리를 가리키도록 포인터만 옮기는 것이라 충돌이 없다.
+  - 이 동기화 push는 **Staging Deploy 워크플로를 돌리지 않는다.** `staging-deploy.yml`의 `check` job이 "push된 커밋이 이미 `main`에 있는가"를 보고 건너뛰기 때문이다 (동기화 push일 때만 참이 된다). 방금 프로덕션에 나간 것과 같은 내용을 스테이징에 다시 배포하지 않기 위해서다. Actions 목록에 `check`만 돌고 `build`/`deploy`가 skipped로 뜨면 정상이다. 같은 내용을 의도적으로 다시 배포해야 하면 `workflow_dispatch`(수동 실행)를 쓴다 — 수동 실행은 가드를 통과한다.
   - `staging`의 개별 커밋 히스토리는 이 과정에서 사라지고 `main`의 스쿼시 커밋만 남는다 (내용 손실은 없음, 다른 브랜치에서 이미 push된 `staging`을 pull 받은 협업자가 있다면 `git fetch && git reset --hard origin/staging`로 맞추도록 안내한다).
 
 ## 테스트 실행 규칙
