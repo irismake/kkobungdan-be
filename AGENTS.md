@@ -46,6 +46,13 @@
 - 현재 모델 기준 baseline 이후에 컬럼/인덱스를 추가하는 migration은 이미 존재할 때 실패하지 않도록 작성한다.
 - 기존 DB의 `alembic_version` 테이블은 자동 변경하지 않는다.
 
+## 브랜치 동기화 규칙
+
+- `staging` → `main`은 squash merge로 반영한다 (staging의 개별 커밋들을 main에 커밋 1개로 합침).
+- `main` → `staging` 동기화는 `git merge`나 `git rebase`를 쓰지 않고, `staging`을 `main` 기준으로 그대로 맞춘다 (`git reset --hard main` 후 `--force-with-lease`로 push).
+  - 이유: squash merge 직후에는 `main`과 `staging`의 파일 트리가 이미 동일하다. 이 상태에서 `merge`를 하면 내용은 같지만 계보가 다른 두 히스토리(staging의 개별 커밋들 vs main의 스쿼시 커밋)가 그래프에 중복으로 남는다. `rebase`도 병합 커밋을 평탄화해 개별 커밋을 재적용하는 과정에서 실제 충돌이 발생한다 (내용은 결국 같아도 도달 과정이 다르기 때문). 반면 reset은 이미 동일한 트리를 가리키도록 포인터만 옮기는 것이라 충돌이 없다.
+  - `staging`의 개별 커밋 히스토리는 이 과정에서 사라지고 `main`의 스쿼시 커밋만 남는다 (내용 손실은 없음, 다른 브랜치에서 이미 push된 `staging`을 pull 받은 협업자가 있다면 `git fetch && git reset --hard origin/staging`로 맞추도록 안내한다).
+
 ## 테스트 실행 규칙
 
 - 통합 테스트를 실행할 때는 `docker-compose.test.yml`의 `mysql-test` 서비스를 사용한다.

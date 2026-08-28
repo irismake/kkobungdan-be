@@ -103,17 +103,46 @@
 | 409 | `PROPOSAL_NOT_UPDATABLE` | 업데이트할 수 없는 요청 상태입니다. | |
 | 409 | `PROPOSAL_REPORT_NOT_REVIEWABLE` | 이미 처리된 신고입니다. | |
 | 409 | `SETTLEMENT_ACCOUNT_REQUIRED` | 요청 또는 지원을 등록하려면 정산 계좌를 먼저 등록해야 합니다. | 요청·지원 등록 전 계좌 필요 |
-| 409 | `USER_WITHDRAWAL_BLOCKED` | 진행 중인 임무, 분쟁 또는 정산이 있어 탈퇴할 수 없습니다. 모든 절차가 완료된 후 다시 이용해주세요. | |
+| 409 | `USER_WITHDRAWAL_BLOCKED` | 진행 중인 요청이나 지원, 완료되지 않은 환불 또는 정산이 있어 탈퇴할 수 없습니다. 모든 절차가 완료된 후 다시 이용해주세요. | 사유를 특정하지 못했을 때의 기본값 |
+| 409 | `USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT` | 입금 확인 중인 요청이 있어 탈퇴할 수 없습니다. 확인이 끝난 후 다시 이용해주세요. | |
+| 409 | `USER_WITHDRAWAL_BLOCKED_PROPOSAL` | 진행 중인 요청이 있어 탈퇴할 수 없습니다. 요청이 모두 종료된 후 다시 이용해주세요. | |
+| 409 | `USER_WITHDRAWAL_BLOCKED_OFFER` | 진행 중인 지원이 있어 탈퇴할 수 없습니다. 지원이 모두 종료된 후 다시 이용해주세요. | |
+| 409 | `USER_WITHDRAWAL_BLOCKED_REFUND` | 환불 처리가 끝나지 않아 탈퇴할 수 없습니다. 환불이 완료된 후 다시 이용해주세요. | |
+| 409 | `USER_WITHDRAWAL_BLOCKED_PAYOUT` | 수행비 지급이 끝나지 않아 탈퇴할 수 없습니다. 지급이 완료된 후 다시 이용해주세요. | |
 | 429 | `PHONE_VERIFICATION_SEND_RATE_LIMITED` | 인증번호 요청이 너무 많습니다. 잠시 후 다시 시도해주세요. | |
+| 429 | `ADMIN_LOGIN_LOCKED` | 로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요. | 관리자 웹 전용. 연속 실패 5회에서 10분 잠금 |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류가 발생했습니다. | |
 | 500 | `SMS_SENDER_NOT_CONFIGURED` | SMS 발신 설정이 완료되지 않았습니다. | |
 
-내부 enum은 50개지만 실제로 나가는 wire code는 **44개**다. 인증 실패 5종, 사용자 부재 2종,
+내부 enum은 57개지만 실제로 나가는 wire code는 **51개**다. 인증 실패 5종, 사용자 부재 2종,
 검증 실패 2종이 각각 하나의 코드로 합쳐지기 때문이며, 클라이언트는 enum 이름이 아니라 위 표의 code 기준으로 매핑한다.
+
+## 탈퇴 차단 사유
+
+`DELETE /v1/user`는 탈퇴가 막힌 이유마다 다른 코드를 낸다. 전부 409이고 `message`는 그대로
+토스트에 쓸 수 있다. 안내 화면이나 이동 경로를 사유별로 다르게 하려면 `code`로 분기한다.
+
+| code | 언제 |
+|---|---|
+| `USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT` | 입금 확인 대기(`HOLDING`) 요청이 있을 때 |
+| `USER_WITHDRAWAL_BLOCKED_PROPOSAL` | 그 밖의 종결되지 않은 요청이 있을 때 |
+| `USER_WITHDRAWAL_BLOCKED_OFFER` | 종결되지 않은 지원이 있을 때 |
+| `USER_WITHDRAWAL_BLOCKED_REFUND` | 환불이 대조 대기 또는 이체 대기일 때(`REFUND_PENDING` 요청 포함) |
+| `USER_WITHDRAWAL_BLOCKED_PAYOUT` | 수행비 지급이 남아 있을 때 |
+| `USER_WITHDRAWAL_BLOCKED` | 사유를 특정하지 못했을 때의 기본값 |
+
+차단 조건이 여러 개면 요청 → 지원 → 환불 → 수행비 순으로 먼저 걸린 하나만 나간다.
+
+사유 없는 `USER_WITHDRAWAL_BLOCKED`는 안전망이다. 탈퇴 차단은 종결 상태 화이트리스트로
+판정하므로 새 상태는 전용 코드가 붙기 전에도 차단되며, 그 구간을 이 코드가 메운다.
+그래서 **클라이언트는 모르는 `USER_WITHDRAWAL_BLOCKED*` 코드를 만나면 `message`를 그대로
+보여주는 기본 처리로 떨어져야 한다.** 판정 규칙은
+[`../domains/user-auth/withdrawal-policy.md`](../domains/user-auth/withdrawal-policy.md)에 있다.
+
 
 ## Swagger(`/docs`)와의 관계
 
-44개 코드 중 42개는 각 엔드포인트의 실패 응답 예시로 `openapi.json`에 들어 있다.
+50개 코드 중 48개는 각 엔드포인트의 실패 응답 예시로 `openapi.json`에 들어 있다.
 `NOT_FOUND`·`METHOD_NOT_ALLOWED`는 매칭되는 엔드포인트가 없을 때만 발생해 특정 오퍼레이션에 속할 수 없으므로,
 개별 API 문서 대신 API 설명(`info.description`) 상단에 문서화한다.
 
@@ -136,7 +165,7 @@
 
 ## `HTTP_ERROR` — 42번째 값
 
-`error.code`의 스키마 열거형(`ErrorCode`)은 위 표의 44개에 `HTTP_ERROR` 하나를 더해 45개다.
+`error.code`의 스키마 열거형(`ErrorCode`)은 위 표의 50개에 `HTTP_ERROR` 하나를 더해 51개다.
 
 `HTTP_ERROR`는 카탈로그를 거치지 않은 `HTTPException`이 봉투를 탈 때만 나가는 방어용 값이다.
 HTTP 상태는 원래 예외의 것을 그대로 유지하고, 메시지는 `요청을 처리할 수 없습니다.`로 고정된다.

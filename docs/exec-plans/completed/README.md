@@ -28,3 +28,5 @@
 - [`2026-08-26-reason-detail-policy.md`](./2026-08-26-reason-detail-policy.md): 분쟁·신고·탈퇴의 사유 선택을 필수로, 상세 사유는 `기타`에서만 필수로 통일
 - [`2026-08-26-seed-dispute-survey-questions.md`](./2026-08-26-seed-dispute-survey-questions.md): 분쟁 사유 문항을 신고·탈퇴처럼 마이그레이션으로 시드하고 `requires_detail`을 코드 정본으로 고정
 - [`2026-08-26-replace-mysql-enums-with-varchar.md`](./2026-08-26-replace-mysql-enums-with-varchar.md): MySQL native ENUM 컬럼 6개를 VARCHAR로 전환하고, 열거형 컬럼 11개를 non-native Enum 매핑 + 이름 붙인 `CHECK` 제약으로 통일
+- [`2026-08-27-withdrawal-open-obligation-rule.md`](./2026-08-27-withdrawal-open-obligation-rule.md): 탈퇴 차단 조건을 종결 상태 화이트리스트 기반 미결 판정 하나로 통일하고 `HOLDING` 자동 취소 제거
+- [`2026-08-27-fcm-token-dedup.md`](./2026-08-27-fcm-token-dedup.md): 여러 계정이 같은 FCM 토큰을 공유해 알림이 엉뚱한 기기로 가는 문제 정리 — 로그인 시 dedupe, 로그아웃 시 토큰 삭제, `fcm_token_hash` unique 제약 추가

@@ -28,6 +28,9 @@ services:
       FCM_CREDENTIALS_JSON: ${STAGING_FCM_CREDENTIALS_JSON:-}
       ADMIN_USERNAME: ${STAGING_ADMIN_USERNAME:-}
       ADMIN_INITIAL_PASSWORD: ${STAGING_ADMIN_INITIAL_PASSWORD:-}
+      ADMIN_ALERT_SLACK_WEBHOOK_URL: ${STAGING_ADMIN_ALERT_SLACK_WEBHOOK_URL:-}
+      ADMIN_WEB_BASE_URL: ${STAGING_ADMIN_WEB_BASE_URL:-}
+      CORS_ALLOW_ORIGINS: ${STAGING_CORS_ALLOW_ORIGINS:?STAGING_CORS_ALLOW_ORIGINS is required}
     volumes:
       - /home/ubuntu/orderrun/keys:/app/keys:ro
       - /home/ubuntu/orderrun/logs/staging/app:/app/logs
@@ -76,6 +79,9 @@ services:
       FCM_CREDENTIALS_JSON: ${PROD_FCM_CREDENTIALS_JSON:-}
       ADMIN_USERNAME: ${PROD_ADMIN_USERNAME:-}
       ADMIN_INITIAL_PASSWORD: ${PROD_ADMIN_INITIAL_PASSWORD:-}
+      ADMIN_ALERT_SLACK_WEBHOOK_URL: ${PROD_ADMIN_ALERT_SLACK_WEBHOOK_URL:-}
+      ADMIN_WEB_BASE_URL: ${PROD_ADMIN_WEB_BASE_URL:-}
+      CORS_ALLOW_ORIGINS: ${PROD_CORS_ALLOW_ORIGINS:?PROD_CORS_ALLOW_ORIGINS is required}
     volumes:
       - /home/ubuntu/orderrun/keys:/app/keys:ro
       - /home/ubuntu/orderrun/logs/prod/app:/app/logs
@@ -108,7 +114,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ${NGINX_TEMPLATE:-./nginx/templates/ec2-http.conf.template}:/etc/nginx/templates/default.conf.template:ro
+      - ${NGINX_TEMPLATE:-./nginx/templates/ec2-https.conf.template}:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
       - certbot_www:/var/www/certbot
       - letsencrypt:/etc/letsencrypt:ro
       - /home/ubuntu/orderrun/logs/nginx:/var/log/nginx

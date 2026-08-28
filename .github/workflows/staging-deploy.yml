@@ -51,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment: staging
+    # 마이그레이션이 락에 걸려도 러너가 몇 시간씩 매달리지 않게 한다.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -62,6 +64,15 @@ jobs:
           echo "${{ secrets.STG_EC2_SSH_KEY }}" | base64 -d > ~/.ssh/staging.pem
           chmod 600 ~/.ssh/staging.pem
           ssh-keyscan -H "${{ secrets.STG_EC2_HOST }}" >> ~/.ssh/known_hosts
+
+          # 마이그레이션처럼 원격 명령이 오래 조용한 동안 세션이 broken pipe로 죽지 않게 한다.
+          # 끊기면 진짜 실패 사유가 로그에 안 남는다(2026-08-27 배포).
+          cat >> ~/.ssh/config << 'SSHCFG'
+          Host *
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          SSHCFG
+          chmod 600 ~/.ssh/config
 
       - name: Create deployment directory on EC2
         run: |
@@ -92,12 +103,24 @@ jobs:
 
             cd ~/orderrun
 
+            # NGINX_TEMPLATE을 덮어쓰지 않는다. 예전에는 HTTP 전용 템플릿을 하드코딩해서
+            # 디스크 설정과 실행 중인 nginx 설정이 어긋나 있었고, nginx가 재생성되는
+            # 순간 staging HTTPS가 사라지는 상태였다.
+            existing_nginx_template="$(grep -E '^NGINX_TEMPLATE=' .env.ec2 2>/dev/null | cut -d= -f2- || true)"
+            if [ -z "$existing_nginx_template" ]; then
+              existing_nginx_template=./nginx/templates/ec2-https.conf.template
+            fi
+
+            # staging API 문서용 basic auth 자격증명. 저장소에 두지 않는다.
+            printf '%s\n' '${{ secrets.DOCS_BASIC_AUTH_HTPASSWD }}' > nginx/htpasswd
+            chmod 600 nginx/htpasswd
+
             cat > .env.ec2 << 'ENVEOF'
           DOCKER_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
           EC2_PUBLIC_IP=${{ secrets.STG_EC2_HOST }}
           PROD_DOMAIN=api.kkobung-dan.store
           STAGING_DOMAIN=staging-api.kkobung-dan.store
-          NGINX_TEMPLATE=./nginx/templates/ec2-staging-http.conf.template
+          NGINX_TEMPLATE=__NGINX_TEMPLATE__
           SERVER_HOST=0.0.0.0
           SERVER_PORT=8000
           STAGING_APP_ENV=staging
@@ -117,6 +140,9 @@ jobs:
           STAGING_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
           STAGING_ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
           STAGING_ADMIN_INITIAL_PASSWORD=${{ secrets.ADMIN_INITIAL_PASSWORD }}
+          STAGING_CORS_ALLOW_ORIGINS=http://localhost:5173
+          STAGING_ADMIN_ALERT_SLACK_WEBHOOK_URL=${{ secrets.STG_ADMIN_ALERT_SLACK_WEBHOOK_URL }}
+          STAGING_ADMIN_WEB_BASE_URL=http://localhost:5173
           PROD_APP_ENV=production
           PROD_APP_DEBUG=false
           PROD_SECRET_KEY=prod-not-configured
@@ -132,8 +158,10 @@ jobs:
           PROD_AWS_SNS_SMS_SENDER_ID=Kkobongdan
           PROD_AWS_SNS_SMS_TYPE=Transactional
           PROD_FCM_CREDENTIALS_PATH=/app/keys/orderrun-firebase-key.json
+          PROD_CORS_ALLOW_ORIGINS=https://order-run-fe.vercel.app
           LETSENCRYPT_EMAIL=admin@example.com
           ENVEOF
+            sed -i.bak "s#__NGINX_TEMPLATE__#${existing_nginx_template}#" .env.ec2
 
             chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
 

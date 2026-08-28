@@ -69,6 +69,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.common import PageResponse
 from app.models.proposal_report import ProposalReportStatus
 from app.services.mission.mission_service import MissionService
+from app.services.admin_alert_outbox import queue_admin_alerts
 from app.services.notification_outbox import pop_pending_notification_ids
 from app.services.proposal.proposal_service import ProposalService
 from app.services.proposal.proposal_report_service import ProposalReportService
@@ -84,9 +85,11 @@ router = APIRouter(
 
 
 def _queue_created_notifications(background_tasks: BackgroundTasks, db: Session) -> None:
+    """이번 요청에서 쌓인 사용자 푸시와 관리자 운영 알림을 커밋 이후 발송하도록 예약한다."""
     notification_ids = pop_pending_notification_ids(db)
     if notification_ids:
         background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal, notification_ids)
+    queue_admin_alerts(background_tasks, db)
 
 
 @router.get(
@@ -254,9 +257,11 @@ def get_mission(mission_id: int, db: Session = Depends(get_db)) -> ApiResponse[M
 def resolve_mission(
     mission_id: int,
     request: MissionResolveRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> ApiResponse[MissionResponse]:
     mission = MissionService.resolve_dispute(db, mission_id=mission_id, resolution=request.resolution)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=mission, message="미션 분쟁이 해결되었습니다.")
 
 
@@ -455,15 +460,14 @@ def get_admin_dispute(dispute_id: int, db: Session = Depends(get_db)) -> ApiResp
 def resolve_admin_dispute(
     dispute_id: int,
     request: AdminDisputeResolveRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> ApiResponse[AdminDisputeDetailResponse]:
-    return ApiResponse(
-        success=True,
-        data=AdminCommandService.resolve_dispute(
-            db, dispute_id, request.outcome, request.admin_id, request.admin_note
-        ),
-        message="분쟁이 처리되었습니다.",
+    detail = AdminCommandService.resolve_dispute(
+        db, dispute_id, request.outcome, request.admin_id, request.admin_note
     )
+    _queue_created_notifications(background_tasks, db)
+    return ApiResponse(success=True, data=detail, message="분쟁이 처리되었습니다.")
 
 
 @router.get(

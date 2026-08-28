@@ -6,12 +6,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi import HTTPException
 
+from app.core.errors import ErrorCode
+from app.core.time import utcnow_naive
 from app.main import app
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.mission import MissionStatus
 from app.models.notification import Notification
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.refund import Refund, RefundReason, RefundStatus
 from app.models.settlement import SettlementAccount
 from app.models.terms import TermsAgreement
 from app.models.user import (
@@ -143,6 +146,28 @@ def test_signup_login_refresh_and_logout_flow(client, db, sms_sender):
     assert logout.status_code == 200
     assert logout.json()["message"] == "로그아웃 되었습니다."
     assert logout.json()["data"] is None
+    assert db.query(UserFCMToken).filter(UserFCMToken.user_id == user.id).first() is None
+
+
+def test_login_confirm_reassigns_fcm_token_registered_to_another_user(client, db, factory, sms_sender):
+    holder = factory.user(phone="01012340099", name="이전 로그인 유저")
+    db.add(UserFCMToken(user_id=holder.id, fcm_token="shared-device-token"))
+    db.commit()
+
+    signup_data = _signup(client, sms_sender)
+
+    login_send = client.post("/v1/auth/login/send", json={"phone": "010-1234-5678"})
+    login_code = _extract_code(sms_sender.sent_messages[-1]["message"])
+    login_confirm = client.post(
+        "/v1/auth/login/confirm",
+        json={"phone": "010-1234-5678", "code": login_code, "fcmToken": "shared-device-token"},
+    )
+    assert login_confirm.status_code == 200
+
+    # 같은 기기 토큰을 새로 로그인한 유저가 가져가고, 이전 유저의 row는 사라진다.
+    assert db.query(UserFCMToken).filter(UserFCMToken.user_id == holder.id).first() is None
+    new_holder = db.query(UserFCMToken).filter(UserFCMToken.fcm_token == "shared-device-token").one()
+    assert new_holder.user_id == signup_data["userId"]
 
 
 def test_signup_confirm_accepts_and_stores_fcm_token(client, db, sms_sender):
@@ -633,42 +658,44 @@ def test_withdraw_user_rejects_inactive_or_unknown_reason(client, db, factory):
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
-@pytest.mark.parametrize("proposal_status", [ProposalStatus.HOLDING])
-def test_withdraw_user_auto_cancels_pre_match_proposal_and_waiting_offers(db, factory, proposal_status):
+def test_withdraw_user_auto_cancels_only_waiting_offers(db, factory):
+    """돈이 오간 적 없는 대기 지원만 탈퇴와 함께 종결한다."""
     reason = seed_withdrawal_reasons(db)[0]
-    user = factory.user(phone="01012340005", name="요청사용자")
+    user = factory.user(phone="01012340005", name="지원사용자")
     db.add(UserFCMToken(user_id=user.id, fcm_token="kept-token"))
-    proposal = factory.proposal(orderer_id=user.id, status=proposal_status)
-    waiting_offer = factory.offer(proposal_id=proposal.id, runner_id=factory.user(phone="01012340008").id)
     own_waiting_offer = factory.offer(
         proposal_id=factory.proposal(orderer_id=factory.user(phone="01012340009").id).id,
         runner_id=user.id,
+    )
+    other_waiting_offer = factory.offer(
+        proposal_id=factory.proposal(orderer_id=factory.user(phone="01012340008").id).id,
+        runner_id=factory.user(phone="01012340010").id,
     )
     db.commit()
 
     UserWithdrawalService.withdraw_user(db, user, UserWithdrawalRequest(reasonQuestionId=reason.id))
 
-    db.refresh(proposal)
-    db.refresh(waiting_offer)
     db.refresh(own_waiting_offer)
+    db.refresh(other_waiting_offer)
     db.refresh(user)
-    assert proposal.status == ProposalStatus.CANCELLED
-    assert waiting_offer.status == OfferStatus.CANCELLED
     assert own_waiting_offer.status == OfferStatus.CANCELLED
+    assert other_waiting_offer.status == OfferStatus.WAITING
     assert user.deleted is True
 
 
 @pytest.mark.parametrize(
-    "proposal_status",
+    ("proposal_status", "expected_code"),
     [
-        ProposalStatus.POSTED,
-        ProposalStatus.OFFERED,
-        ProposalStatus.MATCHED,
-        ProposalStatus.ORDER_COMPLETED,
-        ProposalStatus.DISPUTED,
+        (ProposalStatus.HOLDING, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT),
+        (ProposalStatus.POSTED, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL),
+        (ProposalStatus.OFFERED, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL),
+        (ProposalStatus.MATCHED, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL),
+        (ProposalStatus.ORDER_COMPLETED, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL),
+        (ProposalStatus.DISPUTED, ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL),
+        (ProposalStatus.REFUND_PENDING, ErrorCode.USER_WITHDRAWAL_BLOCKED_REFUND),
     ],
 )
-def test_withdraw_user_blocks_when_user_has_active_proposal(db, factory, proposal_status):
+def test_withdraw_user_blocks_when_user_has_open_proposal(db, factory, proposal_status, expected_code):
     user = factory.user(phone="01012340006", name="오더사용자")
     proposal = factory.proposal(orderer_id=user.id, status=proposal_status)
 
@@ -676,7 +703,8 @@ def test_withdraw_user_blocks_when_user_has_active_proposal(db, factory, proposa
         UserWithdrawalService.withdraw_user(db, user)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
+    # 입금 확인 대기는 진행 중인 거래와 코드·문구가 갈린다.
+    assert exc_info.value.detail["code"] == expected_code
     db.refresh(user)
     db.refresh(proposal)
     assert user.deleted is False
@@ -688,7 +716,7 @@ def test_withdraw_user_blocks_when_user_has_active_proposal(db, factory, proposa
     "offer_status",
     [OfferStatus.ACCEPTED, OfferStatus.RUNNER_COMPLETED, OfferStatus.DISPUTED],
 )
-def test_withdraw_user_blocks_when_user_has_active_offer(db, factory, offer_status):
+def test_withdraw_user_blocks_when_user_has_open_offer(db, factory, offer_status):
     user = factory.user(phone="01012340006", name="러너사용자")
     orderer = factory.user(phone="01012340007", name="오더사용자")
     proposal = factory.proposal(orderer_id=orderer.id, status=ProposalStatus.CANCELLED)
@@ -698,7 +726,7 @@ def test_withdraw_user_blocks_when_user_has_active_offer(db, factory, offer_stat
         UserWithdrawalService.withdraw_user(db, user)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
+    assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_OFFER
     db.refresh(user)
     db.refresh(offer)
     assert user.deleted is False
@@ -717,7 +745,79 @@ def test_withdraw_user_blocks_while_refund_is_pending(db, factory):
         UserWithdrawalService.withdraw_user(db, orderer)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
+    assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_REFUND
+
+
+@pytest.mark.parametrize(
+    ("refund_status", "blocked"),
+    [
+        (RefundStatus.REVIEW, True),
+        (RefundStatus.PENDING, True),
+        (RefundStatus.VOIDED, False),
+        (RefundStatus.COMPLETED, False),
+    ],
+)
+def test_withdraw_user_blocks_until_refund_is_terminal(db, factory, refund_status, blocked):
+    """REVIEW는 입금 여부를 모르는 단계라 확정된 PENDING과 같이 계좌를 지킨다."""
+    reason = seed_withdrawal_reasons(db)[0]
+    orderer = factory.user(phone="01012340021", name="취소행님")
+    proposal = factory.proposal(orderer_id=orderer.id, status=ProposalStatus.CANCELLED)
+    factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=refund_status)
+
+    if blocked:
+        with pytest.raises(HTTPException) as exc_info:
+            UserWithdrawalService.withdraw_user(db, orderer, UserWithdrawalRequest(reasonQuestionId=reason.id))
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_REFUND
+        db.refresh(orderer)
+        assert orderer.deleted is False
+    else:
+        UserWithdrawalService.withdraw_user(db, orderer, UserWithdrawalRequest(reasonQuestionId=reason.id))
+        db.refresh(orderer)
+        assert orderer.deleted is True
+
+
+def test_withdraw_user_keeps_holding_proposal_when_blocked(db, factory):
+    """HOLDING은 차단 대상이므로 탈퇴 실패 시 요청이 취소되지 않는다."""
+    user = factory.user(phone="01012340022", name="입금대기행님")
+    proposal = factory.proposal(orderer_id=user.id, status=ProposalStatus.HOLDING)
+
+    with pytest.raises(HTTPException) as exc_info:
+        UserWithdrawalService.withdraw_user(db, user)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT
+    db.refresh(proposal)
+    assert proposal.status == ProposalStatus.HOLDING
+    assert db.query(Refund).filter(Refund.proposal_id == proposal.id).first() is None
+
+
+def test_withdraw_user_allows_runner_after_payout_is_rejected(db, factory):
+    """지급 반려된 COMPLETED 미션은 꼬붕 쪽 의무가 끝난 종결 상태다."""
+    reason = seed_withdrawal_reasons(db)[0]
+    orderer = factory.user(phone="01012340023", name="행님")
+    runner = factory.user(phone="01012340024", name="반려꼬붕")
+    proposal, offer = factory.execution(orderer, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
+    factory.mission(proposal, offer, MissionStatus.COMPLETED, settlement_rejected_at=utcnow_naive())
+
+    UserWithdrawalService.withdraw_user(db, runner, UserWithdrawalRequest(reasonQuestionId=reason.id))
+
+    db.refresh(runner)
+    assert runner.deleted is True
+
+
+def test_withdraw_user_allows_runner_when_mission_failed(db, factory):
+    """FAILED 미션은 수행비 지급 대상이 아니라 지급 시각이 비어 있어도 종결이다."""
+    reason = seed_withdrawal_reasons(db)[0]
+    orderer = factory.user(phone="01012340025", name="행님")
+    runner = factory.user(phone="01012340026", name="분쟁패배꼬붕")
+    proposal, offer = factory.execution(orderer, runner, ProposalStatus.REFUNDED, OfferStatus.CANCELLED)
+    factory.mission(proposal, offer, MissionStatus.FAILED)
+
+    UserWithdrawalService.withdraw_user(db, runner, UserWithdrawalRequest(reasonQuestionId=reason.id))
+
+    db.refresh(runner)
+    assert runner.deleted is True
 
 
 def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
@@ -730,15 +830,15 @@ def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
         UserWithdrawalService.withdraw_user(db, runner)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["code"] == "USER_WITHDRAWAL_BLOCKED"
+    assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_PAYOUT
 
 
 def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, factory, monkeypatch):
     reason = seed_withdrawal_reasons(db)[0]
-    user = factory.user(phone="01012340015", name="요청사용자")
+    user = factory.user(phone="01012340015", name="지원사용자")
     db.add(UserFCMToken(user_id=user.id, fcm_token="rollback-token"))
-    proposal = factory.proposal(orderer_id=user.id, status=ProposalStatus.OFFERED)
-    waiting_offer = factory.offer(proposal_id=proposal.id, runner_id=factory.user(phone="01012340016").id)
+    proposal = factory.proposal(orderer_id=factory.user(phone="01012340016").id, status=ProposalStatus.OFFERED)
+    waiting_offer = factory.offer(proposal_id=proposal.id, runner_id=user.id)
     db.commit()
 
     def fail_withdraw(self, withdrawn_at):
@@ -1062,3 +1162,7 @@ def test_model_spec_matches_user_auth_docs():
     assert str(UserFCMToken.__table__.c.user_id.type).upper() == "VARCHAR(36)"
     assert UserFCMToken.__table__.c.user_id.unique is True
     assert UserFCMToken.__table__.foreign_keys == set()
+    assert str(UserFCMToken.__table__.c.fcm_token_hash.type).upper() == "CHAR(64)"
+    assert {uc.name for uc in UserFCMToken.__table__.constraints if uc.name} == {
+        "uk_user_fcm_tokens_fcm_token_hash",
+    }

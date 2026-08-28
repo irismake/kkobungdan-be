@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CHAR, Column, Computed, DateTime, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -42,6 +42,9 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
     # 관리자 로그인 아이디. 관리자 행에만 값이 있다.
     admin_username = Column(String(50), nullable=True, unique=True)
+    # 관리자 로그인 실패 잠금. 관리자 계정이 하나뿐이라 계정 단위로 센다.
+    admin_login_failed_count = Column(Integer, nullable=False, default=0, server_default="0")
+    admin_locked_until = Column(DateTime(timezone=True), nullable=True)
     deleted = Column(Boolean, nullable=False, default=False, server_default="0")
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
@@ -53,6 +56,19 @@ class User(Base):
 
     def update_last_login_at(self, current_time: datetime) -> None:
         self.last_login_at = current_time
+
+    def is_admin_login_locked(self, current_time: datetime) -> bool:
+        return self.admin_locked_until is not None and self.admin_locked_until > current_time
+
+    def record_admin_login_failure(self, current_time: datetime, max_attempts: int, lock_duration: timedelta) -> None:
+        """실패를 한 번 세고, 한계에 도달하면 잠근다."""
+        self.admin_login_failed_count = (self.admin_login_failed_count or 0) + 1
+        if self.admin_login_failed_count >= max_attempts:
+            self.admin_locked_until = current_time + lock_duration
+
+    def reset_admin_login_failures(self) -> None:
+        self.admin_login_failed_count = 0
+        self.admin_locked_until = None
 
     def update_alarm_setting(self, alarm_enabled: bool) -> None:
         self.alarm_enabled = alarm_enabled
@@ -101,15 +117,30 @@ class AuthPhoneVerification(Base):
 
 
 class UserFCMToken(Base):
-    """Single FCM token record per user."""
+    """Single FCM token record per user.
+
+    `fcm_token`은 VARCHAR(4096)이라 그대로 유니크 인덱스를 걸 수 없다(utf8mb4 인덱스 길이
+    한도 초과). `fcm_token_hash`는 DB가 SHA2로 자동 계산하는 생성 컬럼으로, 여기에 유니크
+    인덱스를 걸어 같은 기기 토큰이 여러 유저에게 동시에 남는 것을 막는다. 애플리케이션
+    코드는 이 컬럼을 직접 읽거나 쓰지 않는다.
+    """
 
     __tablename__ = "user_fcm_tokens"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(String(36), nullable=False, unique=True, index=True)
     fcm_token = Column(String(4096), nullable=False)
+    fcm_token_hash = Column(
+        CHAR(64),
+        Computed("SHA2(fcm_token, 256)", persisted=True),
+        nullable=False,
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow_naive, onupdate=utcnow_naive)
+
+    __table_args__ = (
+        UniqueConstraint("fcm_token_hash", name="uk_user_fcm_tokens_fcm_token_hash"),
+    )
 
 
 class UserWithdrawalReasonQuestion(Base):

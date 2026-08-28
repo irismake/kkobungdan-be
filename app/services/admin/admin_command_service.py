@@ -17,6 +17,7 @@ from app.schemas.admin import (
     AdminRefundDetailResponse,
 )
 from app.services.admin.admin_query_service import AdminQueryService
+from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
 
 
@@ -138,6 +139,8 @@ class AdminCommandService:
             raise api_error(AppError.MISSION_NOT_FOUND, f"offerId: {offer.id}")
         if not mission.can_resolve():
             raise api_error(AppError.MISSION_NOT_RESOLVABLE, f"status: {mission.status}")
+
+        previous_mission_status = mission.status
         if outcome == MissionResolution.COMPLETED:
             offer.resolve_completed()
             proposal.resolve_completed()
@@ -158,6 +161,8 @@ class AdminCommandService:
         mission.resolved_by_admin_id = admin_id
 
         evidence.mark_resolved(admin_id, admin_note)
+
+        MissionService.publish_transition_alert(db, mission, proposal, previous_mission_status)
         db.commit()
         return AdminQueryService.get_dispute_detail(db, dispute_id)
 

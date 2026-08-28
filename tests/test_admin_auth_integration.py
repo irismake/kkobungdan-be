@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from app.core.config import settings
 from app.core.password import hash_password, verify_password
+from app.core.time import utcnow_naive
 from app.models.proposal import ProposalStatus
 from app.models.user import User
-from app.services.admin.admin_auth_service import AdminAuthService
+from app.services.admin.admin_auth_service import ADMIN_LOGIN_MAX_ATTEMPTS, AdminAuthService
 
 
 ADMIN_PATHS = [
@@ -92,6 +95,74 @@ def test_login_rejects_unknown_username_with_same_error(client, admin_user):
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "ADMIN_CREDENTIALS_INVALID"
+
+
+def _fail_login(client, times: int) -> None:
+    for _ in range(times):
+        client.post("/v1/admin/auth/login", json={"username": "admin", "password": "wrong-password"})
+
+
+def test_login_locks_account_after_repeated_failures(client, admin_user):
+    _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS)
+
+    # 잠금 중에는 올바른 비밀번호도 거절한다. 그러지 않으면 잠금 응답만으로
+    # 비밀번호가 맞았는지 아닌지를 구분할 수 있게 된다.
+    response = client.post(
+        "/v1/admin/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "ADMIN_LOGIN_LOCKED"
+
+
+def test_login_allows_attempts_below_the_limit(client, admin_user):
+    _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS - 1)
+
+    response = client.post(
+        "/v1/admin/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+
+    assert response.status_code == 200
+
+
+def test_successful_login_resets_failure_count(client, db, admin_user):
+    _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS - 1)
+    client.post("/v1/admin/auth/login", json={"username": "admin", "password": "admin-password"})
+
+    db.refresh(admin_user)
+    assert admin_user.admin_login_failed_count == 0
+    assert admin_user.admin_locked_until is None
+
+
+def test_lock_expires_after_the_lock_duration(client, db, admin_user):
+    _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS)
+
+    admin_user.admin_locked_until = utcnow_naive() - timedelta(seconds=1)
+    db.commit()
+
+    response = client.post(
+        "/v1/admin/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+
+    assert response.status_code == 200
+
+
+def test_unknown_username_does_not_lock_the_admin(client, admin_user):
+    _fail_login_unknown = [
+        client.post("/v1/admin/auth/login", json={"username": "nobody", "password": "x"})
+        for _ in range(ADMIN_LOGIN_MAX_ATTEMPTS + 2)
+    ]
+    assert all(response.status_code == 401 for response in _fail_login_unknown)
+
+    response = client.post(
+        "/v1/admin/auth/login",
+        json={"username": "admin", "password": "admin-password"},
+    )
+
+    assert response.status_code == 200
 
 
 def test_login_rejects_non_admin_account(client, db, sample_user):

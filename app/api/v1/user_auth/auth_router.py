@@ -188,8 +188,9 @@ def refresh_token(
 )
 def logout(
     payload: AuthLogoutRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _ = payload
-    _ = current_user
+    UserAuthService.logout(db, str(current_user.id))
     return {"success": True, "data": None, "message": "로그아웃 되었습니다."}

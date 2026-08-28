@@ -5,6 +5,8 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, api_error
+from app.events.base import EventBus
+from app.events.mission_events import MissionCompletedEvent, MissionDisputedEvent
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.mission import Mission, MissionResolution, MissionStatus
 from app.models.offer import Offer, OfferStatus
@@ -70,11 +72,46 @@ class MissionService:
         if mission.is_terminal():
             return mission
 
+        previous_status = mission.status
         if offer.status == OfferStatus.DISPUTED or proposal.status == ProposalStatus.DISPUTED:
             mission.mark_disputed()
         elif offer.status == OfferStatus.ALL_COMPLETED and proposal.status == ProposalStatus.ALL_COMPLETED:
             mission.mark_completed()
+        MissionService.publish_transition_alert(db, mission, proposal, previous_status)
         return mission
+
+    @staticmethod
+    def publish_transition_alert(
+        db: Session,
+        mission: Mission,
+        proposal: Proposal,
+        previous_status: MissionStatus | str,
+    ) -> None:
+        """미션 상태가 실제로 바뀐 경우에만 관리자 알림 이벤트를 발행한다.
+
+        `mark_disputed`/`mark_completed`는 허용되지 않는 상태에서 조용히 아무것도 하지 않으므로
+        호출했다는 사실만으로는 전이 여부를 알 수 없다. 전후 상태를 비교하지 않으면 이미
+        분쟁중인 미션에 같은 알림이 반복해서 나간다.
+
+        관리자가 처리해야 진행되는 두 상태만 알린다. `FAILED`와 `PAID`는 관리자 본인의
+        조작 결과라 다시 알릴 이유가 없다.
+        """
+        if mission.status == previous_status:
+            return
+
+        payload = {
+            "mission_id": mission.id,
+            "proposal_id": mission.proposal_id,
+            "offer_id": mission.offer_id,
+            "proposal_title": proposal.title,
+            "errand_fee": mission.errand_fee,
+            "orderer_id": mission.orderer_id,
+            "runner_id": mission.runner_id,
+        }
+        if mission.status == MissionStatus.DISPUTED:
+            EventBus.publish(MissionDisputedEvent(**payload), db)
+        elif mission.status == MissionStatus.COMPLETED:
+            EventBus.publish(MissionCompletedEvent(**payload), db)
 
     @staticmethod
     def resolve_dispute(
@@ -104,6 +141,7 @@ class MissionService:
             .first()
         )
 
+        previous_status = mission.status
         if resolution == MissionResolution.COMPLETED:
             if offer.can_resolve():
                 offer.resolve_completed()
@@ -129,6 +167,7 @@ class MissionService:
         if evidence is not None and evidence.is_pending():
             evidence.mark_resolved(admin_id, None)
 
+        MissionService.publish_transition_alert(db, mission, proposal, previous_status)
         db.commit()
         db.refresh(mission)
         return MissionService._detail_response(db, mission)

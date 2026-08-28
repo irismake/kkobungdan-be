@@ -44,10 +44,21 @@ class UserProfileService:
 
     @staticmethod
     def upsert_fcm_token(db: Session, user_id: str, fcm_token: str) -> None:
-        """Upsert without committing so an orchestrating use case owns the transaction."""
-        token = db.query(UserFCMToken).filter(UserFCMToken.user_id == str(user_id)).first()
+        """Upsert without committing so an orchestrating use case owns the transaction.
+
+        같은 기기 토큰을 들고 있던 다른 유저의 row를 먼저 지운다. 그렇지 않으면 한 기기에서
+        계정을 바꿔가며 로그인할 때 토큰이 여러 유저에게 중복으로 남아, 알림이 엉뚱한 계정
+        앞으로 갔는데도 실제로는 다른 사람 기기에 도착하는 문제가 생긴다.
+        """
+        user_id = str(user_id)
+        db.query(UserFCMToken).filter(
+            UserFCMToken.fcm_token == fcm_token,
+            UserFCMToken.user_id != user_id,
+        ).delete(synchronize_session=False)
+
+        token = db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).first()
         if token is None:
-            db.add(UserFCMToken(user_id=str(user_id), fcm_token=fcm_token))
+            db.add(UserFCMToken(user_id=user_id, fcm_token=fcm_token))
         else:
             token.fcm_token = fcm_token
 

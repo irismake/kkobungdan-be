@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from app.core.config import Settings
 from app.core.logging import setup_logging
 from app.core.logging import settings as global_settings
-from app.main import _api_docs_enabled, _api_docs_path
+from app.main import (
+    DEFAULT_DEV_CORS_ORIGINS,
+    _api_docs_enabled,
+    _api_docs_path,
+    _cors_allow_origins,
+)
 
 
 def test_settings_load_without_oauth_or_email_values():
@@ -62,6 +69,80 @@ def test_api_docs_are_disabled_in_production(monkeypatch):
 
     assert _api_docs_enabled() is False
     assert _api_docs_path() is None
+
+
+def _settings(**overrides) -> Settings:
+    return Settings(
+        secret_key="test-secret",
+        db_username="test-user",
+        db_password="test-password",
+        db_name="test-db",
+        jwt_secret="test-jwt",
+        **overrides,
+    )
+
+
+def test_cors_allow_origin_list_splits_and_trims():
+    settings = _settings(cors_allow_origins="https://a.example , https://b.example,")
+
+    assert settings.cors_allow_origin_list == ["https://a.example", "https://b.example"]
+
+
+def test_cors_allow_origin_list_is_empty_when_unset():
+    assert _settings().cors_allow_origin_list == []
+
+
+def test_cors_origins_use_configured_values(monkeypatch):
+    monkeypatch.setattr("app.main.settings.cors_allow_origins", "https://order-run-fe.vercel.app")
+
+    assert _cors_allow_origins() == ["https://order-run-fe.vercel.app"]
+
+
+def test_cors_origins_fall_back_to_localhost_in_development(monkeypatch):
+    monkeypatch.setattr("app.main.settings.cors_allow_origins", "")
+    monkeypatch.setattr("app.main.settings.app_env", "development")
+
+    assert _cors_allow_origins() == DEFAULT_DEV_CORS_ORIGINS
+
+
+def test_cors_origins_required_outside_development(monkeypatch):
+    monkeypatch.setattr("app.main.settings.cors_allow_origins", "")
+    monkeypatch.setattr("app.main.settings.app_env", "staging")
+
+    with pytest.raises(RuntimeError, match="CORS_ALLOW_ORIGINS"):
+        _cors_allow_origins()
+
+
+def test_cors_origins_reject_wildcard(monkeypatch):
+    """와일드카드 + allow_credentials는 Starlette이 요청 Origin을 그대로 반사하게 만든다."""
+    monkeypatch.setattr("app.main.settings.cors_allow_origins", "*")
+
+    with pytest.raises(RuntimeError, match="와일드카드"):
+        _cors_allow_origins()
+
+
+def test_cors_rejects_unlisted_origin(client, monkeypatch):
+    response = client.options(
+        "/v1/health",
+        headers={
+            "Origin": "http://evil.test",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert "access-control-allow-origin" not in {key.lower() for key in response.headers}
+
+
+def test_cors_allows_listed_origin(client):
+    response = client.options(
+        "/v1/health",
+        headers={
+            "Origin": DEFAULT_DEV_CORS_ORIGINS[0],
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.headers["access-control-allow-origin"] == DEFAULT_DEV_CORS_ORIGINS[0]
 
 
 def test_setup_logging_writes_daily_file_when_enabled(tmp_path, monkeypatch):

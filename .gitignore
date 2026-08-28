@@ -218,3 +218,6 @@ test.db
 keys/
 secrets/
 *.db
+
+# nginx basic auth 자격증명. 배포 시 GitHub Secret에서 생성한다.
+nginx/htpasswd

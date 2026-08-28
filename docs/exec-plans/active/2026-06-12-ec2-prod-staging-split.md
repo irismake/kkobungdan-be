@@ -1,5 +1,11 @@
 # EC2 prod/staging 분리
 
+> **2026-08-27 일부 결정 철회**: "IP 직접 접근(`http://43.200.56.9`)은 staging HTTP로
+> 유지한다"는 결정을 철회했다. 관리자 자격증명과 토큰이 평문으로 흐르는 경로였다. 이제 80번
+> 포트는 API를 서빙하지 않고 `https://staging-api.kkobung-dan.store`로 308 리다이렉트한다
+> (`/.well-known/acme-challenge/`는 인증서 갱신을 위해 유지). 아래 본문의 IP HTTP 관련
+> 서술은 이 시점부터 유효하지 않다. `2026-08-27-api-security-hardening.md` 참고.
+
 ## 목표
 
 같은 EC2에서 staging 접근은 `http://43.200.56.9`로 유지하고, `api.kkobung-dan.store`는 production, `staging-api.kkobung-dan.store`는 staging으로 분리한다. DNS는 `43.200.56.9`로 연결되었고, SSL은 Let's Encrypt HTTP-01 webroot 방식으로 적용한다.

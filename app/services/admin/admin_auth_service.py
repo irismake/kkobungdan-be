@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,11 @@ from app.schemas.user import AuthTokenResponse
 
 
 logger = logging.getLogger(__name__)
+
+#: 연속 실패 이 횟수에 도달하면 잠근다.
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+#: 잠금 유지 시간. 짧게 잡아 정상 관리자가 오래 막히지 않게 한다.
+ADMIN_LOGIN_LOCK_DURATION = timedelta(minutes=10)
 
 
 class AdminAuthService:
@@ -66,7 +72,12 @@ class AdminAuthService:
         """아이디와 비밀번호로 관리자 토큰을 발급한다.
 
         아이디가 없는 경우와 비밀번호가 틀린 경우를 같은 오류로 응답해 계정 존재 여부를 흘리지 않는다.
+
+        연속 실패가 쌓이면 계정을 잠근다. 관리자 계정이 하나뿐이라 표적이 명확하고 공개
+        인터넷에서 무제한으로 비밀번호를 시도할 수 있기 때문이다. Redis가 없어 IP 단위
+        제한은 못 하므로 계정 단위로 센다.
         """
+        now = utcnow_naive()
         admin = (
             db.query(User)
             .filter(
@@ -76,10 +87,20 @@ class AdminAuthService:
             )
             .first()
         )
+
+        # 잠금 중이면 비밀번호가 맞아도 거절한다. 맞는 비밀번호로 잠금이 풀리면
+        # 공격자가 정답을 찾았는지 여부를 잠금 응답으로 구분할 수 있게 된다.
+        if admin is not None and admin.is_admin_login_locked(now):
+            raise api_error(AppError.ADMIN_LOGIN_LOCKED)
+
         if admin is None or not verify_password(password, admin.password_hash):
+            if admin is not None:
+                admin.record_admin_login_failure(now, ADMIN_LOGIN_MAX_ATTEMPTS, ADMIN_LOGIN_LOCK_DURATION)
+                db.commit()
             raise api_error(AppError.ADMIN_CREDENTIALS_INVALID)
 
-        admin.update_last_login_at(utcnow_naive())
+        admin.reset_admin_login_failures()
+        admin.update_last_login_at(now)
         db.commit()
 
         return AuthTokenResponse(
@@ -90,4 +111,4 @@ class AdminAuthService:
         )
 
 
-__all__ = ["AdminAuthService"]
+__all__ = ["ADMIN_LOGIN_LOCK_DURATION", "ADMIN_LOGIN_MAX_ATTEMPTS", "AdminAuthService"]

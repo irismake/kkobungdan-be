@@ -42,5 +42,8 @@
 - Schema Validation: Pydantic 2.x
 - Runtime: Docker Compose on EC2
 - Edge Proxy: Nginx
-- Staging URL: `http://43.200.56.9`, `http://staging-api.kkobung-dan.store`
-- Production URL: `http://api.kkobung-dan.store`, `https://api.kkobung-dan.store`
+- Staging URL: `https://staging-api.kkobung-dan.store`
+- Production URL: `https://api.kkobung-dan.store`
+
+평문 HTTP와 IP 직접 접근(`http://43.200.56.9`)은 API를 서빙하지 않고 HTTPS로 리다이렉트된다.
+IP에는 인증서를 발급할 수 없으므로 클라이언트는 반드시 도메인을 쓴다.

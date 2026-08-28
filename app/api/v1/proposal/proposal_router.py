@@ -34,6 +34,7 @@ from app.schemas.proposal import (
 )
 from app.schemas.dispute_evidence import DisputeRequest
 from app.schemas.proposal_report import ProposalReportCreateRequest, ProposalReportResponse
+from app.services.admin_alert_outbox import queue_admin_alerts
 from app.services.notification_outbox import pop_pending_notification_ids
 from app.services.proposal.proposal_service import ProposalService
 from app.services.proposal.proposal_report_service import ProposalReportService
@@ -43,9 +44,11 @@ router = APIRouter(prefix="/proposal", tags=["요청"])
 
 
 def _queue_created_notifications(background_tasks: BackgroundTasks, db: Session) -> None:
+    """이번 요청에서 쌓인 사용자 푸시와 관리자 운영 알림을 커밋 이후 발송하도록 예약한다."""
     notification_ids = pop_pending_notification_ids(db)
     if notification_ids:
         background_tasks.add_task(get_notification_worker().flush_pending, SessionLocal, notification_ids)
+    queue_admin_alerts(background_tasks, db)
 
 
 class ProposalSearchRequest:

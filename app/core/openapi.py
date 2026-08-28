@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
-from app.core.errors import AppError, ERRORS
+from app.core.errors import WITHDRAWAL_BLOCKED_ERRORS, AppError, ERRORS
 from app.schemas.common import ErrorResponse
 
 
@@ -108,17 +108,26 @@ def error_response_example(error: AppError, details: str | None = None) -> dict[
     }
 
 
+# 한 wire code에 문구가 여러 개인 에러는 대표 AppError 하나만 라우터에 적고 여기서 펼친다.
+_ERROR_VARIANTS: dict[AppError, tuple[AppError, ...]] = {
+    AppError.INVALID_TOKEN: (
+        AppError.MISSING_CREDENTIALS,
+        AppError.INVALID_TOKEN_CREDENTIALS,
+        AppError.INVALID_TOKEN_TYPE,
+        AppError.INVALID_AUTHENTICATION_CREDENTIALS,
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED: WITHDRAWAL_BLOCKED_ERRORS,
+}
+
+
 def error_responses(*errors: AppError) -> dict[int | str, dict[str, Any]]:
     expanded_errors = list(errors)
-    if AppError.INVALID_TOKEN in expanded_errors:
-        for auth_error in (
-            AppError.MISSING_CREDENTIALS,
-            AppError.INVALID_TOKEN_CREDENTIALS,
-            AppError.INVALID_TOKEN_TYPE,
-            AppError.INVALID_AUTHENTICATION_CREDENTIALS,
-        ):
-            if auth_error not in expanded_errors:
-                expanded_errors.append(auth_error)
+    for umbrella, variants in _ERROR_VARIANTS.items():
+        if umbrella not in expanded_errors:
+            continue
+        for variant in variants:
+            if variant not in expanded_errors:
+                expanded_errors.append(variant)
 
     grouped: dict[int, list[AppError]] = defaultdict(list)
     for error in expanded_errors:

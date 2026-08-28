@@ -21,6 +21,22 @@
 - 민감 상태 변경에 대한 추적 가능성
 - 공개 데모 인증은 전용 전화번호와 용도에만 한정하고 일반 사용자 번호나 환경 전체 우회로 확장하지 않는다.
 
+## 전송 구간과 브라우저 통제
+
+- **CORS Origin은 화이트리스트로만 허용한다.** `CORS_ALLOW_ORIGINS` 환경변수에 명시한
+  Origin만 받는다. 와일드카드(`*`)는 코드에서 거부한다 — `allow_credentials=True`와 함께
+  쓰면 Starlette이 요청 Origin을 그대로 반사해 아무 도메인이나 자격증명을 실어 보낼 수 있다.
+  값이 없으면 development 외 환경에서는 기동에 실패한다
+- **API는 HTTPS로만 서빙한다.** 80번 포트와 IP 직접 접근은 HTTPS 도메인으로 308
+  리다이렉트한다. IP에는 인증서를 발급할 수 없으므로 클라이언트는 도메인을 쓴다.
+  `/.well-known/acme-challenge/`만 예외로 열어 둔다 (인증서 갱신 경로)
+- **응답 보안 헤더**는 nginx 443 블록에서 붙인다: `Strict-Transport-Security`(HTTPS만),
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`
+- **staging API 문서**(`/docs`, `/redoc`, `/openapi.json`)는 nginx basic auth 뒤에 둔다.
+  프로덕션은 앱이 404를 반환한다
+- **관리자 로그인은 연속 실패 5회에서 10분 잠근다.** 관리자 계정이 하나뿐이라 표적이 명확하다.
+  잠금 중에는 올바른 비밀번호도 거절해, 잠금 응답으로 비밀번호 정오답을 구분할 수 없게 한다
+
 ## 갱신 트리거
 
 아래 변화가 생기면 이 문서를 함께 갱신한다.
@@ -29,3 +45,4 @@
 - 결제 흐름
 - 관리자 기능
 - 개인정보 수집 또는 보관 정책
+- 허용 Origin 목록, nginx 라우팅, 응답 보안 헤더

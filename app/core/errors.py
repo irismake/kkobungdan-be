@@ -12,6 +12,7 @@ class ErrorCode(str, Enum):
     """클라이언트에 실제로 나가는 wire code. `error.code`의 유일한 값 집합이다."""
 
     ADMIN_CREDENTIALS_INVALID = "ADMIN_CREDENTIALS_INVALID"
+    ADMIN_LOGIN_LOCKED = "ADMIN_LOGIN_LOCKED"
     DISPUTE_ALREADY_REVIEWED = "DISPUTE_ALREADY_REVIEWED"
     DISPUTE_EVIDENCE_NOT_FOUND = "DISPUTE_EVIDENCE_NOT_FOUND"
     DUPLICATE_OFFER = "DUPLICATE_OFFER"
@@ -55,6 +56,11 @@ class ErrorCode(str, Enum):
     SMS_SENDER_NOT_CONFIGURED = "SMS_SENDER_NOT_CONFIGURED"
     USER_NOT_FOUND = "USER_NOT_FOUND"
     USER_WITHDRAWAL_BLOCKED = "USER_WITHDRAWAL_BLOCKED"
+    USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT = "USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT"
+    USER_WITHDRAWAL_BLOCKED_PROPOSAL = "USER_WITHDRAWAL_BLOCKED_PROPOSAL"
+    USER_WITHDRAWAL_BLOCKED_OFFER = "USER_WITHDRAWAL_BLOCKED_OFFER"
+    USER_WITHDRAWAL_BLOCKED_REFUND = "USER_WITHDRAWAL_BLOCKED_REFUND"
+    USER_WITHDRAWAL_BLOCKED_PAYOUT = "USER_WITHDRAWAL_BLOCKED_PAYOUT"
     VALIDATION_ERROR = "VALIDATION_ERROR"
 
     # 카탈로그에 없는 HTTP 오류가 봉투를 탈 때 쓰는 방어용 값.
@@ -74,7 +80,13 @@ class AppError(str, Enum):
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
 
     USER_NOT_FOUND = "USER_NOT_FOUND"
+    # 차단 사유마다 코드를 나눈다. 앱은 code로 분기하고 message를 토스트로 그대로 쓴다.
     USER_WITHDRAWAL_BLOCKED = "USER_WITHDRAWAL_BLOCKED"
+    USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT = "USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT"
+    USER_WITHDRAWAL_BLOCKED_PROPOSAL = "USER_WITHDRAWAL_BLOCKED_PROPOSAL"
+    USER_WITHDRAWAL_BLOCKED_OFFER = "USER_WITHDRAWAL_BLOCKED_OFFER"
+    USER_WITHDRAWAL_BLOCKED_REFUND = "USER_WITHDRAWAL_BLOCKED_REFUND"
+    USER_WITHDRAWAL_BLOCKED_PAYOUT = "USER_WITHDRAWAL_BLOCKED_PAYOUT"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     REQUIRED_TERMS_INVALID = "REQUIRED_TERMS_INVALID"
 
@@ -120,6 +132,7 @@ class AppError(str, Enum):
     DISPUTE_EVIDENCE_NOT_FOUND = "DISPUTE_EVIDENCE_NOT_FOUND"
     DISPUTE_ALREADY_REVIEWED = "DISPUTE_ALREADY_REVIEWED"
     ADMIN_CREDENTIALS_INVALID = "ADMIN_CREDENTIALS_INVALID"
+    ADMIN_LOGIN_LOCKED = "ADMIN_LOGIN_LOCKED"
 
     MISSION_NOT_FOUND = "MISSION_NOT_FOUND"
     MISSION_NOT_RESOLVABLE = "MISSION_NOT_RESOLVABLE"
@@ -148,10 +161,37 @@ ERRORS: dict[AppError, ApiErrorSpec] = {
         "서버 내부 오류가 발생했습니다.",
     ),
     AppError.USER_NOT_FOUND: ApiErrorSpec(status.HTTP_404_NOT_FOUND, ErrorCode.USER_NOT_FOUND, "사용자를 찾을 수 없습니다."),
+    # 사유를 특정하지 못했을 때의 기본 문구. 종결 상태 화이트리스트 방식이라 새 상태는
+    # 문구가 붙기 전에도 차단되므로, 그 구간을 메우는 안전망으로 남겨 둔다.
     AppError.USER_WITHDRAWAL_BLOCKED: ApiErrorSpec(
         status.HTTP_409_CONFLICT,
         ErrorCode.USER_WITHDRAWAL_BLOCKED,
-        "진행 중인 임무, 분쟁 또는 정산이 있어 탈퇴할 수 없습니다. 모든 절차가 완료된 후 다시 이용해주세요.",
+        "진행 중인 요청이나 지원, 완료되지 않은 환불 또는 정산이 있어 탈퇴할 수 없습니다. 모든 절차가 완료된 후 다시 이용해주세요.",
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT,
+        "입금 확인 중인 요청이 있어 탈퇴할 수 없습니다. 확인이 끝난 후 다시 이용해주세요.",
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED_PROPOSAL: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.USER_WITHDRAWAL_BLOCKED_PROPOSAL,
+        "진행 중인 요청이 있어 탈퇴할 수 없습니다. 요청이 모두 종료된 후 다시 이용해주세요.",
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED_OFFER: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.USER_WITHDRAWAL_BLOCKED_OFFER,
+        "진행 중인 지원이 있어 탈퇴할 수 없습니다. 지원이 모두 종료된 후 다시 이용해주세요.",
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED_REFUND: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.USER_WITHDRAWAL_BLOCKED_REFUND,
+        "환불 처리가 끝나지 않아 탈퇴할 수 없습니다. 환불이 완료된 후 다시 이용해주세요.",
+    ),
+    AppError.USER_WITHDRAWAL_BLOCKED_PAYOUT: ApiErrorSpec(
+        status.HTTP_409_CONFLICT,
+        ErrorCode.USER_WITHDRAWAL_BLOCKED_PAYOUT,
+        "수행비 지급이 끝나지 않아 탈퇴할 수 없습니다. 지급이 완료된 후 다시 이용해주세요.",
     ),
     AppError.VALIDATION_ERROR: ApiErrorSpec(
         status.HTTP_400_BAD_REQUEST,
@@ -319,6 +359,12 @@ ERRORS: dict[AppError, ApiErrorSpec] = {
         ErrorCode.ADMIN_CREDENTIALS_INVALID,
         "아이디 또는 비밀번호가 올바르지 않습니다.",
     ),
+    # 남은 잠금 시간은 알려주지 않는다. 공격자에게 재시도 시점을 주지 않기 위해서다.
+    AppError.ADMIN_LOGIN_LOCKED: ApiErrorSpec(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        ErrorCode.ADMIN_LOGIN_LOCKED,
+        "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.",
+    ),
     AppError.DISPUTE_ALREADY_REVIEWED: ApiErrorSpec(
         status.HTTP_409_CONFLICT,
         ErrorCode.DISPUTE_ALREADY_REVIEWED,
@@ -360,6 +406,16 @@ ERRORS: dict[AppError, ApiErrorSpec] = {
         "알림을 찾을 수 없습니다.",
     ),
 }
+
+
+# 대표 코드 하나만 라우터에 적으면 OpenAPI가 아래 변형을 펼친다.
+WITHDRAWAL_BLOCKED_ERRORS: tuple[AppError, ...] = (
+    AppError.USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT,
+    AppError.USER_WITHDRAWAL_BLOCKED_PROPOSAL,
+    AppError.USER_WITHDRAWAL_BLOCKED_OFFER,
+    AppError.USER_WITHDRAWAL_BLOCKED_REFUND,
+    AppError.USER_WITHDRAWAL_BLOCKED_PAYOUT,
+)
 
 
 def error_detail(error: AppError, details: str | None = None) -> dict:

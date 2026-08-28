@@ -11,72 +11,91 @@
 - Proposal, Offer, DisputeEvidence 같은 거래 활동 기록은 삭제하지 않는다.
 - 탈퇴 사유 선택 이력은 개인정보 삭제와 별도로 `user_withdrawals`에 보존한다.
 
-## 탈퇴 불가 상태
+## 탈퇴 차단 판정
 
-이미 매칭되었거나 분쟁/완료 확인, 환불, 수행비 지급 흐름이 남아 있는 활동이 있으면 탈퇴할 수 없다.
-UI의 "진행 중인 임무"는 매칭 이후 수행, 완료 확인, 분쟁 단계의 Proposal/Offer와 미결 Mission을 의미한다.
+탈퇴는 환불·지급 계좌(`settlement_accounts`)와 전화번호를 하드 삭제한다. 따라서 차단 기준은
+"거래가 진행 중이냐"가 아니라 **"그 개인정보가 아직 필요하냐"** 이고, 그건 곧 사용자에게 걸린
+애그리거트가 종결되지 않았다는 뜻이다. 판정은 하나의 술어로 정의한다.
 
-Proposal 기준:
+```
+탈퇴 차단 = ∃ A ∈ {Proposal, Offer, Mission, Refund} where A가 미결
+A가 미결 ≡ A의 상태가 종결 집합에 없음
+```
 
-- `POSTED`
-- `OFFERED`
-- `MATCHED`
-- `ORDER_COMPLETED`
-- `DISPUTED`
+차단 상태를 열거하지 않고 **종결 상태를 열거하고 나머지를 전부 미결로 본다.** 상태가 새로
+추가될 때 기본값이 안전한 쪽(차단)으로 잡히게 하기 위해서다. 상태를 추가·변경하면 아래 종결
+집합을 함께 갱신한다.
 
-Offer 기준:
+| 애그리거트 | 기준 사용자 | 종결(탈퇴 허용) |
+|---|---|---|
+| Proposal | `orderer_id` | `ALL_COMPLETED` `REFUNDED` `CANCELLED` `REPORTED` |
+| Offer | `runner_id` | `ALL_COMPLETED` `REJECTED` `CANCELLED` (`WAITING`은 자동 취소) |
+| Mission | `runner_id` | `PAID` `FAILED`, 또는 `COMPLETED` + 수행비 지급 반려 |
+| Refund | `orderer_id` | `COMPLETED` `VOIDED` |
 
-- `ACCEPTED`
-- `RUNNER_COMPLETED`
-- `DISPUTED`
+미결이면 탈퇴 요청을 `USER_WITHDRAWAL_BLOCKED`로 차단한다. 상대방 거래 경험, 고객센터 대응,
+분쟁 처리, 정산 확인이 남을 수 있고, 무엇보다 환불·지급 계좌가 아직 필요하기 때문이다.
 
-이 상태는 상대방 거래 경험, 고객센터 대응, 분쟁 처리, 정산 확인이 남을 수 있으므로 탈퇴 요청을 `USER_WITHDRAWAL_BLOCKED`로 차단한다.
+### 애그리거트별 근거
 
-환불·수행비 지급 기준:
+**Proposal**: `HOLDING` `POSTED` `OFFERED` `MATCHED` `ORDER_COMPLETED` `DISPUTED`
+`REFUND_PENDING`이 미결이다. `HOLDING`은 입금 여부를 아직 모르는 상태이므로 차단한다
+(아래 참고).
 
-- 행님에게 `PENDING` Refund가 남아 있는 경우. 요청이 `REFUND_PENDING`으로 종결됐어도 실제
-  이체가 끝나지 않았으면 환불 계좌를 지울 수 없어 차단한다.
-- 꼬붕이 `COMPLETED` 미션의 수행비 지급 완료 또는 반려를 기다리는 경우.
+**Offer**: `ACCEPTED` `RUNNER_COMPLETED` `DISPUTED`가 미결이다. `WAITING`은 돈이 오간 적이
+없어 탈퇴와 함께 자동 취소한다.
 
-환불이 `COMPLETED`가 되면 요청은 `REFUNDED`가 되고 차단이 풀린다.
+**Mission**: 상태만으로 부족하다. `COMPLETED`는 수행비 지급 대기로 남아 있을 수 있어
+지급 시각·반려 시각까지 본다. 지급 완료는 `PAID`로 전이하므로 `COMPLETED`로 남아 종결인
+경우는 반려뿐이다. 행님 쪽 Mission은 따로 보지 않는다. `STARTED`/`DISPUTED`는 Proposal
+`MATCHED`/`ORDER_COMPLETED`/`DISPUTED`와 1:1이고, `FAILED` Mission의 행님 환불 의무는
+Refund가 들고 있어 두 축 모두 이미 차단된다.
+
+**Refund**: `REVIEW`와 `PENDING`이 미결이다. `PENDING`은 환불 의무가 확정됐는데 이체가 안
+끝난 상태고, `REVIEW`는 입금 여부를 모르는 상태다. 둘 다 계좌가 필요하므로 대우를 달리하지
+않는다. 대조 결과 입금이 없으면 `VOIDED`로 종결되어 차단이 풀린다.
+
+### 차단 사유별 코드
+
+차단 응답은 사유마다 코드를 나눈다. 사용자가 겪는 상황이 "입금 확인을 기다리는 중"과 "거래가
+진행 중"과 "돈을 받을 차례"로 갈리는데, 한 문구로는 무엇을 기다려야 하는지 알 수 없기 때문이다.
+앱은 `code`로 분기하고 `message`를 토스트로 그대로 쓴다.
+
+| 판정 | code |
+|---|---|
+| `HOLDING` Proposal | `USER_WITHDRAWAL_BLOCKED_PROPOSAL_DEPOSIT` |
+| `REFUND_PENDING` Proposal | `USER_WITHDRAWAL_BLOCKED_REFUND` |
+| 그 밖의 미결 Proposal | `USER_WITHDRAWAL_BLOCKED_PROPOSAL` |
+| 미결 Offer | `USER_WITHDRAWAL_BLOCKED_OFFER` |
+| 미결 Refund | `USER_WITHDRAWAL_BLOCKED_REFUND` |
+| 지급 대기 Mission | `USER_WITHDRAWAL_BLOCKED_PAYOUT` |
+
+`REFUND_PENDING`은 Proposal 검사에 먼저 걸리지만 사용자가 기다리는 것은 환불이므로 환불 코드로
+보낸다. 그 밖의 판정 순서는 Proposal → Offer → Refund → Mission이고, 먼저 걸린 사유 하나만
+나간다. 문구 정본은 `app/core/errors.py`이며 목록은
+[`error-codes.md`](../../api-spec/error-codes.md#탈퇴-차단-사유)에 있다.
+
+## `HOLDING`을 자동 취소하지 않는 이유
+
+`HOLDING` Proposal을 탈퇴와 함께 자동 취소하면 `REVIEW` Refund를 남긴 채 계좌와 전화번호를
+지우게 된다. 나중에 관리자가 대조해 입금이 확인되면 `REVIEW → PENDING`으로 환불 의무가
+확정되지만, 보낼 계좌도 연락할 번호도 없다. `PENDING` Refund를 차단하는 이유와 같은 사고가
+시점만 탈퇴 이후로 밀린 것이다.
+
+더구나 사용자가 `HOLDING`을 직접 취소해도 `CANCELLED` + `REVIEW`가 되어 똑같이 차단된다.
+자동 취소를 하든 안 하든 탈퇴 가능 여부는 같고, 차이는 사용자가 요청을 잃는다는 것뿐이다.
+이득 없는 파괴적 부수효과라 자동 취소 대상에서 제외한다.
+
+대신 `HOLDING` 사용자는 즉시 탈퇴할 수 없다. `created_at` 기준 24시간이 지나면 입금 마감
+자동 취소로 `CANCELLED` + `REVIEW`가 되고, 그 뒤 관리자 대조까지가 대기 구간이다. 입금하지
+않은 사용자에게는 불필요한 대기지만, **입금 여부를 알 수 없다는 것이 `HOLDING`의 정의**라
+코드로 구분할 방법이 없다. 운영자가 대조를 앞당겨 완화한다.
 
 ## 탈퇴 시 자동 취소 상태
 
-입금 확인 전인 매칭 전 활동은 탈퇴를 막지 않고 자동 취소한다. 입금 확인된 `POSTED`/`OFFERED`는
-환불 계좌가 필요하므로 탈퇴를 차단한다.
+돈이 개입된 적 없는 활동만 탈퇴 트랜잭션 안에서 종결시킨다. 현재 대상은 하나다.
 
-Proposal 기준:
-
-- `HOLDING`
-
-Offer 기준:
-
-- `WAITING`
-
-사용자가 작성한 Proposal이 자동 취소될 때 해당 Proposal에 연결된 대기 Offer도 `CANCELLED` 처리한다.
-
-`HOLDING` 자동 취소도 다른 취소 경로와 같이 대조 대기(`REVIEW`) 환불을 남긴다. 다만 탈퇴는
-개인정보를 하드 삭제하므로, 뒤늦게 입금이 확인되어도 이체할 계좌가 남지 않는다. 기록으로 추적만
-가능하고 지급 경로는 없다. `REVIEW`를 탈퇴 차단 조건에 넣을지는 정책 판단이 남아 있다.
-
-## 탈퇴 가능 상태
-
-모든 활동이 종료 상태라면 탈퇴를 허용한다.
-
-Proposal 기준:
-
-- `ALL_COMPLETED`
-- `REFUNDED`
-- `CANCELLED`
-- `REPORTED`
-
-Offer 기준:
-
-- `ALL_COMPLETED`
-- `REJECTED`
-- `CANCELLED`
-
-탈퇴가 허용되어도 사용자 row는 hard delete하지 않는다.
+- Offer `WAITING` — 러너의 대기 중인 지원. 입금과 무관하다.
 
 ## 즉시 정리 데이터
 
@@ -100,12 +119,6 @@ Offer 기준:
 - `offers`
 - `dispute_evidences`
 - `terms_agreements`
-
-## 정산/결제 미결 검증
-
-행님 환불은 `refunds.status`, 꼬붕 수행비 지급은 `missions`의 지급 시각과 반려 시각으로 미결
-상태를 판단한다. 환불 또는 수행비 지급이 완료·반려되기 전에는 `USER_WITHDRAWAL_BLOCKED`로 탈퇴를
-차단한다.
 
 ## 탈퇴 사유
 

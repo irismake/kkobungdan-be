@@ -90,6 +90,8 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `level` | `integer` | NO |  | 성공 완료한 러너 Offer 수 기반 레벨 |
 | `is_admin` | `boolean` | NO |  | 관리자 웹 전용 계정 여부. 앱 사용자는 항상 거짓 |
 | `admin_username` | `varchar(50)` | YES | UNIQUE `uk_users_admin_username` | 관리자 로그인 아이디. 관리자 행에만 값이 있다 |
+| `admin_login_failed_count` | `int` | NO |  | 관리자 로그인 연속 실패 횟수. 성공하면 0으로 되돌린다 |
+| `admin_locked_until` | `datetime` | YES |  | 관리자 로그인 잠금 해제 시각. 연속 실패 5회에서 10분 뒤로 설정된다 |
 | `deleted` | `boolean` | NO | INDEX `idx_users_deleted` | 탈퇴 여부 |
 | `deleted_at` | `datetime(6)` | YES |  | 탈퇴 처리 시각 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |

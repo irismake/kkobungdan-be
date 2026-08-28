@@ -15,7 +15,7 @@ from app.core.security import (
     verify_token,
 )
 from app.core.time import utcnow_naive
-from app.models.user import PhoneVerificationPurpose, User
+from app.models.user import PhoneVerificationPurpose, User, UserFCMToken
 from app.schemas.user import (
     AuthAccessTokenResponse,
     AuthLoginConfirmRequest,
@@ -153,6 +153,16 @@ class UserAuthService:
 
         access_token = create_access_token({"sub": str(user.id)})
         return AuthAccessTokenResponse(access_token=access_token, expires_in=access_token_expires_in_ms())
+
+    @staticmethod
+    def logout(db: Session, user_id: str) -> None:
+        """로그아웃한 유저의 FCM 토큰을 지운다.
+
+        지우지 않으면 다음 로그인 때까지 이 계정 앞 알림이 (이미 로그아웃한) 이 기기로
+        계속 발송 시도된다. 유저당 토큰이 1개뿐이라 유저 row 삭제만으로 충분하다.
+        """
+        db.query(UserFCMToken).filter(UserFCMToken.user_id == str(user_id)).delete(synchronize_session=False)
+        db.commit()
 
     @staticmethod
     def _find_user_by_phone(db: Session, phone: str) -> User | None:

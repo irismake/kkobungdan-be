@@ -13,6 +13,7 @@ from app.services.fcm_service import FCMService
 logger = logging.getLogger(__name__)
 
 _MAX_RETRY = 3
+_STALE_TOKEN_ERROR_CODES = {"UNREGISTERED", "SENDER_ID_MISMATCH"}
 
 
 class NotificationWorker:
@@ -74,6 +75,11 @@ class NotificationWorker:
                 notif.status = NotificationStatus.FAILED
                 notif.retry_count = (notif.retry_count or 0) + 1
                 notif.error_message = result.error_message if result else "No FCM token"
+                if result is not None and result.error_code in _STALE_TOKEN_ERROR_CODES:
+                    # 토큰이 더 이상 유효하지 않다. 재시도해봐야 계속 실패하고, 남겨두면
+                    # 다음 로그인 때 다른 유저가 같은 값을 등록할 경우 dedupe 대상이 될 뿐이라
+                    # 지금 지워서 정리한다.
+                    self._delete_token(db, notif.user_id)
             else:
                 notif.status = NotificationStatus.SENT
                 notif.sent_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -86,3 +92,8 @@ class NotificationWorker:
         from app.models.user import UserFCMToken
         record = db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).first()
         return record.fcm_token if record else None
+
+    @staticmethod
+    def _delete_token(db: Session, user_id: str) -> None:
+        from app.models.user import UserFCMToken
+        db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).delete(synchronize_session=False)

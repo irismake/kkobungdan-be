@@ -8,6 +8,7 @@ deploy_target="${DEPLOY_TARGET:-}"
 app_service="${APP_SERVICE_NAME:-app}"
 app_container="${APP_CONTAINER_NAME:-orderrun-app-staging}"
 wait_timeout="${WAIT_TIMEOUT_SECONDS:-180}"
+migration_timeout="${MIGRATION_TIMEOUT_SECONDS:-600}"
 
 if [[ ! -f "$compose_file" ]]; then
   echo "Compose file not found: $compose_file" >&2
@@ -88,8 +89,26 @@ prune_docker_storage
 
 # 마이그레이션을 새 앱보다 먼저 돌린다. 새 이미지가 아직 없는 컬럼을 읽어
 # 요청이 실패하는 구간을 없애기 위해서다. 실패하면 돌던 앱을 그대로 두고 멈춘다.
+#
+# 무한정 기다리지 않도록 timeout으로 감싼다. alembic/env.py가 세션 lock_wait_timeout을
+# 짧게 잡아 락 대기는 거기서 먼저 끊기지만, DB 커넥션 자체가 안 열리는 경우처럼 그 앞에서
+# 멈추는 상황까지는 못 잡는다. 2026-08-27 배포가 여기서 2시간 11분 매달렸다.
 echo "Running database migrations..."
-"${compose_cmd[@]}" run --rm -T --no-deps "$app_service" alembic upgrade head
+migration_status=0
+timeout --signal=TERM --kill-after=30s "$migration_timeout" \
+  "${compose_cmd[@]}" run --rm -T --no-deps "$app_service" alembic upgrade head || migration_status=$?
+
+if (( migration_status != 0 )); then
+  if (( migration_status == 124 || migration_status == 137 )); then
+    echo "마이그레이션이 ${migration_timeout}초 안에 끝나지 않아 중단했다." >&2
+    echo "DB에서 'SHOW FULL PROCESSLIST'로 'Waiting for table metadata lock'을 확인할 것." >&2
+    echo "정상적으로 오래 걸리는 마이그레이션이면 MIGRATION_TIMEOUT_SECONDS를 늘려 다시 실행한다." >&2
+  else
+    echo "마이그레이션이 실패했다 (exit ${migration_status}). 배포를 중단한다." >&2
+  fi
+  echo "돌던 앱은 그대로 두었다." >&2
+  exit 1
+fi
 
 if [[ -n "$deploy_target" ]]; then
   "${compose_cmd[@]}" up -d --build --remove-orphans "$app_service"

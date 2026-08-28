@@ -312,6 +312,25 @@ def test_notification_worker_marks_failed_when_fcm_send_fails(db, factory, sampl
     assert notification.error_message == "temporary failure"
 
 
+def test_notification_worker_deletes_stale_token_when_fcm_reports_unregistered(db, factory, sample_user):
+    user_id = sample_user.id
+    db.add(UserFCMToken(user_id=user_id, fcm_token="stale-token"))
+    factory.notification(
+        user_id,
+        notification_type=NotificationType.OFFER_ACCEPTED,
+        status=NotificationStatus.PENDING,
+        fcm_message_id=None,
+        sent_at=None,
+    )
+    fcm = RecordingFCMService(
+        FCMSendResult(success=False, error_code="UNREGISTERED", error_message="Device token is no longer valid")
+    )
+
+    NotificationWorker(fcm).flush_pending(lambda: db)
+
+    assert db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).first() is None
+
+
 def test_notification_worker_fails_without_token_and_does_not_call_fcm(db, factory, sample_user):
     notification = factory.notification(
         sample_user.id,

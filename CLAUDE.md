@@ -275,6 +275,7 @@ Custom exceptions are defined in `app/core/exceptions.py`. Use standard FastAPI 
 - Current feature branch: `feat/user-api`
 - Create feature branches from `main`
 - Use descriptive commit messages linking to execution plans when applicable
+- `main` ↔ `staging` 동기화 규칙(squash merge / reset)은 `AGENTS.md`의 "브랜치 동기화 규칙" 참고
 
 ## Common Tasks
 

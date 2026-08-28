@@ -25,7 +25,11 @@ router = APIRouter(prefix="/admin/auth", tags=["관리자"])
     ),
     responses={
         200: success_response(ADMIN_LOGIN_EXAMPLE),
-        **error_responses(AppError.VALIDATION_ERROR, AppError.ADMIN_CREDENTIALS_INVALID),
+        **error_responses(
+            AppError.VALIDATION_ERROR,
+            AppError.ADMIN_CREDENTIALS_INVALID,
+            AppError.ADMIN_LOGIN_LOCKED,
+        ),
     },
 )
 def admin_login(payload: AdminLoginRequest, db: Session = Depends(get_db)) -> ApiResponse[AuthTokenResponse]:

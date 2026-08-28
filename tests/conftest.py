@@ -40,6 +40,20 @@ class RecordingSmsSender:
         self.sent_messages.append({"phone": phone, "message": message})
 
 
+@dataclass
+class RecordingAdminAlertSender:
+    """관리자 Slack 알림을 발송하는 대신 기록만 한다."""
+
+    sent: list = field(default_factory=list)
+
+    def send(self, alert) -> None:
+        self.sent.append(alert)
+
+    @property
+    def texts(self) -> list[str]:
+        return [alert.to_text() for alert in self.sent]
+
+
 class NoopNotificationWorker:
     def flush_pending(self, db_factory, notification_ids=None):
         _ = db_factory
@@ -234,9 +248,10 @@ TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENG
 def register_event_listeners() -> None:
     """App startup wires notification listeners; mirror it so tests that call
     services directly (without the `client` fixture) also receive events."""
-    from app.listeners import notification_listener
+    from app.listeners import admin_alert_listener, notification_listener
 
     notification_listener.register_all()
+    admin_alert_listener.register_all()
 
 
 @pytest.fixture(scope="function")
@@ -258,13 +273,29 @@ def sms_sender() -> RecordingSmsSender:
     return RecordingSmsSender()
 
 
+@pytest.fixture(scope="function")
+def admin_alerts(monkeypatch: pytest.MonkeyPatch) -> RecordingAdminAlertSender:
+    """관리자 Slack 알림을 가로채 기록한다. 테스트에서 네트워크를 타지 않게 한다."""
+    sender = RecordingAdminAlertSender()
+    monkeypatch.setattr(
+        "app.services.admin_alert_service.get_admin_alert_sender",
+        lambda: sender,
+    )
+    return sender
+
+
 @pytest.fixture
 def factory(db: Session) -> TestDataFactory:
     return TestDataFactory(db)
 
 
 @pytest.fixture(scope="function")
-def client(db: Session, sms_sender: RecordingSmsSender, monkeypatch: pytest.MonkeyPatch) -> OpenApiAssertingClient:
+def client(
+    db: Session,
+    sms_sender: RecordingSmsSender,
+    admin_alerts: RecordingAdminAlertSender,
+    monkeypatch: pytest.MonkeyPatch,
+) -> OpenApiAssertingClient:
     def override_get_db():
         try:
             yield db

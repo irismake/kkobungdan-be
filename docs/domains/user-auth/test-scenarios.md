@@ -13,8 +13,8 @@
 - 모든 회원가입 번호와 일반 로그인 번호는 환경과 무관하게 `123456` 고정 우회를 허용하지 않는지 검증한다.
 - 존재하지 않는 사용자, pending verification 없음, 코드 불일치 같은 인증 실패를 검증한다.
 - 사용자 상세, 알림 설정, 닉네임 변경, FCM 토큰 저장 흐름을 검증한다.
-- 회원 탈퇴는 사유 조회, 선택 사유 이력 저장, 기타 상세 사유 필수 검증, 개인정보 hard delete, 탈퇴 사용자 익명 표시, 매칭 전 활동 자동 취소, 진행 중 활동 차단을 검증한다.
-- 매칭 전 자동 취소는 `HOLDING`, `POSTED`, `OFFERED` Proposal과 `WAITING` Offer를 대상으로 한다.
+- 회원 탈퇴는 사유 조회, 선택 사유 이력 저장, 기타 상세 사유 필수 검증, 개인정보 hard delete, 탈퇴 사용자 익명 표시, 대기 지원 자동 취소, 미결 활동 차단을 검증한다.
+- 자동 취소는 `WAITING` Offer만 대상으로 한다. `HOLDING` Proposal은 입금 여부를 알 수 없어 차단 대상이다.
 - 진행 중 활동 차단은 `MATCHED`, `ORDER_COMPLETED`, `DISPUTED` Proposal과 `ACCEPTED`, `RUNNER_COMPLETED`, `DISPUTED` Offer를 대상으로 한다.
 - SMS background 발송 실패가 verification 저장을 깨지 않는지 확인한다.
 - 사용자/인증 문서 모델과 ORM timestamp 관리 규칙을 검증한다.

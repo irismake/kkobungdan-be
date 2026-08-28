@@ -18,7 +18,7 @@ from app.core.exceptions import (
     unhandled_exception_handler,
     validation_exception_handler,
 )
-from app.listeners import notification_listener
+from app.listeners import admin_alert_listener, notification_listener
 from app.schemas.common import ApiResponse
 from app.tasks.payment_checker import (
     check_and_cancel_expired_payment_proposals,
@@ -39,8 +39,39 @@ logger = logging.getLogger(__name__)
 _scheduler = AsyncIOScheduler()
 
 
+#: `CORS_ALLOW_ORIGINS`가 비었을 때 development에서만 쓰는 기본값. 관리자 웹 로컬 개발 서버다.
+DEFAULT_DEV_CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
+
+
 def _api_docs_enabled() -> bool:
     return settings.app_env.lower() != "production"
+
+
+def _cors_allow_origins() -> list[str]:
+    """허용 Origin 목록을 만든다.
+
+    와일드카드를 허용하지 않는 이유: `allow_origins=["*"]`와 `allow_credentials=True`를 같이
+    쓰면 Starlette은 와일드카드를 못 쓴다는 걸 알고 요청 Origin을 그대로 반사한다. 그러면 아무
+    도메인이나 자격증명을 실어 보내고 응답을 읽을 수 있다.
+
+    미설정일 때 조용히 빈 목록으로 뜨지 않고 죽이는 이유: 빈 목록은 배포 후에 원인 모를 CORS
+    오류로만 드러난다. 기동 시점에 실패하면 무엇이 빠졌는지 바로 보인다.
+    """
+    origins = settings.cors_allow_origin_list
+
+    if "*" in origins:
+        raise RuntimeError(
+            "CORS_ALLOW_ORIGINS에 와일드카드(*)는 쓸 수 없습니다. 허용할 Origin을 명시하세요."
+        )
+    if origins:
+        return origins
+    if settings.app_env.lower() == "development":
+        return DEFAULT_DEV_CORS_ORIGINS
+
+    raise RuntimeError(
+        f"CORS_ALLOW_ORIGINS가 비어 있습니다. APP_ENV={settings.app_env} 환경에서는 "
+        "허용할 Origin을 반드시 지정해야 합니다."
+    )
 
 
 def _api_docs_path() -> str | None:
@@ -64,6 +95,12 @@ def _ensure_admin_account() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     notification_listener.register_all()
+    admin_alert_listener.register_all()
+
+    if not settings.admin_alert_slack_webhook_url:
+        logger.warning(
+            "ADMIN_ALERT_SLACK_WEBHOOK_URL not configured — 분쟁·미션 완료 관리자 알림이 발송되지 않습니다"
+        )
 
     _ensure_admin_account()
 
@@ -125,12 +162,13 @@ app = FastAPI(
 )
 
 # CORS middleware
+# 허용 Origin은 환경변수로만 정한다. 관리자 웹 도메인이 환경마다 다르고 이 저장소에 없다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Exception handlers
