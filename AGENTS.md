@@ -48,11 +48,14 @@
 
 ## 브랜치 동기화 규칙
 
-- `staging` → `main`은 squash merge로 반영한다 (staging의 개별 커밋들을 main에 커밋 1개로 합침).
-- `main` → `staging` 동기화는 `git merge`나 `git rebase`를 쓰지 않고, `staging`을 `main` 기준으로 그대로 맞춘다 (`git reset --hard main` 후 `--force-with-lease`로 push).
-  - 이유: squash merge 직후에는 `main`과 `staging`의 파일 트리가 이미 동일하다. 이 상태에서 `merge`를 하면 내용은 같지만 계보가 다른 두 히스토리(staging의 개별 커밋들 vs main의 스쿼시 커밋)가 그래프에 중복으로 남는다. `rebase`도 병합 커밋을 평탄화해 개별 커밋을 재적용하는 과정에서 실제 충돌이 발생한다 (내용은 결국 같아도 도달 과정이 다르기 때문). 반면 reset은 이미 동일한 트리를 가리키도록 포인터만 옮기는 것이라 충돌이 없다.
-  - 이 동기화 push는 **Staging Deploy 워크플로를 돌리지 않는다.** `staging-deploy.yml`의 `check` job이 "push된 커밋이 이미 `main`에 있는가"를 보고 건너뛰기 때문이다 (동기화 push일 때만 참이 된다). 방금 프로덕션에 나간 것과 같은 내용을 스테이징에 다시 배포하지 않기 위해서다. Actions 목록에 `check`만 돌고 `build`/`deploy`가 skipped로 뜨면 정상이다. 같은 내용을 의도적으로 다시 배포해야 하면 `workflow_dispatch`(수동 실행)를 쓴다 — 수동 실행은 가드를 통과한다.
-  - `staging`의 개별 커밋 히스토리는 이 과정에서 사라지고 `main`의 스쿼시 커밋만 남는다 (내용 손실은 없음, 다른 브랜치에서 이미 push된 `staging`을 pull 받은 협업자가 있다면 `git fetch && git reset --hard origin/staging`로 맞추도록 안내한다).
+- `feature/*`, `fix/*` 브랜치는 최신 `staging`에서 만든다.
+- `feature/*`, `fix/*` → `staging`은 squash merge한다. 작업 브랜치의 중간 커밋은 하나의 검토 가능한 변경으로 정리한다.
+- `staging` → `main`은 merge commit으로 반영한다. `staging`의 커밋 계보와 릴리스 경계를 유지하기 위해 squash merge나 rebase merge를 사용하지 않는다.
+- 릴리스 후 `main` → `staging` 동기화는 평소 수행하지 않는다. `staging` 커밋이 merge commit을 통해 이미 `main` 이력에 포함되므로 merge, rebase, reset/force push가 필요하지 않다.
+- 일반 기능과 수정 사항을 `main`에 직접 커밋하지 않는다.
+- 긴급 수정도 가능하면 `fix/*` → `staging` → `main` 흐름을 따른다. 아직 릴리스할 수 없는 변경이 `staging`에 있어 운영만 즉시 수정해야 한다면 `main`에서 hotfix 브랜치를 만들어 반영한 뒤, 같은 수정을 별도 `fix/*` PR로 `staging`에 반영한다.
+- `.github/workflows/staging-deploy.yml`의 커밋 도달성 가드는 예외 상황에서 이미 `main`에 포함된 커밋의 중복 배포를 막는 안전망으로 유지한다. 명시적으로 재배포할 때는 `workflow_dispatch`를 사용한다.
+- 예외적으로 `staging` → `main`을 squash merge했다면 두 브랜치의 커밋 계보가 갈라지므로 `git fetch origin` 후 `staging`에서 `git reset --hard origin/main`, `git push --force-with-lease origin staging` 순서로 동기화한다. 이 push는 Staging Deploy 워크플로를 트리거하지만, 커밋 도달성 가드가 이미 `main`에 포함된 커밋임을 확인하므로 `check` job만 실행되고 이미지 재빌드와 배포는 건너뛴다.
 
 ## 테스트 실행 규칙
 
