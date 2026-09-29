@@ -271,11 +271,12 @@ Custom exceptions are defined in `app/core/exceptions.py`. Use standard FastAPI 
 
 ## Git Workflow
 
-- Main branch: `main`
-- Current feature branch: `feat/user-api`
-- Create feature branches from `main`
+- Create feature and fix branches from `staging`
+- Squash merge feature and fix PRs into `staging`
+- Merge `staging` into `main` with a merge commit
+- Do not routinely sync `main` back into `staging`
 - Use descriptive commit messages linking to execution plans when applicable
-- `main` ↔ `staging` 동기화 규칙(squash merge / reset)은 `AGENTS.md`의 "브랜치 동기화 규칙" 참고
+- See the "브랜치 동기화 규칙" section in `AGENTS.md` for the canonical branch and hotfix rules
 
 ## Common Tasks
 

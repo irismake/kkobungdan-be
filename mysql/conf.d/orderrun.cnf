@@ -1,0 +1,29 @@
+# orderrun MySQL 서버 설정. RDS(8.4.8) 파라미터와 맞췄다(2026-09-29 조회).
+[mysqld]
+character-set-server = utf8mb4
+# 서버 기본값은 RDS와 같다. 스키마 기본값(utf8mb4_unicode_ci)은 CREATE DATABASE에서 따로 맞춘다.
+collation-server     = utf8mb4_0900_ai_ci
+# 앱은 DATETIME에 naive UTC를 쓴다. RDS time_zone(UTC)과 같게 둔다.
+# 이름('UTC')으로 쓰면 최초 초기화 때 타임존 테이블이 아직 없어 기동이 실패하므로 오프셋으로 쓴다.
+default-time-zone    = '+00:00'
+# RDS가 비엄격 모드다. 8.4 기본값(엄격)으로 두면 같은 요청이 여기서만 실패할 수 있다.
+sql-mode             = NO_ENGINE_SUBSTITUTION
+max_allowed_packet   = 64M
+skip-name-resolve
+# 앱 2개 × (pool 5 + overflow 10) = 30, 마이그레이션·백업·운영 세션 여유. RDS와 같은 값이다.
+max_connections      = 60
+
+# t3.small(2GiB) 기준. 데이터가 수 MB라 RDS와 같은 128M로 충분하다.
+innodb_buffer_pool_size = 128M
+# TD-012 락 추적(performance_schema.metadata_locks)에 필요하다.
+performance_schema      = ON
+table_open_cache        = 400
+tmp_table_size          = 16M
+max_heap_table_size     = 16M
+
+# 8.x는 binlog가 기본으로 켜져 있고 보관 기간이 30일이다. 디스크를 채우지 않게 3일로 줄인다.
+binlog_expire_logs_seconds = 259200
+max_binlog_size            = 100M
+
+[client]
+default-character-set = utf8mb4
