@@ -1,0 +1,19 @@
+# MySQL 백업 1회 실행. 인스턴스 이름이 환경(staging, prod)이다.
+# /etc/systemd/system/ 에 복사해 쓴다. 실패하면 Slack 알림 유닛을 부른다.
+[Unit]
+Description=OrderRun MySQL backup to S3 (%i)
+Wants=network-online.target
+After=network-online.target docker.service
+OnFailure=orderrun-mysql-backup-alert@%i.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+# snap으로 설치한 aws CLI를 찾도록 /snap/bin을 넣는다.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+EnvironmentFile=/home/ubuntu/orderrun-db/backup.env
+EnvironmentFile=/home/ubuntu/orderrun-db/backup-%i.env
+ExecStart=/home/ubuntu/orderrun-db/mysql-backup.sh %i
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

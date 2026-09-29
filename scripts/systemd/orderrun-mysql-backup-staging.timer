@@ -1,0 +1,12 @@
+# staging 일일 백업. 03:30 KST.
+[Unit]
+Description=Daily OrderRun MySQL backup (staging)
+
+[Timer]
+OnCalendar=*-*-* 18:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=orderrun-mysql-backup@staging.service
+
+[Install]
+WantedBy=timers.target
