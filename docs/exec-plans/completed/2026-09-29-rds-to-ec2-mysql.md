@@ -1,7 +1,62 @@
 # RDS → EC2 내부 MySQL 컨테이너 이전
 
-작성일: 2026-09-29 · 상태: **1차(STAGING) 진행 중.** t3.small 전환 후 재점검에서 여유 메모리 1.2GiB를 확인하고
-착수했다. PROD DB 이전·PROD Secret 변경·PROD 재배포·RDS 중지/삭제는 하지 않는다.
+작성일: 2026-09-29 · 상태: **완료.** STAGING·PROD 모두 EC2 MySQL로 전환했다. 같은 날 사용자가 RDS를 중지해 두 환경이
+RDS 없이 동작하는 것을 확인한 뒤 삭제했다(콘솔 작업, 최종 스냅샷은 사용자가 관리). 삭제 후에도 두 환경의 조회·쓰기와
+매시 백업이 정상임을 확인했다. 이제 RDS로 되돌리는 rollback은 없고, 복구 수단은 S3 백업(`RELIABILITY.md`)과 RDS 최종
+스냅샷이다. 남은 정리는 기술부채 트래커 TD-013~TD-018에 옮겼다.
+
+### 2차(PROD) 실행 기록 (2026-09-29, UTC)
+
+| 단계 | 결과 |
+| --- | --- |
+| PROD Secret 검증 | 운영 prod 컨테이너 env를 `~/orderrun-db/rollback/prod-env.backup`(600)에 백업. 임시 브랜치 워크플로로 새 저장소 PROD Secret 13개를 EC2 안에서 해시 비교 → 전부 same. 브랜치 삭제 |
+| Docker Hub PROD 전환 | `main` 그대로 Production Deploy 수동 실행 → `orderrun/orderrun:prod`. DB=RDS 유지, env 전부 동일, 로그인·조회·쓰기(RDS 반영)·SNS(STS)·FCM(토큰 발급)·로그 정상 |
+| staging → main merge | PR #2 merge commit → 자동 배포. app-prod DB 네트워크 연결, DB=RDS 유지, `.env.ec2` 600 |
+| PROD DB 이전 | 리허설 PASS → 05:41:24 app-prod 중지 → 05:41:37 검증 PASS(17테이블 105행, 해시·스키마·메타데이터·alembic·FK) → 05:41:47 `PROD_MYSQL_HOST`=`orderrun-mysql` → 05:44:12 재배포. 중단 약 3분 |
+| 전환 후 | env는 `DB_HOST`만 변경, 데모 로그인 쓰기 EC2에만 반영, RDS 전체 세션 0, RDS·EC2 차이는 테스트 쓰기(인증 1행, 데모 사용자 1행, AUTO_INCREMENT)뿐 |
+| PROD 백업 | 매시 타이머 활성, 즉시 1회 백업 → S3 업로드, 로컬·S3 sha256 일치, 임시 DB 복원 후 행 수·내용 해시 일치 |
+
+검증 중 고친 것: RDS 세션 수 쿼리가 `CURRENT_USER()`(user@host)를 계정명과 비교해 항상 0을 반환하고 있었다.
+`SUBSTRING_INDEX(CURRENT_USER(),'@',1)`로 고친 뒤 RDS 연결 중인 prod에서 1, staging에서 0을 확인했다.
+
+Rollback(PROD): prod 계정 비밀번호는 RDS와 같으므로 `PROD_MYSQL_HOST`만 `~/orderrun-db/rollback/prod-rds-host` 값으로
+되돌리고 Production Deploy를 수동 실행한다. 전환 이후 쓰기가 있었다면 EC2 → RDS 역방향 복사가 먼저다(8장 R-B).
+
+### 1차(STAGING) 기록
+
+### 1차 실행 기록 (2026-09-29, UTC)
+
+| 단계 | 결과 |
+| --- | --- |
+| Docker Hub | Staging Deploy 수동 실행으로 `orderrun/orderrun:staging` build → push → EC2 private pull(읽기 전용 토큰) → deploy. 첫 두 번은 `STG_EC2_SSH_KEY` 복구 형식 오류(원문 PEM)로 SSH 단계 실패, base64 한 줄로 재설정 후 성공 |
+| 복구 Secret 검증 | 배포 전후 staging 컨테이너 env 27개를 해시로 비교 → 전부 동일 |
+| MySQL 구성 | `~/orderrun-db`, `orderrun-mysql`(8.4.8) healthy, internal 네트워크 192.168.100.0/24, 외부 볼륨, 3306 미게시, root@localhost만. conf.d 디렉터리가 umask 077로 700이 되어 첫 기동 실패 → 755로 수정 |
+| 네트워크 연결 | PR #1 squash merge → Staging Deploy. app-staging만 DB 네트워크 연결, DB는 RDS 유지, `.env.ec2` 600 |
+| 리허설 | 덤프 1초·복원 2초·검증 6초. 데이터·행 수 일치, `SHOW CREATE TABLE`의 `CHARACTER SET utf8mb4` 표시 차이만 발견(메타데이터 동일) → 검증에서 정규화 |
+| 최종 전환 | 04:51:26 staging 중지 → 04:51:39 검증 PASS(20테이블 548행, 해시·스키마·메타데이터·alembic·FK 고아 0) → 04:51:54 `STG_MYSQL_HOST`(repo scope) = `orderrun-mysql` → 04:54:06 재배포 완료. 중단 약 2분 40초 |
+| 전환 후 | env는 `DB_HOST`만 변경, EC2 MySQL에 192.168.100.3 연결, RDS의 staging 연결 0, 오류 로그 0. 데모 로그인 쓰기가 EC2에만 반영(RDS 불변) |
+| 백업 | AWS CLI 설치, IAM Role 목록·업로드·읽기 성공, 삭제 거부(의도). staging 타이머 활성(매일 18:30 UTC), prod 타이머 설치만. 수동 1회 백업 → S3 업로드 → 복원 테스트 행 수 일치 |
+
+| staging 비밀번호 교체 | 05:13~05:17. EC2에서 무작위 48자 생성 → `RETAIN CURRENT PASSWORD`로 이중 비밀번호 → `STG_MYSQL_PASSWORD`(repo scope)를 EC2에서 파이프로 설정 → 재배포 → `DISCARD OLD PASSWORD`. env는 `DB_PASSWORD`만 변경, 기존(RDS 마스터) 비밀번호 거부·새 비밀번호 허용, 폐기 후 새 연결 정상, 데모 로그인 쓰기가 EC2에만 반영. 중단 없음 |
+
+Rollback(STAGING): 비밀번호를 교체했으므로 HOST와 PASSWORD를 함께 되돌린다. 값은 EC2 `~/orderrun-db/rollback/`(700)의
+600 파일에서 파이프로만 넘긴다. RDS를 삭제할 때 이 디렉터리도 지운다.
+
+```bash
+E="ssh -i ~/.ssh/orderun-ec2.pem ubuntu@43.200.56.9"
+$E 'cat ~/orderrun-db/rollback/stg-rds-host'     | gh secret set STG_MYSQL_HOST     --repo irismake/kkobungdan-be
+$E 'cat ~/orderrun-db/rollback/stg-rds-password' | gh secret set STG_MYSQL_PASSWORD --repo irismake/kkobungdan-be
+gh workflow run staging-deploy.yml --repo irismake/kkobungdan-be --ref staging
+```
+
+전환 이후 staging 쓰기는 RDS에 없다. RDS STAGING 스키마는 읽기만 했고 그대로다. 되돌린 뒤 다시 EC2로 올 때는
+staging 비밀번호를 새로 발급한다(현재 값은 GitHub Secret과 `.env.ec2`에만 있다).
+
+GitHub Free 플랜(private 저장소)이라 Environment 승인자와 브랜치 보호를 쓸 수 없다. 지금은 `main` push가 곧 PROD
+배포다. 대안으로 production 워크플로를 수동 실행(`workflow_dispatch`) 전용으로 바꾸는 안을 검토한다.
+
+남은 일: Slack webhook 파일(`backup-alert.env`) 작성과 알림 테스트, S3 수명주기 30일 규칙 콘솔 확인(EC2 역할은 조회 권한 없음),
+production 배포 트리거 결정, IMDS hop limit 1.
 
 1차에서 계획과 달라진 점:
 

@@ -1,5 +1,9 @@
 # EC2 prod/staging 분리
 
+> **2026-09-29 DB 위치 변경**: RDS를 삭제하고 두 환경의 DB를 같은 EC2의 MySQL 컨테이너(별도 compose 프로젝트
+> `orderrun-db`)로 옮겼다. 아래 본문의 RDS 관련 서술은 이 시점부터 유효하지 않다.
+> `../completed/2026-09-29-rds-to-ec2-mysql.md` 참고.
+
 > **2026-08-27 일부 결정 철회**: "IP 직접 접근(`http://43.200.56.9`)은 staging HTTP로
 > 유지한다"는 결정을 철회했다. 관리자 자격증명과 토큰이 평문으로 흐르는 경로였다. 이제 80번
 > 포트는 API를 서빙하지 않고 `https://staging-api.kkobung-dan.store`로 308 리다이렉트한다

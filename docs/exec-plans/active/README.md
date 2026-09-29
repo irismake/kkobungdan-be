@@ -13,8 +13,6 @@
 - [`2026-08-25-admin-user-list-api.md`](./2026-08-25-admin-user-list-api.md): 관리자 사용자 목록 조회 API
 - [`2026-08-27-api-security-hardening.md`](./2026-08-27-api-security-hardening.md): CORS 화이트리스트, 평문 HTTP 제거, 보안 응답 헤더, 관리자 로그인 잠금, staging 문서 접근 제한
 - [`2026-08-27-admin-ops-alert.md`](./2026-08-27-admin-ops-alert.md): 분쟁 접수·미션 완료 시 관리자에게 Slack 운영 알림 발송
-- [`2026-09-29-rds-to-ec2-mysql.md`](./2026-09-29-rds-to-ec2-mysql.md): RDS를 EC2 내부 MySQL 컨테이너로 이전 (계획 단계, 미적용)
-
 ## 운영 규칙
 
 권장 파일명 형식:
