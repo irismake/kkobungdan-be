@@ -3,7 +3,12 @@
 작성일: 2026-09-29 · 상태: **완료.** STAGING·PROD 모두 EC2 MySQL로 전환했다. 같은 날 사용자가 RDS를 중지해 두 환경이
 RDS 없이 동작하는 것을 확인한 뒤 삭제했다(콘솔 작업, 최종 스냅샷은 사용자가 관리). 삭제 후에도 두 환경의 조회·쓰기와
 매시 백업이 정상임을 확인했다. 이제 RDS로 되돌리는 rollback은 없고, 복구 수단은 S3 백업(`RELIABILITY.md`)과 RDS 최종
-스냅샷이다. 남은 정리는 기술부채 트래커 TD-013~TD-018에 옮겼다.
+스냅샷이다. 남은 정리는 기술부채 트래커 TD-013, TD-014, TD-016~TD-018에 옮겼다.
+
+정리(같은 날): RDS 최종 덤프 두 개를 S3 `mysql/rds-final/`에 보관하고(체크섬 확인, 수명주기 약 30일) EC2의
+`~/migration`, `~/orderrun-db/rollback/`(RDS 비밀번호·호스트, prod env 백업)과 `hwangdaesun/orderrun` 이미지를 지웠다.
+MySQL 헬스체크를 자격증명 있는 ping으로 바꿔 재생성했다(10초 만에 healthy, 두 앱 자동 재연결, `Aborted_connects` 증가 0).
+아래 본문의 rollback 절차와 rollback 파일 경로는 이 시점부터 유효하지 않다.
 
 ### 2차(PROD) 실행 기록 (2026-09-29, UTC)
 
