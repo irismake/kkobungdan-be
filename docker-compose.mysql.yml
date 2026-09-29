@@ -31,7 +31,8 @@ services:
     networks:
       - db
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      # 자격증명 없이 ping하면 매번 인증 실패로 Aborted_connects가 쌓여 실제 인증 실패를 가린다.
+      test: ["CMD", "mysqladmin", "--defaults-extra-file=/run/secrets/mysql_root_cnf", "ping", "-h", "localhost", "--silent"]
       interval: 10s
       timeout: 5s
       retries: 6
