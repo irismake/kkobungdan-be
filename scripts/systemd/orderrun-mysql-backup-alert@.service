@@ -1,0 +1,9 @@
+# 백업 실패 알림. orderrun-mysql-backup@%i.service의 OnFailure로만 실행된다.
+[Unit]
+Description=Alert on OrderRun MySQL backup failure (%i)
+
+[Service]
+Type=oneshot
+User=ubuntu
+EnvironmentFile=/home/ubuntu/orderrun-db/backup-alert.env
+ExecStart=/home/ubuntu/orderrun-db/mysql-backup-alert.sh %i

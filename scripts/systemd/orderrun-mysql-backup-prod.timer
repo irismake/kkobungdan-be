@@ -1,0 +1,12 @@
+# prod 매시 백업. PROD DB가 EC2 MySQL로 옮겨진 뒤에 enable 한다(그 전에는 대상 DB가 없다).
+[Unit]
+Description=Hourly OrderRun MySQL backup (prod)
+
+[Timer]
+OnCalendar=*-*-* *:05:00 UTC
+RandomizedDelaySec=2min
+Persistent=true
+Unit=orderrun-mysql-backup@prod.service
+
+[Install]
+WantedBy=timers.target

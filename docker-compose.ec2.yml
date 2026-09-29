@@ -38,6 +38,7 @@ services:
       - "8000"
     networks:
       - orderrun-network
+      - db
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import json, urllib.request; data=json.load(urllib.request.urlopen(\"http://127.0.0.1:8000/v1/health\", timeout=5)); assert data[\"success\"] is True and data[\"data\"][\"status\"] == \"UP\"'"]
       interval: 10s
@@ -89,6 +90,7 @@ services:
       - "8000"
     networks:
       - orderrun-network
+      - db
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import json, urllib.request; data=json.load(urllib.request.urlopen(\"http://127.0.0.1:8000/v1/health\", timeout=5)); assert data[\"success\"] is True and data[\"data\"][\"status\"] == \"UP\"'"]
       interval: 10s
@@ -157,6 +159,11 @@ networks:
   orderrun-network:
     name: orderrun-ec2-network
     driver: bridge
+  # MySQL 전용 내부 네트워크. docker-compose.mysql.yml(프로젝트 orderrun-db)과 공유한다.
+  # 앱 두 개만 붙이고 nginx는 붙이지 않는다. EC2에서 한 번 수동으로 만든다(없으면 앱 배포가 실패한다).
+  db:
+    name: orderrun-db-network
+    external: true
 
 volumes:
   certbot_www:

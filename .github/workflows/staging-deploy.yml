@@ -157,6 +157,11 @@ jobs:
             printf '%s\n' '${{ secrets.DOCS_BASIC_AUTH_HTPASSWD }}' > nginx/htpasswd
             chmod 600 nginx/htpasswd
 
+            # Secret이 담긴 env 파일은 소유자만 읽게 한다. 기존 파일이 664로 남아 있어도
+            # 값을 쓰기 전에 권한부터 좁힌다(`cat >`는 기존 파일의 권한을 그대로 둔다).
+            umask 077
+            : > .env.ec2
+            chmod 600 .env.ec2
             cat > .env.ec2 << 'ENVEOF'
           DOCKER_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }}
           EC2_PUBLIC_IP=${{ secrets.STG_EC2_HOST }}
@@ -204,6 +209,8 @@ jobs:
           LETSENCRYPT_EMAIL=admin@example.com
           ENVEOF
             sed -i.bak "s#__NGINX_TEMPLATE__#${existing_nginx_template}#" .env.ec2
+            # 백업본에도 모든 Secret이 들어 있다. 쓰는 곳이 없으므로 남기지 않는다.
+            rm -f .env.ec2.bak
 
             chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
 
