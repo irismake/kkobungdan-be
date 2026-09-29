@@ -11,6 +11,11 @@ RDS 없이 동작하는 것을 확인한 뒤 삭제했다(콘솔 작업, 최종 
 MySQL 헬스체크를 자격증명 있는 ping으로 바꿔 재생성했다(10초 만에 healthy, 두 앱 자동 재연결, `Aborted_connects` 증가 0).
 아래 본문의 rollback 절차와 rollback 파일 경로는 이 시점부터 유효하지 않다.
 
+비용 절감(같은 날): MySQL을 경량 설정(buffer pool 64M, `performance_schema`·X 플러그인 OFF, 컨테이너 상한 512MiB)으로
+바꿔 mysqld 메모리를 415MiB에서 170MiB로 줄인 뒤, 인스턴스를 t3.small에서 t3.micro로 내렸다. t3.micro에서 두 환경
+조회·쓰기, 백업, FCM 초기화가 정상이고 여유 메모리는 약 300MiB, swap 사용은 약 110MiB다(TD-019). 7장의 "t3.small이
+최소" 판단은 MySQL 기본 설정 기준이었다.
+
 ### 2차(PROD) 실행 기록 (2026-09-29, UTC)
 
 | 단계 | 결과 |

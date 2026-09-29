@@ -13,11 +13,14 @@ skip-name-resolve
 # 앱 2개 × (pool 5 + overflow 10) = 30, 마이그레이션·백업·운영 세션 여유. RDS와 같은 값이다.
 max_connections      = 60
 
-# t3.small(2GiB) 기준. 데이터가 수 MB라 RDS와 같은 128M로 충분하다.
-innodb_buffer_pool_size = 128M
-# TD-012 락 추적(performance_schema.metadata_locks)에 필요하다.
-performance_schema      = ON
-table_open_cache        = 400
+# t3.micro(1GiB)에서 앱 2개·nginx와 같이 돌리는 기준이다. 데이터가 수 MB라 64M로도 전부 메모리에 올라간다.
+innodb_buffer_pool_size = 64M
+innodb_log_buffer_size  = 8M
+# 메모리를 가장 많이 쓰는 진단 기능이라 끈다. TD-012 락 추적이 필요할 때만 ON으로 바꿔 재시작한다.
+performance_schema      = OFF
+# X 프로토콜(33060)은 쓰지 않는다.
+mysqlx                  = OFF
+table_open_cache        = 200
 tmp_table_size          = 16M
 max_heap_table_size     = 16M
 

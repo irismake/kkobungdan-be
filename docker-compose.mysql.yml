@@ -39,7 +39,8 @@ services:
       start_period: 60s
     # 기본값(10초 후 SIGKILL)이면 종료 때마다 InnoDB 크래시 복구를 탄다.
     stop_grace_period: 60s
-    mem_limit: 768m
+    # t3.micro에서 MySQL이 앱 메모리까지 잡아먹지 않게 상한을 둔다. 경량 설정 기준 실사용은 이보다 한참 작다.
+    mem_limit: 512m
     logging:
       driver: "json-file"
       options:
