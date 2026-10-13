@@ -245,6 +245,12 @@ htpasswd 파일은 저장소에 커밋하지 않는다. GitHub Secret `DOCS_BASI
 - `DOCS_BASIC_AUTH_HTPASSWD` secret이 비어 있으면 htpasswd가 빈 파일이 되어 문서가 항상
   401이 된다. fail-closed라 위험하진 않지만 문서가 안 열리면 이걸 먼저 확인한다
 - `nginx/htpasswd`는 gitignore에 추가했다. 배포 워크플로가 scp 이후에 생성한다
+- (2026-10-13 수정) 처음에는 htpasswd를 `ubuntu` 소유 `600`으로 썼다. `auth_basic_user_file`은
+  root master가 아니라 worker(`nginx`, uid 101)가 요청마다 열기 때문에 `Permission denied`로
+  `/docs`가 자격증명과 무관하게 500이었다(틀린 자격증명도 401이 아니라 500). 워크플로가
+  파일을 `root:101` `640`으로 만든 뒤 `sudo tee`로 제자리에서 쓰도록 바꿨다. 교체(`install`, `mv`)는
+  inode가 바뀌어 재생성되지 않은 nginx 컨테이너의 단일 파일 bind mount가 예전 내용을 보므로 쓰지 않는다. 문서가 500이면 nginx `error.log`에서
+  `htpasswd` `Permission denied`를 먼저 확인한다
 
 ## 검증 기준
 

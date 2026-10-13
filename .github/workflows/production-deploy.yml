@@ -111,8 +111,15 @@ jobs:
             fi
 
             # staging API 문서용 basic auth 자격증명. 저장소에 두지 않는다.
-            printf '%s\n' '${{ secrets.DOCS_BASIC_AUTH_HTPASSWD }}' > nginx/htpasswd
-            chmod 600 nginx/htpasswd
+            # auth_basic_user_file은 root master가 아니라 worker(nginx, uid 101)가 요청마다 연다.
+            # ubuntu 소유 600이면 worker가 못 읽어 /docs가 500이 되므로 root:101 640으로 둔다.
+            # 파일을 교체하지 않고 제자리에서 덮어쓴다. 단일 파일 bind mount는 inode에 묶여 있어서
+            # 교체하면 재생성되지 않은 nginx 컨테이너가 예전 내용을 계속 본다.
+            # 권한부터 좁힌 뒤 내용을 쓴다.
+            sudo touch nginx/htpasswd
+            sudo chown root:101 nginx/htpasswd
+            sudo chmod 640 nginx/htpasswd
+            printf '%s\n' '${{ secrets.DOCS_BASIC_AUTH_HTPASSWD }}' | sudo tee nginx/htpasswd > /dev/null
 
             # Secret이 담긴 env 파일은 소유자만 읽게 한다. 기존 파일이 664로 남아 있어도
             # 값을 쓰기 전에 권한부터 좁힌다(`cat >`는 기존 파일의 권한을 그대로 둔다).
