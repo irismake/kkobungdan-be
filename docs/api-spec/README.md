@@ -449,7 +449,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 회원 탈퇴 사유 조회 | `GET` | `/v1/user/withdrawal-reasons` | 필요 | `200 OK` | `UserWithdrawalReasonQuestionResponse[]` |
 | 회원 탈퇴 | `DELETE` | `/v1/user` | 필요 | `200 OK` | `UserWithdrawalResponse` |
 
-회원 탈퇴는 `UserWithdrawalRequest`로 사유를 필수로 받아 탈퇴 사유 이력을 저장하고, 개인정보를 즉시 삭제하며, 거래 활동은 작성자를 `탈퇴한 사용자`로 익명화해 유지한다. 매칭 전 Proposal/Offer는 자동 취소하고, 매칭 이후 진행 중인 거래·분쟁·정산이 있으면 `409 USER_WITHDRAWAL_BLOCKED`를 반환한다. 자세한 규칙은 [`../domains/user-auth/withdrawal-policy.md`](../domains/user-auth/withdrawal-policy.md)를 따른다.
+회원 탈퇴는 `UserWithdrawalRequest`로 사유를 필수로 받아 탈퇴 사유 이력을 저장하고, 개인정보를 즉시 삭제하며, 거래 활동은 작성자를 `탈퇴한 사용자`로 익명화해 유지한다. 탈퇴 시 자동 취소하는 대상은 대기 중인 지원(Offer `WAITING`)뿐이며, 요청(Proposal)은 자동 취소하지 않는다. 입금 확인 대기(`HOLDING`) 요청을 포함해 종결되지 않은 요청·지원, 미처리 환불 또는 수행비 지급이 있으면 사유별 `409 USER_WITHDRAWAL_BLOCKED_*` 코드를 반환한다. 요청이 취소(`CANCELLED`)되었더라도 입금 대조 대기(Refund `REVIEW`)나 환불 대기(`PENDING`)가 남아 있으면 탈퇴할 수 없다. 자세한 규칙은 [`../domains/user-auth/withdrawal-policy.md`](../domains/user-auth/withdrawal-policy.md)를 따른다.
 
 ### Terms API
 
