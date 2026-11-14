@@ -326,7 +326,9 @@ def test_create_proposal_requires_settlement_account(client, auth_headers):
     assert response.json()["error"]["code"] == "SETTLEMENT_ACCOUNT_REQUIRED"
 
 
-def test_create_proposal_validation_errors(client, auth_headers):
+def test_create_proposal_validation_errors(client, factory, auth_headers, sample_user):
+    # 정산 계좌가 없으면 SETTLEMENT_ACCOUNT_REQUIRED(409)가 먼저 반환되므로 계좌를 준비한다.
+    factory.settlement_account(sample_user)
     cases = [
         (proposal_payload(title=" "), "VALIDATION_ERROR"),
         (proposal_payload(content=" "), "VALIDATION_ERROR"),
