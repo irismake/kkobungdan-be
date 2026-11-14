@@ -33,3 +33,4 @@
 ## 결정 사항
 
 - 실제 테스트 DB 이름은 `docker-compose.test.yml`과 같은 `orderrun_test`다. `tests/conftest.py`가 `DB_NAME` 뒤에 `_test`를 붙이므로 환경 변수는 `DB_NAME=orderrun`으로 준다. (AGENTS.md, `verify.sh`, `test.yml` 반영. 첫 CI에서 `orderrun_test_test` 접속 실패로 확인)
+- PR 자동 검증 첫 실행에서 드러난 기존 실패 `test_create_proposal_validation_errors`(TD-010)는 테스트에 정산 계좌를 준비하는 방식으로 해결하고 트래커에서 제거했다. 서비스의 검사 순서(정산 계좌 → 입력값)는 바꾸지 않았다.
