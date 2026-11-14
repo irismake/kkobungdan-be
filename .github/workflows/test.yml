@@ -38,7 +38,8 @@ jobs:
       DB_PORT: 3307
       DB_USERNAME: orderrun_user
       DB_PASSWORD: orderrun_pass
-      DB_NAME: orderrun_test
+      # tests/conftest.py가 `_test`를 붙여 orderrun_test DB에 접속한다.
+      DB_NAME: orderrun
 
     steps:
       - name: Checkout code

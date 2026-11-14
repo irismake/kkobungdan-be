@@ -32,4 +32,4 @@
 
 ## 결정 사항
 
-- 테스트 DB 이름은 `docker-compose.test.yml`과 같은 `orderrun_test`로 통일한다. (AGENTS.md, `verify.sh`, `test.yml` 반영)
+- 실제 테스트 DB 이름은 `docker-compose.test.yml`과 같은 `orderrun_test`다. `tests/conftest.py`가 `DB_NAME` 뒤에 `_test`를 붙이므로 환경 변수는 `DB_NAME=orderrun`으로 준다. (AGENTS.md, `verify.sh`, `test.yml` 반영. 첫 CI에서 `orderrun_test_test` 접속 실패로 확인)

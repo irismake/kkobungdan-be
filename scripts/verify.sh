@@ -13,11 +13,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # AGENTS.md "테스트 실행 규칙"의 테스트 DB 설정. 이미 지정된 값이 있으면 그대로 쓴다.
+# DB_NAME에는 접미사 없는 이름을 준다. tests/conftest.py가 `_test`를 붙여 실제 DB(orderrun_test)에 접속한다.
 export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-3307}"
 export DB_USERNAME="${DB_USERNAME:-orderrun_user}"
 export DB_PASSWORD="${DB_PASSWORD:-orderrun_pass}"
-export DB_NAME="${DB_NAME:-orderrun_test}"
+export DB_NAME="${DB_NAME:-orderrun}"
 
 PYTHON="${PYTHON:-$(command -v python || command -v python3)}"
 
