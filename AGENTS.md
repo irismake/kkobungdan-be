@@ -38,6 +38,28 @@
 - 코드나 설계로부터 파생된 산출물은 `docs/generated/`에 둔다.
 - 외부 도구, 플랫폼, 참고 자료 메모는 `docs/references/`에 둔다.
 
+## TDD 개발 규칙
+
+모든 기능 개발과 동작 변경은 문서 → 실패하는 테스트(Red) → 구현(Green) → 정리(Refactor) → 검증 순서로 진행한다. 세부 규칙은 작성 중이다.
+
+### 문서 위치
+- [`docs/design-docs/tdd-workflow.md`](./docs/design-docs/tdd-workflow.md): TDD 흐름과 문서·테스트 연결 규칙
+- [`docs/references/testing-guidelines.md`](./docs/references/testing-guidelines.md): 테스트 종류, 파일명, 검증 규칙
+- `docs/product-specs/*.md`: 기능별 요구사항과 테스트 시나리오
+- `tests/`: 단위 테스트(`test_{module}.py`)와 통합 테스트(`test_{domain}_integration.py`)
+- [`scripts/verify.sh`](./scripts/verify.sh): 테스트·정적 검사 자동 실행
+- [`.github/workflows/test.yml`](./.github/workflows/test.yml): PR 생성 시 자동 검증
+
+### 규칙
+- 요구사항(`{DOMAIN}-REQ-*`)과 테스트 시나리오(`{DOMAIN}-TS-*`)를 먼저 스펙 문서에 적는다.
+- 시나리오마다 실패하는 테스트를 먼저 작성하고 실패를 확인한 뒤 구현한다.
+- 완료 전 `scripts/verify.sh`가 통과해야 한다.
+- TODO: 추가 규칙
+
+### 채팅 (첫 적용 기능)
+- [`docs/product-specs/chat-requirements.md`](./docs/product-specs/chat-requirements.md): 채팅 요구사항과 테스트 시나리오
+- [`docs/design-docs/chat-architecture.md`](./docs/design-docs/chat-architecture.md): 채팅 서버 구성과 의존성 규칙
+
 ## 마이그레이션 규칙
 
 - Alembic revision ID는 현재 저장소처럼 설명형 이름을 사용할 수 있다.
@@ -61,7 +83,7 @@
 
 - 통합 테스트를 실행할 때는 `docker-compose.test.yml`의 `mysql-test` 서비스를 사용한다.
 - 테스트 DB는 `docker compose -f docker-compose.test.yml up -d mysql-test`로 띄우고, `orderrun-mysql-test`가 `healthy`인지 확인한 뒤 `pytest`를 실행한다.
-- 테스트 실행 env는 compose 설정과 맞춘다: `DB_HOST=127.0.0.1`, `DB_PORT=3307`, `DB_USERNAME=orderrun_user`, `DB_PASSWORD=orderrun_pass`, `DB_NAME=orderrun`.
+- 테스트 실행 env는 compose 설정과 맞춘다: `DB_HOST=127.0.0.1`, `DB_PORT=3307`, `DB_USERNAME=orderrun_user`, `DB_PASSWORD=orderrun_pass`, `DB_NAME=orderrun_test`.
 - 통합 테스트 실패를 로컬 MySQL 인증/스키마 문제로 판단하기 전에 위 테스트 compose 환경으로 재실행한다.
 
 ## 완료 전 확인

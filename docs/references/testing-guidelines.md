@@ -1,5 +1,7 @@
 # 테스트 작성 가이드
 
+> 개발 순서(문서 → 실패하는 테스트 → 구현)는 [`../design-docs/tdd-workflow.md`](../design-docs/tdd-workflow.md)를 따른다.
+
 ## 목적
 
 OrderRun-BE의 테스트는 API 계약, 상태 전이, DB 저장 결과를 신뢰성 있게 검증하는 것을 우선한다.
