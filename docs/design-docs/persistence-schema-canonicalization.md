@@ -17,10 +17,10 @@
 | `user_fcm_tokens` | user | O | 사용자별 FCM 토큰 |
 | `terms_agreements` | terms | O | 사용자별 필수 약관 동의 |
 | `proposals` | bidding/proposal | O | 요청 모집 공고 |
-| `offers` | bidding/offer | O | 러너 지원서와 수행 상태 |
+| `offers` | bidding/offer | O | 꼬붕 지원서와 수행 상태 |
 | `dispute_evidences` | execution/dispute-evidence | O | 분쟁 사유 증빙 |
 | `payments` | settlement | 목표 O / 현재 미구현 | 결제/정산 처리 |
-| `settlement_accounts` | settlement | O | 러너 정산 계좌 |
+| `settlement_accounts` | settlement | O | 꼬붕 정산 계좌 |
 
 관계는 기본적으로 애플리케이션 레벨에서 검증한다. 다만 분쟁이 미션 없이 존재하지 못하게 하는
 `dispute_evidences.mission_id -> missions.id`는 실제 MySQL FK constraint로 보장한다.

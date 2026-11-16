@@ -717,7 +717,7 @@ def test_withdraw_user_blocks_when_user_has_open_proposal(db, factory, proposal_
     [OfferStatus.ACCEPTED, OfferStatus.RUNNER_COMPLETED, OfferStatus.DISPUTED],
 )
 def test_withdraw_user_blocks_when_user_has_open_offer(db, factory, offer_status):
-    user = factory.user(phone="01012340006", name="러너사용자")
+    user = factory.user(phone="01012340006", name="꼬붕사용자")
     orderer = factory.user(phone="01012340007", name="오더사용자")
     proposal = factory.proposal(orderer_id=orderer.id, status=ProposalStatus.CANCELLED)
     offer = factory.offer(proposal_id=proposal.id, runner_id=user.id, status=offer_status)

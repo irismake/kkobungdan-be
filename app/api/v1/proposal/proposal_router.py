@@ -255,8 +255,8 @@ def cancel_proposal(
     "/{proposal_id}/confirm-received",
     response_model=ApiResponse[ProposalDetailResponse],
     status_code=status.HTTP_200_OK,
-    summary="오더러 완료 처리",
-    description="오더러가 완료를 확인하고 요청을 완료 상태로 변경합니다.",
+    summary="행님 완료 처리",
+    description="행님이 완료를 확인하고 요청을 완료 상태로 변경합니다.",
     responses={
         200: success_response_examples(
             {
@@ -288,8 +288,8 @@ def confirm_received(
     "/{proposal_id}/dispute",
     response_model=ApiResponse[ProposalDetailResponse],
     status_code=status.HTTP_200_OK,
-    summary="오더 분쟁 접수",
-    description="오더러가 요청의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
+    summary="행님 분쟁 접수",
+    description="행님이 요청의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
     responses={
         200: success_response(PROPOSAL_DISPUTE_EXAMPLE),
         **error_responses(

@@ -5,16 +5,16 @@
 
 ## ProposalStatus
 
-Proposal은 오더 관점의 모집 및 수행 상태를 추적한다.
+Proposal은 행님 관점의 모집 및 수행 상태를 추적한다.
 
 | 값 | 설명 |
 |----|------|
 | HOLDING | 입금 확인 대기 |
 | POSTED | 모집 중 |
-| OFFERED | 제안 도착 |
+| OFFERED | 지원 도착 |
 | MATCHED | Offer 수락으로 수행 건이 확정된 상태 |
-| ORDER_COMPLETED | 오더러가 완료 확인을 마친 상태 |
-| ALL_COMPLETED | 러너와 오더러가 모두 완료 확인을 마친 상태 |
+| ORDER_COMPLETED | 행님이 완료 확인을 마친 상태 |
+| ALL_COMPLETED | 꼬붕과 행님이 모두 완료 확인을 마친 상태 |
 | DISPUTED | 분쟁 접수 |
 | REFUND_PENDING | 취소가 확정되어 행님 환불을 기다리는 상태 |
 | REFUNDED | 행님 환불이 완료된 상태 |
@@ -28,9 +28,9 @@ Proposal은 오더 관점의 모집 및 수행 상태를 추적한다.
 | `HOLDING -> POSTED` | 입금 또는 관리자 확인으로 모집이 공개될 때 |
 | `POSTED -> OFFERED` | 첫 Offer가 생성될 때 |
 | `OFFERED -> MATCHED` | 오더가 Offer 하나를 수락할 때 |
-| `MATCHED -> ORDER_COMPLETED` | 오더러가 Proposal에서 완료를 확인할 때 |
-| `ORDER_COMPLETED + Offer RUNNER_COMPLETED -> ALL_COMPLETED` | 러너와 오더러 완료가 모두 접수될 때 |
-| `MATCHED/ORDER_COMPLETED -> DISPUTED` | 오더 또는 러너가 분쟁을 접수할 때 |
+| `MATCHED -> ORDER_COMPLETED` | 행님이 Proposal에서 완료를 확인할 때 |
+| `ORDER_COMPLETED + Offer RUNNER_COMPLETED -> ALL_COMPLETED` | 꼬붕과 행님 완료가 모두 접수될 때 |
+| `MATCHED/ORDER_COMPLETED -> DISPUTED` | 행님 또는 꼬붕이 분쟁을 접수할 때 |
 | `DISPUTED -> ALL_COMPLETED` | 행님 책임으로 분쟁이 종결되어 꼬붕 지급 대상이 될 때 |
 | `DISPUTED -> REFUND_PENDING` | 꼬붕 책임으로 분쟁이 종결되어 행님 환불 대상이 될 때 |
 | `POSTED/OFFERED -> REPORTED` | 관리자가 게시글 신고를 승인할 때 |
@@ -46,30 +46,30 @@ Proposal은 오더 관점의 모집 및 수행 상태를 추적한다.
 
 ## OfferStatus
 
-Offer는 러너 관점의 제안 및 수행 상태를 추적한다.
+Offer는 꼬붕 관점의 지원 및 수행 상태를 추적한다.
 
 | 값 | 설명 |
 |----|------|
 | WAITING | 수락 대기 |
 | ACCEPTED | 수락되어 수행 건 기준이 된 상태 |
-| RUNNER_COMPLETED | 러너가 완료와 증빙 업로드를 마친 상태 |
-| ALL_COMPLETED | 러너와 오더러가 모두 완료 확인을 마친 상태 |
+| RUNNER_COMPLETED | 꼬붕이 완료와 증빙 업로드를 마친 상태 |
+| ALL_COMPLETED | 꼬붕과 행님이 모두 완료 확인을 마친 상태 |
 | DISPUTED | 분쟁 접수 |
 | REJECTED | 거절됨 |
-| CANCELLED | 러너가 수락 전 취소했거나, 수행 중 분쟁·관리자 취소로 종결된 상태 |
+| CANCELLED | 꼬붕이 수락 전 취소했거나, 수행 중 분쟁·관리자 취소로 종결된 상태 |
 
 ### Offer 상태 전이
 
 | 전이 | 발생 시점 |
 |------|-----------|
 | `WAITING -> ACCEPTED` | 오더가 해당 Offer를 수락할 때 |
-| `ACCEPTED -> RUNNER_COMPLETED` | 러너가 Offer에서 완료를 등록할 때 |
-| `RUNNER_COMPLETED + Proposal ORDER_COMPLETED -> ALL_COMPLETED` | 러너와 오더러 완료가 모두 접수될 때 |
-| `ACCEPTED/RUNNER_COMPLETED -> DISPUTED` | 오더 또는 러너가 분쟁을 접수할 때 |
+| `ACCEPTED -> RUNNER_COMPLETED` | 꼬붕이 Offer에서 완료를 등록할 때 |
+| `RUNNER_COMPLETED + Proposal ORDER_COMPLETED -> ALL_COMPLETED` | 꼬붕과 행님 완료가 모두 접수될 때 |
+| `ACCEPTED/RUNNER_COMPLETED -> DISPUTED` | 행님 또는 꼬붕이 분쟁을 접수할 때 |
 | `DISPUTED -> ALL_COMPLETED` | 행님 책임으로 분쟁이 종결될 때 |
 | `DISPUTED -> CANCELLED` | 꼬붕 책임으로 분쟁이 종결될 때 |
 | `WAITING -> REJECTED` | 같은 Proposal의 다른 Offer가 수락되거나 Proposal 취소로 대기 Offer가 정리될 때 |
-| `WAITING -> CANCELLED` | 러너가 수락 전 Offer를 취소할 때 |
+| `WAITING -> CANCELLED` | 꼬붕이 수락 전 Offer를 취소할 때 |
 | `ACCEPTED/RUNNER_COMPLETED/DISPUTED -> CANCELLED` | 관리자가 Proposal을 취소해 수행 중인 Offer가 함께 종결될 때 |
 
 ## DisputeEvidence
@@ -172,7 +172,7 @@ Refund는 Proposal의 전액 환불 처리 정본이다. 매칭 전 취소는 Mi
 - Proposal은 모집 가능 상태에서 Offer를 받을 수 있고, Offer 수락 후 `MATCHED`가 된다.
 - Offer 수락 시 선택된 Offer는 `ACCEPTED`, 같은 Proposal의 다른 대기 Offer는 `REJECTED`가 된다.
 - 수락된 Offer ID가 매칭 이후 수행 건의 기준 식별자다.
-- 매칭 이후 오더 관점 진행 상태는 Proposal, 러너 관점 진행 상태는 Offer에서 추적한다.
+- 매칭 이후 행님 관점 진행 상태는 Proposal, 꼬붕 관점 진행 상태는 Offer에서 추적한다.
 - 분쟁 사유 및 선택한 분쟁 설문 질문 ID는 DisputeEvidence에 기록한다. 신고·탈퇴와 같이 사유 선택은 필수이고, `requires_detail`이 `true`인 사유(기타)를 고를 때만 상세 사유가 필수다.
 - 공개 모집 상태의 Proposal은 다른 사용자가 신고할 수 있으며, 승인된 신고는 Proposal을 `REPORTED`로 전환하고 대기 Offer를 거절한다.
 - 입금 확인 대기(`HOLDING`) Proposal은 `created_at` 기준 24시간이 지나면 자동으로 `CANCELLED`가 된다.

@@ -24,7 +24,7 @@ def _names(db: Session, event: MissionDisputedEvent | MissionCompletedEvent) -> 
 
 
 def _subject(event: MissionDisputedEvent | MissionCompletedEvent) -> str:
-    return f"미션 #{event.mission_id} · 요청 #{event.proposal_id} «{event.proposal_title}»"
+    return f"임무 #{event.mission_id} · 요청 #{event.proposal_id} «{event.proposal_title}»"
 
 
 def on_mission_disputed(event: MissionDisputedEvent, db: Session) -> None:
@@ -44,7 +44,7 @@ def on_mission_disputed(event: MissionDisputedEvent, db: Session) -> None:
 def on_mission_completed(event: MissionCompletedEvent, db: Session) -> None:
     _, runner_name = _names(db, event)
     track_admin_alert(db, AdminAlert(
-        headline="💰 미션이 완료됐어요 — 수행비 입금이 필요합니다",
+        headline="💰 임무가 완료됐어요 — 수행비 입금이 필요합니다",
         lines=[
             _subject(event),
             f"꼬붕 {runner_name} · 입금 금액 {_fee(event.errand_fee)}",

@@ -105,7 +105,7 @@ def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, d
 
 
 def test_create_offer_requires_runner_settlement_account(client, db, factory, sample_user):
-    runner = factory.user("01077770034", name="계좌 없는 러너")
+    runner = factory.user("01077770034", name="계좌 없는 꼬붕")
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
     response = client.post(
@@ -505,7 +505,7 @@ def test_accept_offer_creates_selected_and_rejected_runner_notifications(client,
     orderer_notification = notification_for(
         db, sample_user.id, NotificationType.PROPOSAL_MATCHED, selected.id
     )
-    assert orderer_notification.title == "미션이 시작됐어요! 🏃"
+    assert orderer_notification.title == "임무가 시작됐어요! 🏃"
     assert orderer_notification.status == NotificationStatus.PENDING
     assert json.loads(orderer_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
     assert (
@@ -668,6 +668,8 @@ def test_complete_delivery_creates_meeting_confirmed_notification_for_orderer(cl
 
     assert response.status_code == 200
     notification = notification_for(db, sample_user.id, NotificationType.MEETING_CONFIRMED, offer.id)
+    assert notification.title == "꼬붕이 임무를 완료했어요! 🤝"
+    assert notification.body == "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요."
     assert notification.status == NotificationStatus.PENDING
     assert notification.related_entity_type == "offer"
     assert json.loads(notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
@@ -845,7 +847,7 @@ def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory
 
     wrong_target = client.post(
         f"/v1/offer/{offer.id}/dispute",
-        json={"reasonQuestionId": order_question.id, "detailReason": "오더 질문은 불가"},
+        json={"reasonQuestionId": order_question.id, "detailReason": "행님 질문은 불가"},
         headers=factory.headers_for(runner),
     )
     assert wrong_target.status_code == 400

@@ -7,9 +7,9 @@
 
 - 결제 확인은 request body 없이 `HOLDING` Proposal을 공개 상태로 전환하고 오픈채팅방 링크를 저장한다.
 - 결제 확인은 `HOLDING`이 아닌 Proposal과 형식이 잘못된 오픈채팅방 링크를 거부한다.
-- 결제 확인은 요청자에게 알림을 생성한다.
+- 결제 확인은 행님에게 알림을 생성한다.
 - 입금 확인 대기 Proposal은 생성 후 24시간이 지나면 스케줄러에 의해 `CANCELLED`로 전환된다.
-- 미입금 자동 취소 시 요청자에게 `PROPOSAL_CANCELLED` 알림이 생성되고, 알림 비활성 사용자는 `SKIPPED`로 저장된다.
+- 미입금 자동 취소 시 행님에게 `PROPOSAL_CANCELLED` 알림이 생성되고, 알림 비활성 사용자는 `SKIPPED`로 저장된다.
 
 ## 관리자 웹 처리 (`test_admin_web_api_integration.py`)
 

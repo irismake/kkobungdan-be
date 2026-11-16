@@ -44,7 +44,7 @@ WITHDRAWAL_TERMINAL_REFUND_STATUSES = {
     RefundStatus.COMPLETED,
     RefundStatus.VOIDED,
 }
-# 돈이 개입된 적 없는 활동만 탈퇴 트랜잭션 안에서 종결시킨다. 러너의 지원은 입금과 무관하다.
+# 돈이 개입된 적 없는 활동만 탈퇴 트랜잭션 안에서 종결시킨다. 꼬붕의 지원은 입금과 무관하다.
 # HOLDING Proposal은 입금 여부를 알 수 없어 여기 들어가지 않는다. 자동 취소하면 REVIEW 환불을
 # 남긴 채 계좌를 지우게 되고, 뒤늦게 입금이 확인돼도 보낼 곳이 없다.
 WITHDRAWAL_AUTO_CANCEL_OFFER_STATUSES = {OfferStatus.WAITING}

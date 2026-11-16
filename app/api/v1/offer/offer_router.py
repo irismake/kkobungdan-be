@@ -73,8 +73,8 @@ class OfferOwnerSearchRequest:
     "",
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="러너 지원 등록",
-    description="정산 계좌가 등록된 러너가 요청에 수행 지원을 등록합니다.",
+    summary="꼬붕 지원 등록",
+    description="정산 계좌가 등록된 꼬붕이 요청에 수행 지원을 등록합니다.",
     responses={
         201: success_response(OFFER_CREATE_EXAMPLE),
         **error_responses(
@@ -104,7 +104,7 @@ def create_offer(
     response_model=ApiResponse[PageResponse[OfferResponse]],
     status_code=status.HTTP_200_OK,
     summary="내 지원 목록 조회",
-    description="현재 러너가 등록한 지원 목록을 상태와 페이지 조건으로 조회합니다.",
+    description="현재 꼬붕이 등록한 지원 목록을 상태와 페이지 조건으로 조회합니다.",
     responses={
         200: success_response_examples(OFFER_PAGE_EXAMPLES),
         **error_responses(AppError.INVALID_TOKEN, AppError.VALIDATION_ERROR),
@@ -175,7 +175,7 @@ def get_offer(
     response_model=ApiResponse[OfferAcceptResponse],
     status_code=status.HTTP_201_CREATED,
     summary="지원 수락",
-    description="오더러가 지원을 수락하고 요청/지원 상태를 매칭 상태로 전환합니다.",
+    description="행님이 지원을 수락하고 요청/지원 상태를 매칭 상태로 전환합니다.",
     responses={
         201: success_response(OFFER_ACCEPT_EXAMPLE),
         **error_responses(
@@ -203,8 +203,8 @@ def accept_offer(
     "/{offer_id}/complete-delivery",
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
-    summary="러너 완료 처리",
-    description="러너가 지원을 완료 상태로 변경합니다.",
+    summary="꼬붕 완료 처리",
+    description="꼬붕이 지원을 완료 상태로 변경합니다.",
     responses={
         200: success_response_examples(OFFER_COMPLETE_DELIVERY_EXAMPLES),
         **error_responses(
@@ -235,8 +235,8 @@ def complete_delivery(
     "/{offer_id}/dispute",
     response_model=ApiResponse[OfferResponse],
     status_code=status.HTTP_200_OK,
-    summary="러너 분쟁 접수",
-    description="러너가 수락된 지원의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
+    summary="꼬붕 분쟁 접수",
+    description="꼬붕이 수락된 지원의 분쟁을 접수합니다. 사유(`reasonQuestionId`)는 필수이며, 그 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유(`detailReason`)도 필수입니다.",
     responses={
         200: success_response(OFFER_DISPUTE_EXAMPLE),
         **error_responses(
@@ -270,7 +270,7 @@ def raise_offer_dispute(
     "/{offer_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="지원 취소",
-    description="현재 러너가 등록한 지원을 취소합니다.",
+    description="현재 꼬붕이 등록한 지원을 취소합니다.",
     responses={
         204: no_content_response("지원 취소 성공"),
         **error_responses(

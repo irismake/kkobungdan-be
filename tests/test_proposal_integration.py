@@ -484,6 +484,8 @@ def test_confirm_received_creates_meeting_confirmed_notification_for_runner(clie
 
     assert response.status_code == 200
     notification = notification_for(db, runner.id, NotificationType.MEETING_CONFIRMED, offer.id)
+    assert notification.title == "행님이 임무 완료를 확인했어요! 🤝"
+    assert notification.body == "행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!"
     assert notification.status == NotificationStatus.PENDING
     assert notification.related_entity_type == "offer"
     assert json.loads(notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
@@ -546,6 +548,9 @@ def test_confirm_received_after_runner_completion_creates_execution_completed_no
     assert notification_count(db, runner.id, NotificationType.MEETING_CONFIRMED, offer.id) == 0
     assert orderer_completed_notification.status == NotificationStatus.PENDING
     assert runner_completed_notification.status == NotificationStatus.PENDING
+    for completed_notification in (orderer_completed_notification, runner_completed_notification):
+        assert completed_notification.title == "임무 수행 완료! 수고하셨어요 🎊"
+        assert completed_notification.body == "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!"
     assert json.loads(orderer_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
     assert json.loads(runner_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
 
@@ -614,7 +619,7 @@ def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, fact
 
     wrong_target = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"reasonQuestionId": runner_question.id, "detailReason": "러너 질문은 불가"},
+        json={"reasonQuestionId": runner_question.id, "detailReason": "꼬붕 질문은 불가"},
         headers=auth_headers,
     )
     assert wrong_target.status_code == 400

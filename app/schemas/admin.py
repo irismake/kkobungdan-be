@@ -142,7 +142,7 @@ class AdminDisputeResolveRequest(BaseModel):
 
     outcome: MissionResolution = Field(
         ...,
-        description="판정 결과. COMPLETED는 미션 완료(꼬붕 수행비 지급 대상), FAILED는 미션 실패(행님 환불 대상)다.",
+        description="판정 결과. COMPLETED는 임무 완료(꼬붕 수행비 지급 대상), FAILED는 임무 실패(행님 환불 대상)다.",
     )
     admin_note: str | None = Field(None, max_length=500, validation_alias="adminNote", description="관리자 메모")
     admin_id: str | None = Field(None, max_length=36, validation_alias="adminId", description="처리한 관리자 식별자")
@@ -396,7 +396,7 @@ class AdminUserSummaryResponse(BaseModel):
     mission_count: int = Field(
         ...,
         serialization_alias="missionCount",
-        description="임무 수행 횟수. 성공 완료한 러너 지원 수(users.level)와 같은 값이다.",
+        description="임무 수행 횟수. 성공 완료한 꼬붕 지원 수(users.level)와 같은 값이다.",
     )
 
     model_config = ConfigDict(populate_by_name=True)

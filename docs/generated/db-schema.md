@@ -31,7 +31,7 @@ native ENUM으로 남아 있던 6개 컬럼은 `0029_replace_mysql_enums_with_va
 | `user_withdrawals` | user | O | `docs/domains/user-auth/withdrawal-policy.md` | 회원 탈퇴 사유 선택 이력 |
 | `terms_agreements` | terms | O | `docs/exec-plans/completed/terms-agreement/model.md` | 사용자별 필수 약관 동의 |
 | `proposals` | bidding/proposal | O | `docs/exec-plans/completed/proposal/model.md` | 심부름 모집 공고 |
-| `offers` | bidding/offer | O | `docs/domains/offer/README.md` | 러너 지원서 |
+| `offers` | bidding/offer | O | `docs/domains/offer/README.md` | 꼬붕 지원서 |
 | `missions` | mission | O | `docs/product-specs/mission.md` | 수락된 지원의 수행 단위. 관리자 웹 전용 |
 | `refunds` | refund | O | `docs/design-docs/refund-lifecycle.md` | 입금 확인된 요청의 환불 처리 정본 |
 | `dispute_evidences` | execution/dispute-evidence | O | `docs/domain.md` | 분쟁 사유 증빙 |
@@ -39,7 +39,7 @@ native ENUM으로 남아 있던 6개 컬럼은 `0029_replace_mysql_enums_with_va
 | `proposal_report_reason_questions` | proposal-report | O | `docs/product-specs/proposal-reporting.md` | 게시글 신고 사유 마스터 |
 | `proposal_reports` | proposal-report | O | `docs/product-specs/proposal-reporting.md` | 사용자 게시글 신고 및 관리자 검토 이력 |
 | `payments` | settlement | 목표 O / 현재 미구현 | 이 문서 | 결제/정산 처리 |
-| `settlement_accounts` | settlement | O | 이 문서 | 러너 정산 계좌 |
+| `settlement_accounts` | settlement | O | 이 문서 | 꼬붕 정산 계좌 |
 
 ## 관계 요약
 
@@ -87,7 +87,7 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `phone_verified_at` | `datetime(6)` | YES |  | 전화번호 인증 완료 시각 |
 | `last_login_at` | `datetime(6)` | YES |  | 마지막 로그인 시각 |
 | `alarm_enabled` | `boolean` | YES |  | 알림 수신 동의 여부 |
-| `level` | `integer` | NO |  | 성공 완료한 러너 Offer 수 기반 레벨 |
+| `level` | `integer` | NO |  | 성공 완료한 꼬붕 Offer 수 기반 레벨 |
 | `is_admin` | `boolean` | NO |  | 관리자 웹 전용 계정 여부. 앱 사용자는 항상 거짓 |
 | `admin_username` | `varchar(50)` | YES | UNIQUE `uk_users_admin_username` | 관리자 로그인 아이디. 관리자 행에만 값이 있다 |
 | `admin_login_failed_count` | `int` | NO |  | 관리자 로그인 연속 실패 횟수. 성공하면 0으로 되돌린다 |
@@ -214,8 +214,8 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `status` | `varchar(20)` | NO |  | `HOLDING`, `POSTED`, `OFFERED`, `MATCHED`, `ORDER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REFUND_PENDING`, `REFUNDED`, `REPORTED`, `CANCELLED` |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `matched_at` | `datetime(6)` | YES |  | Offer 수락으로 매칭된 시각 |
-| `runner_confirmed_at` | `datetime(6)` | YES |  | 러너 완료 확인 시각 |
-| `orderer_confirmed_at` | `datetime(6)` | YES |  | 오더러 완료 확인 시각 |
+| `runner_confirmed_at` | `datetime(6)` | YES |  | 꼬붕 완료 확인 시각 |
+| `orderer_confirmed_at` | `datetime(6)` | YES |  | 행님 완료 확인 시각 |
 | `settled_at` | `datetime(6)` | YES |  | legacy 호환 컬럼. 현재 API 미노출 |
 | `disputed_at` | `datetime(6)` | YES |  | 분쟁 접수 시각 |
 | `resolved_at` | `datetime(6)` | YES |  | 분쟁 해결 시각 |
@@ -229,13 +229,13 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 |------|------|------|-----------|------|
 | `id` | `bigint` | NO | PK, auto increment | Offer ID |
 | `proposal_id` | `bigint` | NO | UNIQUE `uk_proposal_runner` 일부 | 대상 Proposal ID |
-| `runner_id` | `varchar(36)` | NO | UNIQUE `uk_proposal_runner` 일부, INDEX `idx_offers_runner_id` | 지원자 사용자 ID |
+| `runner_id` | `varchar(36)` | NO | UNIQUE `uk_proposal_runner` 일부, INDEX `idx_offers_runner_id` | 꼬붕 사용자 ID |
 | `status` | `varchar(20)` | NO |  | `WAITING`, `ACCEPTED`, `RUNNER_COMPLETED`, `ALL_COMPLETED`, `DISPUTED`, `REJECTED`, `CANCELLED` |
 | `open_chat_url` | `varchar(500)` | YES |  | 미사용. 링크는 `proposals.open_chat_url`이 정본이다 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `accepted_at` | `datetime(6)` | YES |  | 오더가 Offer를 수락한 시각 |
-| `runner_confirmed_at` | `datetime(6)` | YES |  | 러너 완료 확인 시각 |
-| `orderer_confirmed_at` | `datetime(6)` | YES |  | 오더러 완료 확인 시각 |
+| `runner_confirmed_at` | `datetime(6)` | YES |  | 꼬붕 완료 확인 시각 |
+| `orderer_confirmed_at` | `datetime(6)` | YES |  | 행님 완료 확인 시각 |
 | `settled_at` | `datetime(6)` | YES |  | legacy 호환 컬럼. 현재 API 미노출 |
 | `disputed_at` | `datetime(6)` | YES |  | 분쟁 접수 시각 |
 | `resolved_at` | `datetime(6)` | YES |  | 분쟁 해결 시각 |
@@ -384,12 +384,12 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 |------|------|------|-----------|------|
 | `id` | `bigint` | NO | PK, auto increment | Payment ID |
 | `offer_id` | `bigint` | NO | UNIQUE `uk_offer_id` | 정산 대상 Offer ID |
-| `orderer_id` | `varchar(36)` | NO | INDEX `idx_payments_orderer_id` | 요청자 사용자 ID 스냅샷 |
-| `runner_id` | `varchar(36)` | NO | INDEX `idx_payments_runner_id` | 수행자 사용자 ID 스냅샷 |
+| `orderer_id` | `varchar(36)` | NO | INDEX `idx_payments_orderer_id` | 행님 사용자 ID 스냅샷 |
+| `runner_id` | `varchar(36)` | NO | INDEX `idx_payments_runner_id` | 꼬붕 사용자 ID 스냅샷 |
 | `run_fee` | `decimal(10,2)` | NO |  | 수행 수수료 |
 | `item_price` | `decimal(10,2)` | NO |  | 물품 금액 |
 | `total_amount` | `decimal(10,2)` | NO |  | 총 결제 금액 |
-| `settlement_amount` | `decimal(10,2)` | NO |  | 러너 정산 금액 |
+| `settlement_amount` | `decimal(10,2)` | NO |  | 꼬붕 정산 금액 |
 | `pg_transaction_id` | `varchar(100)` | YES |  | PG 거래 ID |
 | `pg_response` | `text` | YES |  | PG 응답 원문 |
 | `status` | `varchar(20)` | NO |  | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `REFUNDED` |

@@ -148,7 +148,7 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | createdAt | string | 가입 시각 |
 | lastLoginAt | string, null | 마지막 로그인 시각 |
 | alarmEnabled | boolean | 알람 수신 동의 여부 |
-| level | number | 성공 완료한 러너 Offer 수 기반 레벨 |
+| level | number | 성공 완료한 꼬붕 Offer 수 기반 레벨 |
 
 ### UserWithdrawalReasonQuestionResponse
 
@@ -192,7 +192,7 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | title | string | 공고 제목 |
 | content | string | 요청 상세 내용 |
 | deadline | string | 수행 마감 시각. ISO-8601 Instant |
-| errandFee | number | 러너에게 지급할 심부름비 |
+| errandFee | number | 꼬붕에게 지급할 심부름비 |
 | status | string | Proposal 상태. `ProposalStatus` 참조 |
 
 ### AdminProposalResponse
@@ -206,7 +206,7 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | title | string | 공고 제목 |
 | content | string | 요청 상세 내용 |
 | deadline | string | 수행 마감 시각. ISO-8601 Instant |
-| errandFee | number | 러너에게 지급할 심부름비 |
+| errandFee | number | 꼬붕에게 지급할 심부름비 |
 | status | string | Proposal 상태. `ProposalStatus` 참조 |
 
 ### ProposalOwnResponse
@@ -215,8 +215,8 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 |------|------|------|
 | id | number | Proposal ID |
 | ordererId | string | 작성자 사용자 ID |
-| ordererName | string, null | 작성자/오더러 사용자 이름 |
-| ordererLevel | number | 작성자/오더러 사용자 레벨 |
+| ordererName | string, null | 행님 사용자 이름 |
+| ordererLevel | number | 행님 사용자 레벨 |
 | title | string | 공고 제목 |
 | content | string | 요청 상세 내용 |
 | deadline | string | 수행 마감 시각 |
@@ -233,9 +233,9 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 |------|------|------|
 | id | number | Offer ID |
 | proposalId | number | 대상 Proposal ID |
-| runnerId | string | Offer 제출 러너 ID |
-| runnerName | string, null | Offer 제출 러너 이름 |
-| runnerLevel | number | Offer 제출 러너 레벨 |
+| runnerId | string | Offer 제출 꼬붕 ID |
+| runnerName | string, null | Offer 제출 꼬붕 이름 |
+| runnerLevel | number | Offer 제출 꼬붕 레벨 |
 | status | string | Offer 상태 |
 | createdAt | string | Offer 생성 시각 |
 
@@ -245,12 +245,12 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
-| ordererId | string | 작성자/오더러 사용자 ID |
-| ordererName | string, null | 작성자/오더러 사용자 이름 |
-| ordererLevel | number | 작성자/오더러 사용자 레벨 |
+| ordererId | string | 행님 사용자 ID |
+| ordererName | string, null | 행님 사용자 이름 |
+| ordererLevel | number | 행님 사용자 레벨 |
 | matchedAt | string, null | Offer 수락으로 매칭된 시각 |
-| runnerConfirmedAt | string, null | 러너가 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 오더러가 수령/만남 완료를 확인한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | openChatUrl | string, null | 매칭 당사자에게만 반환되는 카카오톡 오픈채팅방 링크 |
@@ -262,16 +262,16 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 |------|------|------|
 | id | number | Offer ID |
 | proposalId | number | 대상 Proposal ID |
-| ordererId | string | 대상 Proposal 작성자/오더러 ID |
-| ordererName | string, null | 대상 Proposal 작성자/오더러 이름 |
-| ordererLevel | number | 대상 Proposal 작성자/오더러 레벨 |
-| runnerId | string | Offer 제출 러너 ID |
-| runnerName | string, null | Offer 제출 러너 이름 |
-| runnerLevel | number | Offer 제출 러너 레벨 |
+| ordererId | string | 대상 Proposal 행님 ID |
+| ordererName | string, null | 대상 Proposal 행님 이름 |
+| ordererLevel | number | 대상 Proposal 행님 레벨 |
+| runnerId | string | Offer 제출 꼬붕 ID |
+| runnerName | string, null | Offer 제출 꼬붕 이름 |
+| runnerLevel | number | Offer 제출 꼬붕 레벨 |
 | status | string | Offer 상태. `OfferStatus` 참조 |
 | acceptedAt | string, null | 오더가 Offer를 수락한 시각 |
-| runnerConfirmedAt | string, null | 러너가 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 오더러가 수령/만남 완료를 확인한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | createdAt | string | Offer 생성 시각 |
@@ -284,16 +284,16 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 |------|------|------|
 | id | number | Offer ID |
 | proposalId | number | 대상 Proposal ID |
-| ordererId | string | 대상 Proposal 작성자/오더러 ID |
-| ordererName | string, null | 대상 Proposal 작성자/오더러 이름 |
-| ordererLevel | number | 대상 Proposal 작성자/오더러 레벨 |
-| runnerId | string | Offer 제출 러너 ID |
-| runnerName | string, null | Offer 제출 러너 이름 |
-| runnerLevel | number | Offer 제출 러너 레벨 |
+| ordererId | string | 대상 Proposal 행님 ID |
+| ordererName | string, null | 대상 Proposal 행님 이름 |
+| ordererLevel | number | 대상 Proposal 행님 레벨 |
+| runnerId | string | Offer 제출 꼬붕 ID |
+| runnerName | string, null | Offer 제출 꼬붕 이름 |
+| runnerLevel | number | Offer 제출 꼬붕 레벨 |
 | status | string | Offer 상태. `OfferStatus` 참조 |
-| acceptedAt | string, null | 오더러가 Offer를 수락한 시각 |
-| runnerConfirmedAt | string, null | 러너가 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 오더러가 수령/만남 완료를 확인한 시각 |
+| acceptedAt | string, null | 행님이 Offer를 수락한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | createdAt | string | Offer 생성 시각 |
@@ -315,12 +315,12 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | proposalStatus | string | 수락 후 Proposal 상태 |
 | acceptedOfferStatus | string | 수락된 Offer 상태 |
 | rejectedOfferCount | number | 자동 거절된 다른 Offer 개수 |
-| ordererId | string | 오더 사용자 ID 스냅샷 |
-| ordererName | string, null | 오더 사용자 이름 |
-| ordererLevel | number | 오더 사용자 레벨 |
-| runnerId | string | 러너 사용자 ID 스냅샷 |
-| runnerName | string, null | 러너 사용자 이름 |
-| runnerLevel | number | 러너 사용자 레벨 |
+| ordererId | string | 행님 사용자 ID 스냅샷 |
+| ordererName | string, null | 행님 사용자 이름 |
+| ordererLevel | number | 행님 사용자 레벨 |
+| runnerId | string | 꼬붕 사용자 ID 스냅샷 |
+| runnerName | string, null | 꼬붕 사용자 이름 |
+| runnerLevel | number | 꼬붕 사용자 레벨 |
 | acceptedAt | string | Offer 수락 시각 |
 
 ### DisputeEvidenceResponse
@@ -474,8 +474,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 요청 게시글 등록 | `POST` | `/v1/proposal` | 필요. 정산·환불 계좌 등록 필수 | `201 Created` | `ProposalResponse` |
 | 요청 게시글 수정 | `PUT` | `/v1/proposal/{id}` | 필요. 작성자만 가능 | `200 OK` | `ProposalResponse` |
 | 요청 게시글 취소 | `POST` | `/v1/proposal/{id}/cancel` | 필요. 작성자만 가능 | `200 OK` | `ProposalResponse` |
-| 오더 수령 확인 | `POST` | `/v1/proposal/{id}/confirm-received` | 필요. 작성자만 가능 | `200 OK` | `ProposalDetailResponse` |
-| 오더 분쟁 접수 | `POST` | `/v1/proposal/{id}/dispute` | 필요. 작성자만 가능 | `200 OK` | `ProposalDetailResponse` |
+| 행님 수령 확인 | `POST` | `/v1/proposal/{id}/confirm-received` | 필요. 작성자만 가능 | `200 OK` | `ProposalDetailResponse` |
+| 행님 분쟁 접수 | `POST` | `/v1/proposal/{id}/dispute` | 필요. 작성자만 가능 | `200 OK` | `ProposalDetailResponse` |
 | 게시글 신고 | `POST` | `/v1/proposal/{id}/reports` | 필요. 작성자 외 사용자만 가능 | `201 Created` | `ProposalReportResponse` |
 
 ### Proposal Report API
@@ -488,14 +488,14 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
-| 오퍼 제출 | `POST` | `/v1/offer` | 필요. 러너 정산 계좌 등록 필수 | `201 Created` | `OfferResponse` |
-| 오퍼 수락 | `POST` | `/v1/offer/{offerId}/accept` | 필요. 연결된 Proposal 작성자만 가능 | `201 Created` | `OfferAcceptResponse` |
-| 오퍼 상세 조회 | `GET` | `/v1/offer/{id}` | 필요 | `200 OK` | `OfferDetailResponse` |
-| Proposal별 오퍼 목록 조회 | `GET` | `/v1/offer?proposalId={id}` | 필요 | `200 OK` | `OfferSummaryResponse[]` |
-| 내 오퍼 목록 조회 | `GET` | `/v1/offer/own` | 필요 | `200 OK` | `PageResponse<OfferSummaryResponse>` |
-| 러너 전달 완료 | `POST` | `/v1/offer/{offerId}/complete-delivery` | 필요. Offer 제출 러너만 가능 | `200 OK` | `OfferResponse` |
-| 러너 분쟁 접수 | `POST` | `/v1/offer/{offerId}/dispute` | 필요. Offer 제출 러너만 가능 | `200 OK` | `OfferResponse` |
-| 오퍼 취소 | `DELETE` | `/v1/offer/{offerId}` | 필요. Offer 제출 러너만 가능 | `204 No Content` | 없음 |
+| 지원 제출 | `POST` | `/v1/offer` | 필요. 꼬붕 정산 계좌 등록 필수 | `201 Created` | `OfferResponse` |
+| 지원 수락 | `POST` | `/v1/offer/{offerId}/accept` | 필요. 연결된 Proposal 작성자만 가능 | `201 Created` | `OfferAcceptResponse` |
+| 지원 상세 조회 | `GET` | `/v1/offer/{id}` | 필요 | `200 OK` | `OfferDetailResponse` |
+| Proposal별 지원 목록 조회 | `GET` | `/v1/offer?proposalId={id}` | 필요 | `200 OK` | `OfferSummaryResponse[]` |
+| 내 지원 목록 조회 | `GET` | `/v1/offer/own` | 필요 | `200 OK` | `PageResponse<OfferSummaryResponse>` |
+| 꼬붕 전달 완료 | `POST` | `/v1/offer/{offerId}/complete-delivery` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
+| 꼬붕 분쟁 접수 | `POST` | `/v1/offer/{offerId}/dispute` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
+| 지원 취소 | `DELETE` | `/v1/offer/{offerId}` | 필요. Offer 제출 꼬붕만 가능 | `204 No Content` | 없음 |
 
 ### Admin Execution API
 
@@ -512,9 +512,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
-| 미션 목록 조회 | `GET` | `/v1/admin/missions?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
-| 미션 상세 조회 | `GET` | `/v1/admin/missions/{missionId}` | 관리자 필요 | `200 OK` | `MissionResponse` |
-| 미션 분쟁 판정 | `POST` | `/v1/admin/missions/{missionId}/resolve` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 임무 목록 조회 | `GET` | `/v1/admin/missions?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
+| 임무 상세 조회 | `GET` | `/v1/admin/missions/{missionId}` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 임무 분쟁 판정 | `POST` | `/v1/admin/missions/{missionId}/resolve` | 관리자 필요 | `200 OK` | `MissionResponse` |
 | 수행비 지급 기록 | `POST` | `/v1/admin/missions/{missionId}/settlement` | 관리자 필요 | `200 OK` | `MissionResponse` |
 | 입금 확인 | `POST` | `/v1/admin/proposal/{proposalId}/confirm-payment` | 관리자 필요 | `200 OK` | `AdminProposalResponse` |
 | 게시글 신고 목록 조회 | `GET` | `/v1/admin/proposal-reports?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminProposalReportResponse>` |
@@ -550,7 +550,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 사용자 목록은 앱 사용자만 반환한다(관리자 콘솔 계정 제외). `AdminUserSummaryResponse`는
 `id`, `name`, `createdAt`(회원 가입일), `missionCount`(임무 수행 횟수)로 이뤄지며 `missionCount`는
-성공 완료한 러너 지원 수(`users.level`)다. 탈퇴한 사용자는 목록에 남고 `name`이 `"탈퇴한 사용자"`가 된다.
+성공 완료한 꼬붕 지원 수(`users.level`)다. 탈퇴한 사용자는 목록에 남고 `name`이 `"탈퇴한 사용자"`가 된다.
 `keyword`는 이름 부분 일치 또는 사용자 ID 완전 일치로 찾는다.
 
 분쟁 판정(`outcome`)은 `COMPLETED` 또는 `FAILED`다. `COMPLETED`면 요청·지원이
@@ -629,7 +629,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
-| targetType | string | O | 질문 대상. 오더 분쟁 접수 전에는 `ORDER`, 러너 분쟁 접수 전에는 `RUNNER` |
+| targetType | string | O | 질문 대상. 행님 분쟁 접수 전에는 `ORDER`, 꼬붕 분쟁 접수 전에는 `RUNNER` |
 
 ### Proposal
 
@@ -751,10 +751,10 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 |----|------|
 | HOLDING | 입금 확인 대기 |
 | POSTED | 모집 중 |
-| OFFERED | 제안 도착 |
+| OFFERED | 지원 도착 |
 | MATCHED | 매칭 완료 |
-| ORDER_COMPLETED | 오더러 완료 확인 |
-| ALL_COMPLETED | 러너와 오더러 모두 완료 |
+| ORDER_COMPLETED | 행님 완료 확인 |
+| ALL_COMPLETED | 꼬붕과 행님 모두 완료 |
 | DISPUTED | 분쟁 접수 |
 | REFUND_PENDING | 환불 대기 |
 | REFUNDED | 환불 완료 |
@@ -767,11 +767,11 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 |----|------|
 | WAITING | 수락 대기 |
 | ACCEPTED | 수락됨 |
-| RUNNER_COMPLETED | 러너 완료 |
-| ALL_COMPLETED | 러너와 오더러 모두 완료 |
+| RUNNER_COMPLETED | 꼬붕 완료 |
+| ALL_COMPLETED | 꼬붕과 행님 모두 완료 |
 | DISPUTED | 분쟁 접수 |
 | REJECTED | 거절됨 |
-| CANCELLED | 취소됨 (러너 취소, 분쟁 실패 판정, 관리자 취소) |
+| CANCELLED | 취소됨 (꼬붕 취소, 분쟁 실패 판정, 관리자 취소) |
 
 ### MissionStatus
 

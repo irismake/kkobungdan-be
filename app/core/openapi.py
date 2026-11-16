@@ -259,7 +259,7 @@ DISPUTE_SURVEY_QUESTIONS_EXAMPLE = {
         {
             "id": 1,
             "targetType": "ORDER",
-            "questionText": "러너의 수행 결과에 어떤 문제가 있었나요?",
+            "questionText": "꼬붕의 수행 결과에 어떤 문제가 있었나요?",
             "displayOrder": 1,
             "requiresDetail": False,
         }
@@ -705,12 +705,12 @@ MISSION_RESOLVED_EXAMPLES = {
             resolvedAt=EXAMPLE_UPDATED_AT,
             resolvedByAdminId=EXAMPLE_USER_ID,
         ),
-        "message": "미션 분쟁이 해결되었습니다.",
+        "message": "임무 분쟁이 해결되었습니다.",
     },
     "failed": {
         "success": True,
         "data": MISSION_STATUS_EXAMPLES["failed"],
-        "message": "미션 분쟁이 해결되었습니다.",
+        "message": "임무 분쟁이 해결되었습니다.",
     },
 }
 MISSION_SETTLEMENT_EXAMPLE = {

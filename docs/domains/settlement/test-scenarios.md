@@ -9,4 +9,4 @@
 - 인증된 사용자는 정산 계좌 등록에 사용할 은행명 목록을 조회할 수 있다.
 - 필수 필드, 형식 validation, 인증 실패를 검증한다.
 - 계좌가 없는 사용자는 Proposal을 생성할 수 없고 `409 SETTLEMENT_ACCOUNT_REQUIRED`를 받는다.
-- 계좌가 없는 러너는 Offer를 생성할 수 없고 `409 SETTLEMENT_ACCOUNT_REQUIRED`를 받는다.
+- 계좌가 없는 꼬붕은 Offer를 생성할 수 없고 `409 SETTLEMENT_ACCOUNT_REQUIRED`를 받는다.
