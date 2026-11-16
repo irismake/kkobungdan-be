@@ -259,7 +259,7 @@ DISPUTE_SURVEY_QUESTIONS_EXAMPLE = {
         {
             "id": 1,
             "targetType": "ORDER",
-            "questionText": "러너의 수행 결과에 어떤 문제가 있었나요?",
+            "questionText": "꼬붕의 수행 결과에 어떤 문제가 있었나요?",
             "displayOrder": 1,
             "requiresDetail": False,
         }

@@ -143,7 +143,7 @@ def reject_proposal_report(report_id: int, db: Session = Depends(get_db)) -> Api
     response_model=ApiResponse[AdminProposalResponse],
     status_code=status.HTTP_200_OK,
     summary="입금 확인 (관리자 전용)",
-    description="관리자가 오더러의 입금을 확인하여 요청을 POSTED 상태로 전환합니다.",
+    description="관리자가 행님의 입금을 확인하여 요청을 POSTED 상태로 전환합니다.",
     responses={
         200: success_response({"success": True, "data": PROPOSAL_EXAMPLE, "message": None}),
         **error_responses(
@@ -683,7 +683,7 @@ def reject_admin_payout(
     summary="사용자 목록 조회 (관리자 전용)",
     description=(
         "가입한 앱 사용자를 최신 가입순으로 조회합니다. 관리자 콘솔 계정은 목록에 포함하지 않습니다. "
-        "`missionCount`는 성공 완료한 러너 지원 수입니다."
+        "`missionCount`는 성공 완료한 꼬붕 지원 수입니다."
     ),
     responses={200: success_response(ADMIN_USER_PAGE_EXAMPLE)},
 )

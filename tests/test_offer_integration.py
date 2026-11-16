@@ -105,7 +105,7 @@ def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, d
 
 
 def test_create_offer_requires_runner_settlement_account(client, db, factory, sample_user):
-    runner = factory.user("01077770034", name="계좌 없는 러너")
+    runner = factory.user("01077770034", name="계좌 없는 꼬붕")
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
     response = client.post(
@@ -845,7 +845,7 @@ def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory
 
     wrong_target = client.post(
         f"/v1/offer/{offer.id}/dispute",
-        json={"reasonQuestionId": order_question.id, "detailReason": "오더 질문은 불가"},
+        json={"reasonQuestionId": order_question.id, "detailReason": "행님 질문은 불가"},
         headers=factory.headers_for(runner),
     )
     assert wrong_target.status_code == 400

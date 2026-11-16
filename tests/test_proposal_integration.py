@@ -614,7 +614,7 @@ def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, fact
 
     wrong_target = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
-        json={"reasonQuestionId": runner_question.id, "detailReason": "러너 질문은 불가"},
+        json={"reasonQuestionId": runner_question.id, "detailReason": "꼬붕 질문은 불가"},
         headers=auth_headers,
     )
     assert wrong_target.status_code == 400

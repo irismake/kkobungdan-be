@@ -23,9 +23,9 @@ def _question(
 
 
 def test_list_order_dispute_survey_questions_returns_active_questions_in_display_order(client, db, auth_headers):
-    older = _question(DisputeSurveyTargetType.ORDER, "두 번째 오더 질문", 2)
-    first = _question(DisputeSurveyTargetType.ORDER, "첫 번째 오더 질문", 1)
-    runner = _question(DisputeSurveyTargetType.RUNNER, "러너 질문", 1)
+    older = _question(DisputeSurveyTargetType.ORDER, "두 번째 행님 질문", 2)
+    first = _question(DisputeSurveyTargetType.ORDER, "첫 번째 행님 질문", 1)
+    runner = _question(DisputeSurveyTargetType.RUNNER, "꼬붕 질문", 1)
     inactive = _question(DisputeSurveyTargetType.ORDER, "비활성 질문", 3, is_active=False)
     db.add_all([older, first, runner, inactive])
     db.commit()
@@ -36,7 +36,7 @@ def test_list_order_dispute_survey_questions_returns_active_questions_in_display
     body = response.json()
     assert body["success"] is True
     assert body["message"] == "Success"
-    assert [item["questionText"] for item in body["data"]] == ["첫 번째 오더 질문", "두 번째 오더 질문"]
+    assert [item["questionText"] for item in body["data"]] == ["첫 번째 행님 질문", "두 번째 행님 질문"]
     assert [item["displayOrder"] for item in body["data"]] == [1, 2]
     assert {item["targetType"] for item in body["data"]} == {"ORDER"}
 
@@ -44,9 +44,9 @@ def test_list_order_dispute_survey_questions_returns_active_questions_in_display
 def test_list_runner_dispute_survey_questions_returns_runner_questions_only(client, db, auth_headers):
     db.add_all(
         [
-            _question(DisputeSurveyTargetType.ORDER, "오더 질문", 1),
-            _question(DisputeSurveyTargetType.RUNNER, "첫 번째 러너 질문", 1),
-            _question(DisputeSurveyTargetType.RUNNER, "두 번째 러너 질문", 2),
+            _question(DisputeSurveyTargetType.ORDER, "행님 질문", 1),
+            _question(DisputeSurveyTargetType.RUNNER, "첫 번째 꼬붕 질문", 1),
+            _question(DisputeSurveyTargetType.RUNNER, "두 번째 꼬붕 질문", 2),
         ]
     )
     db.commit()
@@ -55,7 +55,7 @@ def test_list_runner_dispute_survey_questions_returns_runner_questions_only(clie
 
     assert response.status_code == 200
     body = response.json()
-    assert [item["questionText"] for item in body["data"]] == ["첫 번째 러너 질문", "두 번째 러너 질문"]
+    assert [item["questionText"] for item in body["data"]] == ["첫 번째 꼬붕 질문", "두 번째 꼬붕 질문"]
     assert {item["targetType"] for item in body["data"]} == {"RUNNER"}
 
 

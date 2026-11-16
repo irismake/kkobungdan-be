@@ -396,7 +396,7 @@ class AdminUserSummaryResponse(BaseModel):
     mission_count: int = Field(
         ...,
         serialization_alias="missionCount",
-        description="임무 수행 횟수. 성공 완료한 러너 지원 수(users.level)와 같은 값이다.",
+        description="임무 수행 횟수. 성공 완료한 꼬붕 지원 수(users.level)와 같은 값이다.",
     )
 
     model_config = ConfigDict(populate_by_name=True)

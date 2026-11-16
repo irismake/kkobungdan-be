@@ -7,7 +7,7 @@ from app.events.base import DomainEvent
 
 @dataclass(frozen=True)
 class MeetingConfirmedByRunnerEvent(DomainEvent):
-    """러너가 완료 처리했을 때 요청자에게 알림."""
+    """꼬붕이 완료 처리했을 때 행님에게 알림."""
 
     offer_id: int
     proposal_id: int
@@ -19,7 +19,7 @@ class MeetingConfirmedByRunnerEvent(DomainEvent):
 
 @dataclass(frozen=True)
 class MeetingConfirmedByOrdererEvent(DomainEvent):
-    """요청자가 완료 확인했을 때 러너에게 알림."""
+    """행님이 완료 확인했을 때 꼬붕에게 알림."""
 
     offer_id: int
     proposal_id: int
@@ -31,7 +31,7 @@ class MeetingConfirmedByOrdererEvent(DomainEvent):
 
 @dataclass(frozen=True)
 class DisputeRaisedByOrdererEvent(DomainEvent):
-    """요청자가 분쟁을 접수했을 때 러너에게 알림."""
+    """행님이 분쟁을 접수했을 때 꼬붕에게 알림."""
 
     offer_id: int
     proposal_id: int
@@ -42,7 +42,7 @@ class DisputeRaisedByOrdererEvent(DomainEvent):
 
 @dataclass(frozen=True)
 class DisputeRaisedByRunnerEvent(DomainEvent):
-    """러너가 분쟁을 접수했을 때 요청자에게 알림."""
+    """꼬붕이 분쟁을 접수했을 때 행님에게 알림."""
 
     offer_id: int
     proposal_id: int
