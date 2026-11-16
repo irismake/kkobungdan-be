@@ -44,7 +44,7 @@ def test_runner_dispute_alerts_admin(client, db, factory, sample_user, admin_ale
     assert len(admin_alerts.sent) == 1
     text = admin_alerts.texts[0]
     assert "분쟁이 접수됐어요" in text
-    assert f"미션 #{mission.id}" in text
+    assert f"임무 #{mission.id}" in text
     assert "홍길동" in text
     assert "5,000원" in text
 
@@ -83,7 +83,7 @@ def test_sync_does_not_realert_for_already_disputed_mission(db, factory, sample_
     assert pop_admin_alerts(db) == []
 
 
-# ------------------------------------------------------------------ 미션 완료
+# ------------------------------------------------------------------ 임무 완료
 
 
 def test_both_side_confirmation_alerts_admin_to_pay(client, db, factory, sample_user, admin_alerts):
@@ -101,7 +101,7 @@ def test_both_side_confirmation_alerts_admin_to_pay(client, db, factory, sample_
     assert len(admin_alerts.sent) == 1
     text = admin_alerts.texts[0]
     assert "수행비 입금이 필요합니다" in text
-    assert f"미션 #{mission.id}" in text
+    assert f"임무 #{mission.id}" in text
     assert "김꼬붕" in text
     assert "5,000원" in text
 
@@ -189,11 +189,11 @@ def test_sender_posts_text_payload_to_webhook():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     sender = SlackAdminAlertSender(webhook_url="https://hooks.slack.test/abc", client=client)
 
-    sender.send(AdminAlert(headline="🚨 분쟁", lines=["미션 #1"]))
+    sender.send(AdminAlert(headline="🚨 분쟁", lines=["임무 #1"]))
 
     assert len(posted) == 1
     assert posted[0]["url"] == "https://hooks.slack.test/abc"
-    assert "미션 #1" in posted[0]["body"]
+    assert "임무 #1" in posted[0]["body"]
 
 
 def test_sender_swallows_failure_and_logs(caplog):

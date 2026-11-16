@@ -199,9 +199,9 @@ def list_pending_payment_proposals(
     "/missions",
     response_model=ApiResponse[PageResponse[MissionResponse]],
     status_code=status.HTTP_200_OK,
-    summary="미션 목록 조회 (관리자 전용)",
+    summary="임무 목록 조회 (관리자 전용)",
     description=(
-        "관리자가 미션을 상태로 필터링해 조회합니다. "
+        "관리자가 임무를 상태로 필터링해 조회합니다. "
         "`status=STARTED&status=DISPUTED`처럼 반복 지정할 수 있습니다."
     ),
     responses={200: success_response_examples(MISSION_PAGE_EXAMPLES)},
@@ -210,7 +210,7 @@ def list_missions(
     mission_statuses: list[MissionStatus] | None = Query(
         None,
         alias="status",
-        description="미션 상태 필터. `status=A&status=B`처럼 반복 지정합니다.",
+        description="임무 상태 필터. `status=A&status=B`처럼 반복 지정합니다.",
     ),
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1, le=100),
@@ -223,8 +223,8 @@ def list_missions(
     "/missions/{mission_id}",
     response_model=ApiResponse[MissionResponse],
     status_code=status.HTTP_200_OK,
-    summary="미션 상세 조회 (관리자 전용)",
-    description="관리자가 미션 한 건의 상태와 지급·환불 여부를 조회합니다.",
+    summary="임무 상세 조회 (관리자 전용)",
+    description="관리자가 임무 한 건의 상태와 지급·환불 여부를 조회합니다.",
     responses={
         200: success_response_examples(MISSION_DETAIL_EXAMPLES),
         **error_responses(AppError.MISSION_NOT_FOUND),
@@ -238,9 +238,9 @@ def get_mission(mission_id: int, db: Session = Depends(get_db)) -> ApiResponse[M
     "/missions/{mission_id}/resolve",
     response_model=ApiResponse[MissionResponse],
     status_code=status.HTTP_200_OK,
-    summary="미션 분쟁 판정 (관리자 전용)",
+    summary="임무 분쟁 판정 (관리자 전용)",
     description=(
-        "관리자가 분쟁 중인 미션을 완료 또는 실패로 판정하고 요청과 지원을 함께 종결합니다. "
+        "관리자가 분쟁 중인 임무를 완료 또는 실패로 판정하고 요청과 지원을 함께 종결합니다. "
         "완료는 꼬붕 수행비 지급 대상, 실패는 행님 환불 대상이 됩니다."
     ),
     responses={
@@ -262,7 +262,7 @@ def resolve_mission(
 ) -> ApiResponse[MissionResponse]:
     mission = MissionService.resolve_dispute(db, mission_id=mission_id, resolution=request.resolution)
     _queue_created_notifications(background_tasks, db)
-    return ApiResponse(success=True, data=mission, message="미션 분쟁이 해결되었습니다.")
+    return ApiResponse(success=True, data=mission, message="임무 분쟁이 해결되었습니다.")
 
 
 @router.post(
@@ -271,7 +271,7 @@ def resolve_mission(
     status_code=status.HTTP_200_OK,
     summary="수행비 지급 기록 (관리자 전용)",
     description=(
-        "관리자가 꼬붕에게 수행비를 이체한 사실을 기록해 미션을 입금 완료로 전환합니다. "
+        "관리자가 꼬붕에게 수행비를 이체한 사실을 기록해 임무를 입금 완료로 전환합니다. "
         "지급액은 요청의 수행비 전액이며 요청 본문으로 받지 않습니다."
     ),
     responses={
@@ -333,7 +333,7 @@ def list_admin_proposals(
     "/proposal/{proposal_id}",
     response_model=ApiResponse[AdminProposalDetailResponse],
     summary="요청 상세 조회 (관리자 전용)",
-    description="관리자가 요청 한 건의 상세와 선택된 지원·미션·입금 계좌 정보를 조회합니다.",
+    description="관리자가 요청 한 건의 상세와 선택된 지원·임무·입금 계좌 정보를 조회합니다.",
     responses={
         200: success_response(ADMIN_PROPOSAL_DETAIL_RESPONSE_EXAMPLE),
         **error_responses(AppError.PROPOSAL_NOT_FOUND),
@@ -349,7 +349,7 @@ def get_admin_proposal(proposal_id: int, db: Session = Depends(get_db)) -> ApiRe
     summary="요청 취소 (관리자 전용)",
     description=(
         "관리자가 요청을 취소하고 연결된 지원을 함께 취소합니다. "
-        "진행 중인 미션이 있으면 환불 대상인 실패로 종결합니다."
+        "진행 중인 임무가 있으면 환불 대상인 실패로 종결합니다."
     ),
     responses={
         200: success_response(ADMIN_PROPOSAL_CANCELLED_EXAMPLE),
@@ -441,7 +441,7 @@ def get_admin_dispute(dispute_id: int, db: Session = Depends(get_db)) -> ApiResp
     response_model=ApiResponse[AdminDisputeDetailResponse],
     summary="분쟁 판정 (관리자 전용)",
     description=(
-        "관리자가 분쟁을 판정하고 요청·지원·미션을 함께 종결합니다. "
+        "관리자가 분쟁을 판정하고 요청·지원·임무를 함께 종결합니다. "
         "`COMPLETED`는 꼬붕 수행비 지급 대상, `FAILED`는 행님 환불 대상이 됩니다."
     ),
     responses={
@@ -600,7 +600,7 @@ def void_admin_refund(
     "/payout",
     response_model=ApiResponse[PageResponse[MissionResponse]],
     summary="수행비 지급 목록 조회 (관리자 전용)",
-    description="지급 대상 미션을 조회합니다. 식별자는 미션 ID이며 상태는 미션의 지급 기록에서 파생합니다.",
+    description="지급 대상 임무를 조회합니다. 식별자는 임무 ID이며 상태는 임무의 지급 기록에서 파생합니다.",
     responses={200: success_response(ADMIN_PAYOUT_PAGE_EXAMPLE)},
 )
 def list_admin_payouts(

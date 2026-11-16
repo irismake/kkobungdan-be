@@ -130,7 +130,7 @@ def list_withdrawal_reasons(
     "",
     response_model=ApiResponse[UserWithdrawalResponse],
     summary="회원 탈퇴",
-    description="현재 사용자의 개인정보를 삭제합니다. 탈퇴 사유는 필수이고, 해당 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유도 필수입니다. 종결되지 않은 요청, 지원, 미션 또는 환불이 있으면 탈퇴할 수 없습니다. 입금 확인 대기(`HOLDING`) 요청도 차단 대상이며, 대기 중인 지원(`WAITING`)만 탈퇴와 함께 자동 취소됩니다.",
+    description="현재 사용자의 개인정보를 삭제합니다. 탈퇴 사유는 필수이고, 해당 사유의 `requiresDetail`이 `true`(기타)이면 상세 사유도 필수입니다. 종결되지 않은 요청, 지원, 임무 또는 환불이 있으면 탈퇴할 수 없습니다. 입금 확인 대기(`HOLDING`) 요청도 차단 대상이며, 대기 중인 지원(`WAITING`)만 탈퇴와 함께 자동 취소됩니다.",
     responses={
         200: success_response(USER_WITHDRAWAL_EXAMPLE),
         **error_responses(

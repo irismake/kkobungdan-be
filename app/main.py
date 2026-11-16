@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
 
     if not settings.admin_alert_slack_webhook_url:
         logger.warning(
-            "ADMIN_ALERT_SLACK_WEBHOOK_URL not configured — 분쟁·미션 완료 관리자 알림이 발송되지 않습니다"
+            "ADMIN_ALERT_SLACK_WEBHOOK_URL not configured — 분쟁·임무 완료 관리자 알림이 발송되지 않습니다"
         )
 
     _ensure_admin_account()
@@ -146,7 +146,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="OrderRun API",
     description=(
-        "심부름 요청, 지원, 미션, 인증을 제공하는 OrderRun 백엔드 API입니다.\n\n"
+        "심부름 요청, 지원, 임무, 인증을 제공하는 OrderRun 백엔드 API입니다.\n\n"
         "모든 실패 응답은 `success`/`error`/`timestamp` 봉투로 나갑니다. "
         "클라이언트는 `error.code`로만 분기하고 `error.message`는 표시용으로만 사용합니다.\n\n"
         "아래 두 코드는 매칭되는 엔드포인트가 없을 때 발생해 개별 API 문서에 표시되지 않습니다.\n"

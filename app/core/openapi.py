@@ -705,12 +705,12 @@ MISSION_RESOLVED_EXAMPLES = {
             resolvedAt=EXAMPLE_UPDATED_AT,
             resolvedByAdminId=EXAMPLE_USER_ID,
         ),
-        "message": "미션 분쟁이 해결되었습니다.",
+        "message": "임무 분쟁이 해결되었습니다.",
     },
     "failed": {
         "success": True,
         "data": MISSION_STATUS_EXAMPLES["failed"],
-        "message": "미션 분쟁이 해결되었습니다.",
+        "message": "임무 분쟁이 해결되었습니다.",
     },
 }
 MISSION_SETTLEMENT_EXAMPLE = {

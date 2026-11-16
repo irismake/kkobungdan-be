@@ -142,7 +142,7 @@ class AdminDisputeResolveRequest(BaseModel):
 
     outcome: MissionResolution = Field(
         ...,
-        description="판정 결과. COMPLETED는 미션 완료(꼬붕 수행비 지급 대상), FAILED는 미션 실패(행님 환불 대상)다.",
+        description="판정 결과. COMPLETED는 임무 완료(꼬붕 수행비 지급 대상), FAILED는 임무 실패(행님 환불 대상)다.",
     )
     admin_note: str | None = Field(None, max_length=500, validation_alias="adminNote", description="관리자 메모")
     admin_id: str | None = Field(None, max_length=36, validation_alias="adminId", description="처리한 관리자 식별자")

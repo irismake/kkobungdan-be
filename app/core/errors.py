@@ -373,17 +373,17 @@ ERRORS: dict[AppError, ApiErrorSpec] = {
     AppError.MISSION_NOT_FOUND: ApiErrorSpec(
         status.HTTP_404_NOT_FOUND,
         ErrorCode.MISSION_NOT_FOUND,
-        "미션을 찾을 수 없습니다.",
+        "임무를 찾을 수 없습니다.",
     ),
     AppError.MISSION_NOT_RESOLVABLE: ApiErrorSpec(
         status.HTTP_409_CONFLICT,
         ErrorCode.MISSION_NOT_RESOLVABLE,
-        "분쟁 중인 미션만 판정할 수 있습니다.",
+        "분쟁 중인 임무만 판정할 수 있습니다.",
     ),
     AppError.MISSION_NOT_SETTLEABLE: ApiErrorSpec(
         status.HTTP_409_CONFLICT,
         ErrorCode.MISSION_NOT_SETTLEABLE,
-        "수행비를 지급할 수 없는 미션 상태입니다.",
+        "수행비를 지급할 수 없는 임무 상태입니다.",
     ),
     AppError.REFUND_NOT_FOUND: ApiErrorSpec(
         status.HTTP_404_NOT_FOUND,

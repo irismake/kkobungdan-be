@@ -249,8 +249,8 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | ordererName | string, null | 행님 사용자 이름 |
 | ordererLevel | number | 행님 사용자 레벨 |
 | matchedAt | string, null | Offer 수락으로 매칭된 시각 |
-| runnerConfirmedAt | string, null | 꼬붕이 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 행님이 수령/만남 완료를 확인한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | openChatUrl | string, null | 매칭 당사자에게만 반환되는 카카오톡 오픈채팅방 링크 |
@@ -270,8 +270,8 @@ Swagger UI는 `/docs`, OpenAPI JSON은 `/openapi.json`에서 확인한다.
 | runnerLevel | number | Offer 제출 꼬붕 레벨 |
 | status | string | Offer 상태. `OfferStatus` 참조 |
 | acceptedAt | string, null | 오더가 Offer를 수락한 시각 |
-| runnerConfirmedAt | string, null | 꼬붕이 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 행님이 수령/만남 완료를 확인한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | createdAt | string | Offer 생성 시각 |
@@ -292,8 +292,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | runnerLevel | number | Offer 제출 꼬붕 레벨 |
 | status | string | Offer 상태. `OfferStatus` 참조 |
 | acceptedAt | string, null | 행님이 Offer를 수락한 시각 |
-| runnerConfirmedAt | string, null | 꼬붕이 전달/만남 완료를 확인한 시각 |
-| ordererConfirmedAt | string, null | 행님이 수령/만남 완료를 확인한 시각 |
+| runnerConfirmedAt | string, null | 꼬붕이 임무를 완료한 시각 |
+| ordererConfirmedAt | string, null | 행님이 임무 완료를 확인한 시각 |
 | disputedAt | string, null | 분쟁 접수 시각 |
 | resolvedAt | string, null | 분쟁 해결 시각 |
 | createdAt | string | Offer 생성 시각 |
@@ -512,9 +512,9 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
-| 미션 목록 조회 | `GET` | `/v1/admin/missions?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
-| 미션 상세 조회 | `GET` | `/v1/admin/missions/{missionId}` | 관리자 필요 | `200 OK` | `MissionResponse` |
-| 미션 분쟁 판정 | `POST` | `/v1/admin/missions/{missionId}/resolve` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 임무 목록 조회 | `GET` | `/v1/admin/missions?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<MissionResponse>` |
+| 임무 상세 조회 | `GET` | `/v1/admin/missions/{missionId}` | 관리자 필요 | `200 OK` | `MissionResponse` |
+| 임무 분쟁 판정 | `POST` | `/v1/admin/missions/{missionId}/resolve` | 관리자 필요 | `200 OK` | `MissionResponse` |
 | 수행비 지급 기록 | `POST` | `/v1/admin/missions/{missionId}/settlement` | 관리자 필요 | `200 OK` | `MissionResponse` |
 | 입금 확인 | `POST` | `/v1/admin/proposal/{proposalId}/confirm-payment` | 관리자 필요 | `200 OK` | `AdminProposalResponse` |
 | 게시글 신고 목록 조회 | `GET` | `/v1/admin/proposal-reports?status={status}&page={page}&size={size}` | 관리자 필요 | `200 OK` | `PageResponse<AdminProposalReportResponse>` |

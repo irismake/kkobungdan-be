@@ -35,10 +35,10 @@
 | 지원 완료 | 꼬붕 | 꼬붕 본인 | `POST /v1/offer` | `지원 완료! ✅` | `지원이 정상적으로 접수됐어요. 행님의 선택을 기다려주세요.` |
 | 지원 수락 | 선택된 꼬붕 | 행님 | `POST /v1/offer/{offerId}/accept` | `선택받으셨어요! 🙌` | `행님이 회원님을 선택했어요.` |
 | 탈락 통보 | 탈락 꼬붕 전원 | 행님 | `POST /v1/offer/{offerId}/accept` | `이번엔 아쉽게 됐어요 😢` | `이번엔 선택받지 못했지만 다음 기회가 분명 있을 거예요. 다시 도전해보세요!` |
-| 꼬붕만 만남 확인 | 행님 | 꼬붕 | `POST /v1/offer/{offerId}/complete-delivery` | `꼬붕이 만남을 확인했어요! 🤝` | `꼬붕이 만남을 확인했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요.` |
-| 행님만 만남 확인 | 꼬붕 | 행님 | `POST /v1/proposal/{proposalId}/confirm-received` | `행님이 만남을 확인했어요! 🤝` | `행님이 만남을 확인했어요. 회원님도 앱에서 만남을 확인해주시면 정산이 바로 진행돼요!` |
-| 양측 확인 완료 (행님) | 행님 | 두 번째 완료 클릭 사용자 | `POST /v1/offer/{offerId}/complete-delivery` 또는 `POST /v1/proposal/{proposalId}/confirm-received` | `미션 수행 완료! 수고하셨어요 🎊` | `양측 만남이 모두 확인됐어요. 성공적으로 미션 수행이 완료됐습니다!` |
-| 양측 확인 완료 (꼬붕) | 꼬붕 | 두 번째 완료 클릭 사용자 | `POST /v1/offer/{offerId}/complete-delivery` 또는 `POST /v1/proposal/{proposalId}/confirm-received` | `미션 수행 완료! 수고하셨어요 🎊` | `양측 만남이 모두 확인됐어요. 성공적으로 미션이 완료됐습니다!` |
+| 꼬붕만 임무 완료 | 행님 | 꼬붕 | `POST /v1/offer/{offerId}/complete-delivery` | `꼬붕이 임무를 완료했어요! 🤝` | `꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요.` |
+| 행님만 임무 완료 확인 | 꼬붕 | 행님 | `POST /v1/proposal/{proposalId}/confirm-received` | `행님이 임무 완료를 확인했어요! 🤝` | `행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!` |
+| 양측 확인 완료 (행님) | 행님 | 두 번째 완료 클릭 사용자 | `POST /v1/offer/{offerId}/complete-delivery` 또는 `POST /v1/proposal/{proposalId}/confirm-received` | `임무 수행 완료! 수고하셨어요 🎊` | `양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!` |
+| 양측 확인 완료 (꼬붕) | 꼬붕 | 두 번째 완료 클릭 사용자 | `POST /v1/offer/{offerId}/complete-delivery` 또는 `POST /v1/proposal/{proposalId}/confirm-received` | `임무 수행 완료! 수고하셨어요 🎊` | `양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!` |
 
 양측 확인 완료는 두 번째 완료 클릭으로 `ALL_COMPLETED`가 되는 경우에만 발송된다. 타이틀은 동일하고 본문만 수신자별로 다르다. 이때 마지막 클릭에 대한 `meeting_confirmed`는 별도로 발송되지 않는다.
 | 행님이 분쟁 접수 | 꼬붕 | 행님 | `POST /v1/proposal/{proposalId}/dispute` | `분쟁이 접수되었어요 🚨` | `행님이 분쟁을 접수했어요. 앱에서 내용을 확인해주세요.` |
@@ -86,7 +86,7 @@
 }
 ```
 
-### 꼬붕만 만남 확인
+### 꼬붕만 임무 완료
 
 ```json
 {
@@ -96,7 +96,7 @@
 }
 ```
 
-### 행님만 만남 확인
+### 행님만 임무 완료 확인
 
 ```json
 {
