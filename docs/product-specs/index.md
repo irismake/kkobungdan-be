@@ -23,6 +23,7 @@
 - [`mission.md`](./mission.md): 수락된 지원의 수행 단위와 관리자 정산·환불 상태 흐름
 - [`chat-requirements.md`](./chat-requirements.md): 채팅 요구사항과 테스트 시나리오 (초안)
 - [`user-block.md`](./user-block.md): 사용자 차단 정책과 요청·지원·미션에 주는 영향 (초안)
+- [`chat-reporting.md`](./chat-reporting.md): 채팅방 상대방 신고와 관리자 검토 흐름 (초안)
 
 ## 예정 스펙
 
