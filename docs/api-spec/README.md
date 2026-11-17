@@ -323,6 +323,46 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | runnerLevel | number | 꼬붕 사용자 레벨 |
 | acceptedAt | string | Offer 수락 시각 |
 
+### ChatRoomDetailResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅방 ID |
+| proposalId | number | 요청 ID |
+| offerId | number | 지원 ID |
+| proposalTitle | string | 요청 제목 |
+| myRole | string | 이 채팅방에서 나의 역할 (`ORDERER`, `RUNNER`) |
+| partnerId | string | 상대 사용자 ID |
+| partnerName | string | 상대 이름. 탈퇴했으면 `"탈퇴한 사용자"` |
+| status | string | 채팅방 상태 (`ACTIVE`, `INACTIVE`, `CLOSED`) |
+| statusReason | string, null | 상태 이유 ([`chat-requirements.md`](../product-specs/chat-requirements.md#상태-이유-statusreason)) |
+| proposalStatus | string | 요청 상태 |
+| offerStatus | string | 지원 상태 |
+| lastSeq | number | 마지막 채팅 순번 |
+| myLastReadSeq | number | 내가 마지막으로 읽은 채팅 순번 |
+| partnerLastReadSeq | number | 상대가 마지막으로 읽은 채팅 순번 |
+| createdAt | string | 생성 시각 |
+
+### ChatMessageListResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| content | ChatMessageResponse[] | 채팅. 저장 순서(`seq` 오름차순) |
+| hasPrevious | boolean | 더 이전 채팅이 있는지 |
+
+### ChatMessageResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅 ID. 앱의 중복 제거 기준 |
+| roomId | number | 채팅방 ID |
+| seq | number | 채팅방 안의 저장 순서 |
+| type | string | `USER`(일반 채팅), `SYSTEM`(시스템 채팅) |
+| senderId | string, null | 보낸 사람. 시스템 채팅은 null |
+| content | string | 내용. 시스템 채팅은 보는 사람(행님/꼬붕)에 맞는 문구 |
+| systemEvent | string, null | 시스템 채팅 사건 코드 (예: `OFFER_CREATED`) |
+| createdAt | string | 전송 시각 |
+
 ### DisputeEvidenceResponse
 
 | 필드 | 타입 | 설명 |
@@ -496,6 +536,15 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 꼬붕 전달 완료 | `POST` | `/v1/offer/{offerId}/complete-delivery` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
 | 꼬붕 분쟁 접수 | `POST` | `/v1/offer/{offerId}/dispute` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
 | 지원 취소 | `DELETE` | `/v1/offer/{offerId}` | 필요. Offer 제출 꼬붕만 가능 | `204 No Content` | 없음 |
+
+### Chat API
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 채팅방 상세 조회 | `GET` | `/v1/chat-room/{roomId}` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatRoomDetailResponse` |
+| 채팅 조회 (최근 30개) | `GET` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
+
+채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다. 나머지 채팅 API(목록, 전송, 읽음, 실시간)는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
 
 ### Admin Execution API
 
@@ -677,6 +726,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
 | proposalId | number | O | 1 이상 |
+| greeting | string | O | 꼬붕의 첫 인사. 공백·줄바꿈만 있으면 안 되고 화면 글자(grapheme) 기준 500자 이하. 지원과 같은 트랜잭션에서 채팅방에 꼬붕의 일반 채팅으로 저장된다 |
 
 #### `POST /v1/offer/{offerId}/accept`
 
@@ -824,6 +874,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 404 | `PHONE_VERIFICATION_NOT_FOUND` | 전화번호 인증 요청 없음 |
 | 404 | `PROPOSAL_NOT_FOUND` | Proposal을 찾을 수 없음 |
 | 404 | `OFFER_NOT_FOUND` | Offer를 찾을 수 없음 |
+| 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없음 |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 사용 중인 전화번호 |
 | 409 | `DUPLICATE_OFFER` | 동일 Proposal에 중복 Offer 제출 |
 | 409 | `PROPOSAL_NOT_OPEN` | Offer를 받을 수 없는 Proposal 상태 |

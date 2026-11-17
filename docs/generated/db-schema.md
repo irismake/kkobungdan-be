@@ -34,6 +34,8 @@ native ENUM으로 남아 있던 6개 컬럼은 `0029_replace_mysql_enums_with_va
 | `offers` | bidding/offer | O | `docs/domains/offer/README.md` | 꼬붕 지원서 |
 | `missions` | mission | O | `docs/product-specs/mission.md` | 수락된 지원의 수행 단위. 관리자 웹 전용 |
 | `refunds` | refund | O | `docs/design-docs/refund-lifecycle.md` | 입금 확인된 요청의 환불 처리 정본 |
+| `chat_rooms` | chat | O | `docs/design-docs/chat-architecture.md` | 지원 1건당 행님–꼬붕 1:1 채팅방 |
+| `chat_messages` | chat | O | `docs/design-docs/chat-architecture.md` | 채팅방의 일반·시스템 채팅 |
 | `dispute_evidences` | execution/dispute-evidence | O | `docs/domain.md` | 분쟁 사유 증빙 |
 | `dispute_survey_questions` | dispute-survey | O | `docs/api-spec/README.md` | 분쟁 접수 전 설문 질문 마스터 |
 | `proposal_report_reason_questions` | proposal-report | O | `docs/product-specs/proposal-reporting.md` | 게시글 신고 사유 마스터 |
@@ -303,6 +305,45 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `admin_note` | `varchar(200)` | YES |  | 이체 참조번호 등 처리 메모 |
 | `created_at` | `datetime(6)` | NO |  | 생성 시각 |
 | `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
+
+## `chat_rooms`
+
+지원(Offer) 1건당 하나인 행님–꼬붕 1:1 채팅방이다. 0035_create_chat_tables에서 생성한다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
+|------|------|------|-----------|------|
+| `id` | `bigint` | NO | PK, auto increment | 채팅방 ID |
+| `offer_id` | `bigint` | NO | UNIQUE `uk_chat_rooms_offer_id` | 지원 ID. 지원 1건당 채팅방 1개 |
+| `proposal_id` | `bigint` | NO | INDEX `ix_chat_rooms_proposal_id` | 요청 ID |
+| `orderer_id` | `varchar(36)` | NO | INDEX `idx_chat_rooms_orderer_last_message` | 행님 사용자 ID |
+| `runner_id` | `varchar(36)` | NO | INDEX `idx_chat_rooms_runner_last_message` | 꼬붕 사용자 ID |
+| `status` | `varchar(10)` | NO | CHECK `ck_chat_rooms_status_values` | `ACTIVE`, `INACTIVE`, `CLOSED` |
+| `status_reason` | `varchar(30)` | YES | CHECK `ck_chat_rooms_status_reason_values` | 상태 이유 |
+| `last_seq` | `bigint` | NO |  | 마지막 채팅 순번 |
+| `last_message_at` | `datetime(6)` | YES | 위 두 인덱스 | 마지막 채팅 시각 (목록 정렬) |
+| `orderer_last_read_seq` | `bigint` | NO |  | 행님 읽음 위치 |
+| `runner_last_read_seq` | `bigint` | NO |  | 꼬붕 읽음 위치 |
+| `version` | `bigint` | NO |  | 상태·읽음 이벤트 순서 값 |
+| `created_at` | `datetime(6)` | NO |  | 생성 시각 |
+| `updated_at` | `datetime(6)` | NO |  | 수정 시각 |
+
+## `chat_messages`
+
+채팅방의 일반 채팅과 시스템 채팅이다. `seq`가 채팅방 안의 저장 순서다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 | 설명 |
+|------|------|------|-----------|------|
+| `id` | `bigint` | NO | PK, auto increment | 채팅 ID |
+| `room_id` | `bigint` | NO | UNIQUE `uk_chat_messages_room_seq` 일부 | 채팅방 ID |
+| `seq` | `bigint` | NO | UNIQUE `uk_chat_messages_room_seq` 일부 | 채팅방 안의 순번 |
+| `type` | `varchar(10)` | NO | CHECK `ck_chat_messages_type_values` | `USER`, `SYSTEM` |
+| `sender_id` | `varchar(36)` | YES | UNIQUE `uk_chat_messages_sender_client_message_id` 일부 | 보낸 사람. 시스템 채팅은 NULL |
+| `content` | `text` | YES |  | 일반 채팅 내용 |
+| `system_event` | `varchar(40)` | YES | CHECK `ck_chat_messages_system_event_values` | 시스템 채팅 사건 코드 |
+| `system_payload` | `json` | YES |  | 시스템 채팅 문구에 들어갈 값 |
+| `system_event_key` | `varchar(100)` | YES | UNIQUE `uk_chat_messages_room_system_event_key` 일부 | 같은 사건 중복 저장 방지 키 |
+| `client_message_id` | `varchar(64)` | YES | UNIQUE `uk_chat_messages_sender_client_message_id` 일부 | 앱 전송 ID (중복 전송 방지) |
+| `created_at` | `datetime(6)` | NO |  | 전송 시각 |
 
 ## `dispute_evidences`
 

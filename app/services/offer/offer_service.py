@@ -18,6 +18,7 @@ from app.models.settlement import SettlementAccount
 from app.models.user import User
 from app.schemas.common import PageResponse
 from app.schemas.offer import OfferAcceptResponse, OfferCreate, OfferDetailResponse, OfferResponse, OfferSummaryResponse
+from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
 from app.services.mission.mission_service import MissionService
 
@@ -169,6 +170,8 @@ class OfferService:
             if proposal.status == ProposalStatus.POSTED:
                 proposal.mark_as_offered()
             db.flush()
+            # 채팅방·지원 등록 안내·첫 인사를 같은 트랜잭션에 저장한다 (CHAT-REQ-006, CHAT-REQ-023).
+            ChatLifecycle.on_offer_created(db, offer, proposal, request.greeting)
             EventBus.publish(OfferCreatedEvent(
                 offer_id=offer.id,
                 proposal_id=proposal.id,

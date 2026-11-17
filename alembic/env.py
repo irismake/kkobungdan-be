@@ -13,6 +13,7 @@ from app.core.database import Base
 
 # Import models so Base.metadata is populated for autogenerate.
 from app.models import (  # noqa: F401
+    chat,
     dispute_evidence,
     dispute_survey,
     mission,

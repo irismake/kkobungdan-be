@@ -1090,3 +1090,58 @@ ADMIN_LOGIN_EXAMPLE = {
     },
     "message": None,
 }
+
+
+EXAMPLE_CHAT_ROOM_ID = 42
+
+CHAT_ROOM_DETAIL_EXAMPLE = {
+    "success": True,
+    "data": {
+        "id": EXAMPLE_CHAT_ROOM_ID,
+        "proposalId": 1,
+        "offerId": 10,
+        "proposalTitle": "편의점 담배 심부름",
+        "myRole": "ORDERER",
+        "partnerId": EXAMPLE_RUNNER_ID,
+        "partnerName": EXAMPLE_RUNNER_NAME,
+        "status": "ACTIVE",
+        "statusReason": None,
+        "proposalStatus": "OFFERED",
+        "offerStatus": "WAITING",
+        "lastSeq": 2,
+        "myLastReadSeq": 0,
+        "partnerLastReadSeq": 0,
+        "createdAt": EXAMPLE_CREATED_AT,
+    },
+    "message": "Success",
+}
+
+CHAT_MESSAGE_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": 100,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 1,
+                "type": "SYSTEM",
+                "senderId": None,
+                "content": "지원으로 채팅이 시작됐어요.",
+                "systemEvent": "OFFER_CREATED",
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+            {
+                "id": 101,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 2,
+                "type": "USER",
+                "senderId": EXAMPLE_RUNNER_ID,
+                "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                "systemEvent": None,
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+        ],
+        "hasPrevious": False,
+    },
+    "message": "Success",
+}
