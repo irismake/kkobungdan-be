@@ -49,7 +49,15 @@ run_migration() {
   # 그래서 마이그레이션은 빈 DB(기본 orderrun_migration_check)에 따로 올려 본다.
   local migration_db="${MIGRATION_DB_NAME:-orderrun_migration_check}"
   echo "==> 마이그레이션 검사 (빈 DB ${migration_db}에 alembic upgrade head)"
-  DB_NAME="$migration_db" "$PYTHON" -m alembic upgrade head
+  # alembic/env.py가 app 설정(Settings)을 불러오므로 필수 값이 있어야 한다.
+  # 테스트와 같은 더미 값을 쓴다 (tests/conftest.py 의 os.environ.setdefault). 이미 지정된 값은 그대로 둔다.
+  DB_NAME="$migration_db" \
+    SECRET_KEY="${SECRET_KEY:-test-secret}" \
+    JWT_SECRET="${JWT_SECRET:-test-jwt-secret}" \
+    AWS_SNS_ACCESS_KEY_ID="${AWS_SNS_ACCESS_KEY_ID:-test-access-key}" \
+    AWS_SNS_SECRET_ACCESS_KEY="${AWS_SNS_SECRET_ACCESS_KEY:-test-secret-key}" \
+    AWS_SNS_SMS_SENDER_ID="${AWS_SNS_SMS_SENDER_ID:-OrderRun}" \
+    "$PYTHON" -m alembic upgrade head
 }
 
 case "$target" in
