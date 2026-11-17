@@ -392,3 +392,28 @@ def test_notification_worker_ignores_skipped_notifications(db, factory, sample_u
     assert notification.status == NotificationStatus.SKIPPED
     assert notification.fcm_message_id is None
     assert notification.sent_at is None
+
+
+@pytest.mark.scenario("CHAT-TS-055")
+def test_domain_notification_push_badge_adds_chat_unread_and_notification_unread(db, factory, sample_user):
+    from app.models.chat import ChatMessage, ChatMessageType
+    from app.models.proposal import ProposalStatus
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+
+    runner = factory.user("01075000001", name="꼬붕 하나")
+    proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
+    offer = factory.offer(proposal.id, runner.id)
+    room = ChatLifecycle.on_offer_created(db, offer, proposal, "안녕하세요")  # 행님 안읽음 2
+    db.add(ChatMessage(room_id=room.id, seq=room.next_seq(), type=ChatMessageType.USER, sender_id=runner.id,
+                       content="출발했어요", created_at=utcnow_naive()))  # 행님 안읽음 3
+    db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-badge"))
+    db.commit()
+    factory.notification(sample_user.id)  # 알림 미읽음 1
+    pending = factory.notification(sample_user.id, status=NotificationStatus.PENDING, fcm_message_id=None, sent_at=None)  # 2
+    pending_id = pending.id
+    fcm = RecordingFCMService(FCMSendResult(success=True, message_id="message-badge"))
+
+    NotificationWorker(fcm).flush_pending(lambda: db, notification_ids=[pending_id])
+
+    assert len(fcm.calls) == 1
+    assert fcm.calls[0]["badge"] == 5

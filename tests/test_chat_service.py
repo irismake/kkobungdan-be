@@ -159,3 +159,86 @@ def test_unread_and_push_targets_follow_the_table() -> None:
     by_runner = {"raisedBy": "RUNNER"}
     assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.RUNNER, by_runner) == (True, True)
     assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.ORDERER, by_runner) == (True, False)
+
+
+# ------------------------------------------------------------------ 채팅 푸시 재시도 (CHAT-REQ-018, 029)
+
+from datetime import datetime, timedelta  # noqa: E402
+
+PUSH_AT = datetime(2026, 11, 17, 12, 0, 0)
+
+
+def _push_envelope(occurred_at: datetime):
+    from app.services.outbox.envelope import EventEnvelope
+
+    return EventEnvelope(
+        event_id="evt-1",
+        event_type="chat.message.created",
+        aggregate_type="chat_room",
+        aggregate_id="1",
+        schema_version=1,
+        occurred_at=occurred_at,
+        payload={"roomId": 1, "messageId": 1, "seq": 3, "type": "USER", "senderId": "u-1", "systemEvent": None},
+    )
+
+
+class _NoSession:
+    def __call__(self):
+        raise AssertionError("유효 시간이 지난 푸시는 DB를 보지 않는다")
+
+
+class _NeverSend:
+    def send(self, **push):
+        raise AssertionError("유효 시간이 지난 푸시는 보내지 않는다")
+
+
+@pytest.mark.scenario("CHAT-TS-106")
+def test_push_older_than_ten_minutes_is_skipped_without_sending() -> None:
+    from app.models.outbox import DeliveryStatus
+    from app.services.chat.chat_push import ChatPushConsumer
+    from app.services.outbox.delivery import execute_delivery
+
+    consumer = ChatPushConsumer(_NoSession(), _NeverSend())
+    envelope = _push_envelope(PUSH_AT)
+
+    outcome = execute_delivery(consumer, envelope, attempts=2, now=PUSH_AT + timedelta(minutes=10))
+
+    assert outcome.status == DeliveryStatus.SKIPPED
+    assert outcome.skip_reason == "expired"
+
+
+@pytest.mark.scenario("CHAT-TS-111")
+def test_push_retries_five_times_within_ten_minutes_then_dies_with_one_alert() -> None:
+    from types import SimpleNamespace
+
+    from app.models.outbox import DeliveryStatus
+    from app.services.chat.chat_push import CHAT_PUSH_RETRY_POLICY, ChatPushConsumer
+    from app.services.outbox.delivery import alert_dead_delivery, execute_delivery
+
+    assert ChatPushConsumer.name == "chat.push"
+    assert ChatPushConsumer.retry_policy == CHAT_PUSH_RETRY_POLICY
+
+    def always_fail(envelope):
+        raise RuntimeError("FCM 오류")
+
+    consumer = SimpleNamespace(name="chat.push", retry_policy=CHAT_PUSH_RETRY_POLICY, handle=always_fail)
+    envelope = _push_envelope(PUSH_AT)
+
+    now, attempts, gaps = PUSH_AT, 0, []
+    while True:
+        outcome = execute_delivery(consumer, envelope, attempts, now)
+        if outcome.status != DeliveryStatus.FAILED:
+            break
+        gaps.append(outcome.next_attempt_at - now)
+        now, attempts = outcome.next_attempt_at, attempts + 1
+
+    assert gaps == [timedelta(seconds=s) for s in (5, 30, 60, 120, 240)]
+    assert outcome.status == DeliveryStatus.DEAD
+    assert now < PUSH_AT + timedelta(minutes=10)  # 유효 시간이 먼저 지나 SKIPPED가 되지 않는다
+
+    alerts = []
+    sender = SimpleNamespace(send=alerts.append)
+    delivery = SimpleNamespace(consumer="chat.push", attempts=6, last_error="FCM 오류", dead_alerted_at=None)
+    alert_dead_delivery(delivery, envelope, sender, now)
+    alert_dead_delivery(delivery, envelope, sender, now)
+    assert len(alerts) == 1

@@ -1451,3 +1451,235 @@ def test_room_detail_shows_where_the_partner_has_read_up_to(client, db, factory,
     assert read(client, factory, room.id, runner, seqs[1]).status_code == 200
 
     assert room_detail(client, factory, room.id, sample_user)["partnerLastReadSeq"] == seqs[1]
+
+
+# ================================================================== 4-6 채팅 푸시
+
+
+class FakePushSender:
+    """가짜 FCM 발송기. 처음 `fail_times`번은 실패한다. 성공한 발송만 `sent`에 남긴다."""
+
+    def __init__(self, fail_times: int = 0):
+        self.fail_times = fail_times
+        self.attempts = 0
+        self.sent: list[dict] = []
+
+    def send(self, **push):
+        from app.schemas.notification import FCMSendResult
+
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            return FCMSendResult(success=False, error_code="UNAVAILABLE", error_message="FCM 일시 오류")
+        self.sent.append(push)
+        return FCMSendResult(success=True, message_id=f"message-{self.attempts}")
+
+    def to(self, user) -> list[dict]:
+        return [push for push in self.sent if push["token"] == f"token-{user.id}"]
+
+
+class RecordingRealtime:
+    """`chat.realtime` 자리의 가짜 전달 대상 (4-7 전까지)."""
+
+    name = "chat.realtime"
+    event_types = frozenset({"chat.message.created"})
+
+    def __init__(self):
+        from app.services.outbox.policy import RetryPolicy
+
+        self.retry_policy = RetryPolicy(max_retries=0, backoff=(timedelta(seconds=5),))
+        self.calls = 0
+
+    def handle(self, envelope) -> None:
+        self.calls += 1
+
+
+class NoAlerts:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, alert) -> None:
+        self.sent.append(alert)
+
+
+def enable_push(db, *users) -> None:
+    from app.models.user import UserFCMToken
+
+    for user in users:
+        user.alarm_enabled = True
+        db.add(UserFCMToken(user_id=user.id, fcm_token=f"token-{user.id}"))
+    db.commit()
+
+
+def run_chat_push(sender, *extra_consumers, now: datetime | None = None) -> None:
+    """outbox 처리 한 바퀴: 미발행 이벤트 발행 → 처리할 전달 실행."""
+    from app.core.time import utcnow_naive
+    from app.services.chat.chat_push import ChatPushConsumer
+    from app.services.outbox.consumers import ConsumerRegistry
+    from app.services.outbox.delivery import process_due_deliveries
+    from app.services.outbox.publisher import InProcessEventPublisher
+    from app.services.outbox.relay import publish_pending
+    from tests.conftest import TestSessionLocal
+
+    registry = ConsumerRegistry()
+    registry.register(ChatPushConsumer(TestSessionLocal, sender))
+    for consumer in extra_consumers:
+        registry.register(consumer)
+    now = now or utcnow_naive()
+    with TestSessionLocal() as session:
+        publish_pending(session, InProcessEventPublisher(registry), now)
+        process_due_deliveries(session, registry, now, NoAlerts())
+
+
+def for_seq(pushes: list[dict], room_id: int, seq: int) -> list[dict]:
+    return [p for p in pushes if p["data"].get("roomId") == str(room_id) and p["data"].get("seq") == str(seq)]
+
+
+@pytest.mark.scenario("CHAT-TS-051")
+def test_partner_chat_is_pushed_once_with_name_content_and_badge(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01074000001", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    factory.notification(runner.id, read_at=None)  # 꼬붕의 알림 미읽음 1
+    sender = FakePushSender()
+
+    seq = send(client, factory, room.id, sample_user, content="지금 출발할게요").json()["data"]["seq"]
+    run_chat_push(sender)
+
+    pushes = for_seq(sender.sent, room.id, seq)
+    assert len(pushes) == 1
+    push = pushes[0]
+    assert push["token"] == f"token-{runner.id}"
+    assert (push["title"], push["body"]) == (sample_user.name, "지금 출발할게요")
+    # 꼬붕 채팅 안읽음 합계(시작 안내 1 + 행님 채팅 1) + 알림 미읽음 1
+    assert push["badge"] == 3
+
+
+@pytest.mark.scenario("CHAT-TS-052")
+def test_no_push_to_the_sender_or_to_someone_with_alarm_off(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01074000002", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    runner.alarm_enabled = False
+    db.commit()
+    before = unread_summary(client, factory, runner).get(room.id, 0)
+    sender = FakePushSender()
+
+    seq = send(client, factory, room.id, sample_user, content="알림 꺼진 꼬붕에게").json()["data"]["seq"]
+    run_chat_push(sender)
+
+    assert for_seq(sender.sent, room.id, seq) == []  # 보낸 행님에게도, 알림 끈 꼬붕에게도 없다
+    assert unread_summary(client, factory, runner)[room.id] == before + 1
+
+
+@pytest.mark.scenario("CHAT-TS-053")
+def test_pushes_of_one_room_share_a_collapse_key_and_open_that_room(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01074000003", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    sender = FakePushSender()
+
+    first = send(client, factory, room.id, runner, content="첫 번째", client_message_id="m-1").json()["data"]["seq"]
+    second = send(client, factory, room.id, runner, content="두 번째", client_message_id="m-2").json()["data"]["seq"]
+    run_chat_push(sender)
+
+    pushes = for_seq(sender.sent, room.id, first) + for_seq(sender.sent, room.id, second)
+    assert [p["body"] for p in pushes] == ["첫 번째", "두 번째"]
+    assert {p["collapse_key"] for p in pushes} == {f"chat-room-{room.id}"}
+    assert all(p["data"]["type"] == "CHAT" and p["data"]["roomId"] == str(room.id) for p in pushes)
+
+
+@pytest.mark.scenario("CHAT-TS-054")
+def test_chat_push_is_not_stored_as_a_notification(client, db, factory, sample_user):
+    from app.models.notification import Notification
+
+    runner = runner_with_account(factory, "01074000004", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    before = db.query(Notification).count()
+    sender = FakePushSender()
+
+    seq = send(client, factory, room.id, runner, content="알림 목록에 없어야 해요").json()["data"]["seq"]
+    run_chat_push(sender)
+
+    assert len(for_seq(sender.sent, room.id, seq)) == 1
+    db.rollback()
+    assert db.query(Notification).count() == before
+
+
+@pytest.mark.scenario("CHAT-TS-079")
+def test_failed_push_is_retried_and_sent_once_on_success(client, db, factory, sample_user):
+    from app.core.time import utcnow_naive
+
+    runner = runner_with_account(factory, "01074000005", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    run_chat_push(FakePushSender())  # 앞서 쌓인 지원 등록 이벤트를 먼저 끝낸다
+    sender = FakePushSender(fail_times=1)
+    now = utcnow_naive()
+
+    response = send(client, factory, room.id, runner, content="재시도 확인")
+    assert response.status_code == 201  # 푸시 실패와 관계없이 전송은 성공
+    seq = response.json()["data"]["seq"]
+    run_chat_push(sender, now=now)  # 첫 시도 실패
+    assert for_seq(sender.sent, room.id, seq) == []
+    run_chat_push(sender, now=now + timedelta(seconds=6))  # 5초 뒤 재시도 성공
+    run_chat_push(sender, now=now + timedelta(minutes=1))  # 끝난 전달은 다시 보내지 않는다
+
+    assert sender.attempts == 2
+    assert len(for_seq(sender.sent, room.id, seq)) == 1
+
+
+@pytest.mark.scenario("CHAT-TS-105")
+def test_only_the_failed_push_is_retried_not_the_realtime_event(client, db, factory, sample_user):
+    from app.core.time import utcnow_naive
+
+    runner = runner_with_account(factory, "01074000006", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    enable_push(db, sample_user, runner)
+    run_chat_push(FakePushSender(), RecordingRealtime())
+    sender, realtime = FakePushSender(fail_times=1), RecordingRealtime()
+    now = utcnow_naive()
+
+    send(client, factory, room.id, runner, content="푸시만 다시")
+    run_chat_push(sender, realtime, now=now)
+    run_chat_push(sender, realtime, now=now + timedelta(seconds=6))
+
+    assert realtime.calls == 1
+    assert sender.attempts == 2
+    assert len(sender.sent) == 1
+
+
+@pytest.mark.scenario("CHAT-TS-091")
+def test_offer_cancel_notice_is_pushed_to_both_in_their_own_wording(journey, db):
+    runner = journey.apply("01074000007", "꼬붕 하나")
+    enable_push(db, journey.orderer, runner)
+    run_chat_push(FakePushSender())  # 지원 등록까지의 이벤트를 먼저 끝낸다
+    sender = FakePushSender()
+
+    assert journey.cancel_offer(runner).status_code == 204
+    run_chat_push(sender)
+
+    assert [(p["title"], p["body"]) for p in sender.to(journey.orderer)] == [
+        ("꼬붕 하나", "꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요.")
+    ]
+    assert [(p["title"], p["body"]) for p in sender.to(runner)] == [
+        (journey.orderer.name, "지원을 취소했어요. 채팅이 자동으로 종료돼요.")
+    ]
+
+
+@pytest.mark.scenario("CHAT-TS-092")
+def test_runner_completion_is_not_chat_pushed_to_the_orderer_who_gets_the_notification(journey, db, client, factory):
+    runner = journey.apply("01074000008", "꼬붕 하나")
+    journey.accept(runner)
+    enable_push(db, journey.orderer, runner)
+    run_chat_push(FakePushSender())
+    room_id = journey.room(runner).id
+    before = unread_summary(client, factory, journey.orderer).get(room_id, 0)
+    sender = FakePushSender()
+
+    assert journey.runner_complete(runner).status_code == 200
+    run_chat_push(sender)
+
+    assert sender.to(journey.orderer) == []  # 행님은 기존 알림 푸시만 받는다
+    assert [p["body"] for p in sender.to(runner)] == ["행님의 임무 완료 확인을 기다리고 있어요."]
+    assert unread_summary(client, factory, journey.orderer)[room_id] == before + 1
