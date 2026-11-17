@@ -30,6 +30,7 @@ class ChatRoomDetailResponse(BaseModel):
     last_seq: int = Field(..., serialization_alias="lastSeq", description="마지막 채팅 순번")
     my_last_read_seq: int = Field(..., serialization_alias="myLastReadSeq")
     partner_last_read_seq: int = Field(..., serialization_alias="partnerLastReadSeq")
+    version: int = Field(..., description="채팅방 상태·읽음 위치가 바뀔 때마다 1 증가. 실시간 이벤트와 순서를 맞출 때 쓴다")
     created_at: datetime = Field(..., serialization_alias="createdAt")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -119,5 +120,39 @@ class ChatRoomListItemResponse(BaseModel):
 class ChatRoomListResponse(BaseModel):
     content: list[ChatRoomListItemResponse]
     next_cursor: str | None = Field(None, serialization_alias="nextCursor", description="다음 페이지 커서. 마지막 페이지면 null")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatReadRequest(BaseModel):
+    seq: int = Field(..., ge=1, description="읽은 마지막 채팅의 순번")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChatReadResponse(BaseModel):
+    room_id: int = Field(..., serialization_alias="roomId")
+    last_read_seq: int = Field(..., serialization_alias="lastReadSeq", description="처리 뒤 내 읽음 위치. 뒤로만 움직인다")
+    unread_count: int = Field(..., serialization_alias="unreadCount")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatUnreadRoomResponse(BaseModel):
+    room_id: int = Field(..., serialization_alias="roomId")
+    unread_count: int = Field(..., serialization_alias="unreadCount")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatUnreadSummaryResponse(BaseModel):
+    total_unread_count: int = Field(..., serialization_alias="totalUnreadCount", description="전체 채팅방 안읽음 합계")
+    rooms: list[ChatUnreadRoomResponse] = Field(..., description="안읽음이 있는 채팅방만")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatReadAllResponse(BaseModel):
+    total_unread_count: int = Field(..., serialization_alias="totalUnreadCount", description="처리 뒤 남은 안읽음 합계")
 
     model_config = ConfigDict(populate_by_name=True)

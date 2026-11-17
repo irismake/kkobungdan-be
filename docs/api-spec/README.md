@@ -610,11 +610,18 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 채팅방 상세 조회 | `GET` | `/v1/chat-room/{roomId}` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatRoomDetailResponse` |
 | 채팅 조회 | `GET` | `/v1/chat-room/{roomId}/messages?beforeSeq=&afterSeq=` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
 | 채팅 전송 | `POST` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `201 Created` | `ChatMessageResponse` |
+| 읽음 처리 | `POST` | `/v1/chat-room/{roomId}/read` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatReadResponse` (`roomId`, `lastReadSeq`, `unreadCount`) |
+| 안읽음 수 조회 | `GET` | `/v1/chat-room/unread-count` | 필요 | `200 OK` | `ChatUnreadSummaryResponse` (`totalUnreadCount`, `rooms[{roomId, unreadCount}]`) |
+| 전체 읽음 | `POST` | `/v1/chat-room/read-all` | 필요 | `200 OK` | `ChatReadAllResponse` (`totalUnreadCount`) |
 
 - 채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다.
 - 채팅 목록: 행님·꼬붕 역할과 관계없이 참여한 모든 채팅방. 마지막 채팅이 최신인 순서(채팅이 없으면 생성 시각). 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. 목록 조회는 읽음 처리하지 않는다.
 - 채팅 조회: 기본은 최근 30개, `beforeSeq`는 그보다 앞선 30개, `afterSeq`는 그 뒤의 채팅(최대 100개, 재연결 후 복구). 둘은 함께 쓸 수 없다.
-- 읽음·실시간 API는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
+- 읽음: 읽음 위치는 뒤로만 움직인다. 이미 읽은 위치와 같거나 앞선 `seq`도 성공으로 응답하고 위치를 유지한다. 채팅방에 없는 `seq`는 `400 CHAT_READ_SEQ_INVALID`. 채팅방 상태·차단과 관계없이 읽을 수 있다.
+- 안읽음 수: 내 읽음 위치 뒤의 상대 일반 채팅 + 나에게 보이는 시스템 채팅(행님 기준 매칭 미선정 안내 제외). 안읽음이 있는 채팅방만 담고, 종료·차단 채팅방도 합계에 포함한다.
+- 전체 읽음: 역할과 관계없이 내 모든 채팅방을 요청 시점의 마지막 채팅까지 읽는다. 그 사이 더 읽은 채팅방은 그대로 두고 상대방 읽음 위치는 바꾸지 않는다.
+- 채팅방 상세의 `partnerLastReadSeq`로 내 채팅의 안읽음 표시(`1`)를 그린다. `version`은 채팅방 상태·읽음 위치가 바뀔 때마다 1 오른다.
+- 실시간 API는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
 
 ### Admin Outbox API
 
@@ -873,6 +880,12 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 그 밖의 필드(예: 채팅 유형)는 받지 않는다(`400 VALIDATION_ERROR`). 시스템 채팅은 서버만 만든다.
 
+#### `POST /v1/chat-room/{roomId}/read`
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| seq | integer | O | 1 이상. 읽은 마지막 채팅의 순번. 채팅방의 마지막 순번보다 크면 `400 CHAT_READ_SEQ_INVALID` |
+
 ### Settlement
 
 #### `PUT /v1/settlement/account`
@@ -960,6 +973,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 400 | `PROPOSAL_DEPOSIT_INVALID` | 보증금이 0원 미만 |
 | 400 | `PHONE_VERIFICATION_EXPIRED` | 전화번호 인증 코드 만료 |
 | 400 | `PHONE_VERIFICATION_CODE_MISMATCH` | 전화번호 인증 코드 불일치 |
+| 400 | `CHAT_READ_SEQ_INVALID` | 채팅방에 없는 채팅으로 읽음 요청 |
 | 401 | `INVALID_TOKEN` | 유효하지 않은 토큰 |
 | 401 | `EXPIRED_TOKEN` | 만료된 토큰 |
 | 403 | `FORBIDDEN` | 권한 없음 |

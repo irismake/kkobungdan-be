@@ -38,7 +38,8 @@
 - [x] 4-2 Transactional Outbox (2026-11-17): `outbox_events`·`event_deliveries`(0036), 기록·발행(`SKIP LOCKED`, 발행 재시도)·전달 처리(임대·재시도·SKIPPED·DEAD)·지연/DEAD 알림·관리자 재처리 API·정리 배치, 앱 스케줄러 등록(`OUTBOX_WORKER_ENABLED`, 테스트는 끔). 아직 등록된 전달 대상은 없다(채팅 전달 대상은 4-6·4-7)
 - [x] 4-3 채팅 전송·조회·목록 (2026-11-17): `POST /v1/chat-room/{id}/messages`(전송 ID 중복 방지, 채팅방 행 잠금 순번, 보낸 사람 읽음 위치, `chat.message.created` 기록), `GET …/messages`의 `beforeSeq`·`afterSeq`, `GET /v1/chat-room`(커서 페이지, 안읽음 수, 차단 여부 `NONE`), 시스템 채팅 사건 14종과 문구 표(4-4에서 사용), 지원 등록 안내·첫 인사도 이벤트 기록, `CHAT_MESSAGE_ID_CONFLICT`·`CHAT_ROOM_NOT_SENDABLE`
 - [x] 4-4 채팅방 상태와 시스템 채팅 (2026-11-17): `room_status.next_room_state`(상태 전이 표, `CLOSED` 불변), `system_chat_delivery`(안읽음·푸시 대상, 분쟁 접수는 접수한 쪽만 푸시), `ChatLifecycle`에 매칭·지원 취소·요청 취소·관리자 취소·신고 승인·임무 완료·분쟁 접수/판정·수행비 입금·환불 완료 추가(채팅방 행 잠금, `system_event_key`로 사건당 1건), 설계 문서 호출 지점 표의 서비스 11곳에 같은 트랜잭션으로 연결. 채팅방이 없는 기존 지원은 건너뛴다(백필은 4-9)
-- [ ] 4-5 ~ 4-9
+- [x] 4-5 읽음과 안읽음 (2026-11-17): `POST /v1/chat-room/{id}/read`(조건부 UPDATE로 뒤로만, 바뀔 때만 `version` 증가, 없는 순번 `CHAT_READ_SEQ_INVALID`), `GET /v1/chat-room/unread-count`(채팅방별·합계, 닫힌 방 포함), `POST /v1/chat-room/read-all`(요청 시점 위치까지, 더 읽은 방 유지), 상세 응답에 `version`. `chat.read.updated` 기록은 실시간과 함께 4-7에서
+- [ ] 4-6 ~ 4-9
 
 채팅 시나리오 105개(CHAT-TS-102~104, 107~109는 OUTBOX로 옮겨 비움)와 Outbox 시나리오 21개는 위 표에서 한 묶음에만 배정했다.
 

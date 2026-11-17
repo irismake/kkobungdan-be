@@ -66,6 +66,7 @@ class ChatRoomService:
             last_seq=room.last_seq,
             my_last_read_seq=my_last_read,
             partner_last_read_seq=partner_last_read,
+            version=room.version,
             created_at=room.created_at,
         )
 

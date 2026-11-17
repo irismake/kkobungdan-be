@@ -68,6 +68,7 @@
 |---|---|---|---|
 | 400 | `INVALID_DATE_TIME_FORMAT` | deadline 형식이 올바르지 않습니다. | |
 | 400 | `INVALID_STATUS` | 입금 확인 대기 상태가 아닙니다. | |
+| 400 | `CHAT_READ_SEQ_INVALID` | 채팅방에 없는 채팅입니다. | |
 | 400 | `PHONE_VERIFICATION_CODE_MISMATCH` | 인증번호가 일치하지 않습니다. | |
 | 400 | `PHONE_VERIFICATION_EXPIRED` | 인증번호가 만료되었습니다. 다시 요청해주세요. | |
 | 400 | `PROPOSAL_DEADLINE_INVALID` | 마감 시각은 현재 시각보다 이후여야 합니다. | |

@@ -1111,8 +1111,33 @@ CHAT_ROOM_DETAIL_EXAMPLE = {
         "lastSeq": 2,
         "myLastReadSeq": 0,
         "partnerLastReadSeq": 0,
+        "version": 0,
         "createdAt": EXAMPLE_CREATED_AT,
     },
+    "message": "Success",
+}
+
+CHAT_READ_EXAMPLE = {
+    "success": True,
+    "data": {"roomId": EXAMPLE_CHAT_ROOM_ID, "lastReadSeq": 5, "unreadCount": 0},
+    "message": "Success",
+}
+
+CHAT_UNREAD_COUNT_EXAMPLE = {
+    "success": True,
+    "data": {
+        "totalUnreadCount": 3,
+        "rooms": [
+            {"roomId": EXAMPLE_CHAT_ROOM_ID, "unreadCount": 2},
+            {"roomId": EXAMPLE_CHAT_ROOM_ID + 1, "unreadCount": 1},
+        ],
+    },
+    "message": "Success",
+}
+
+CHAT_READ_ALL_EXAMPLE = {
+    "success": True,
+    "data": {"totalUnreadCount": 0},
     "message": "Success",
 }
 

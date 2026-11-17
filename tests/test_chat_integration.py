@@ -1314,7 +1314,8 @@ def test_reading_a_chat_that_is_not_in_the_room_is_rejected(client, db, factory,
         response = read(client, factory, room_a.id, sample_user, seq)
         assert response.status_code == 400, response.json()
         assert response.json()["error"]["code"] == "CHAT_READ_SEQ_INVALID"
-    assert read(client, factory, room_a.id, sample_user, 0).status_code == 422
+    zero = read(client, factory, room_a.id, sample_user, 0)
+    assert zero.status_code == 400 and zero.json()["error"]["code"] == "VALIDATION_ERROR"
     assert room_detail(client, factory, room_a.id, sample_user)["myLastReadSeq"] == 0
 
 

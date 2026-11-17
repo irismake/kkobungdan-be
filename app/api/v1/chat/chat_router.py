@@ -10,8 +10,11 @@ from app.core.errors import AppError
 from app.core.openapi import (
     CHAT_MESSAGE_LIST_EXAMPLE,
     CHAT_MESSAGE_SEND_EXAMPLE,
+    CHAT_READ_ALL_EXAMPLE,
+    CHAT_READ_EXAMPLE,
     CHAT_ROOM_DETAIL_EXAMPLE,
     CHAT_ROOM_LIST_EXAMPLE,
+    CHAT_UNREAD_COUNT_EXAMPLE,
     error_responses,
     success_response,
 )
@@ -21,11 +24,16 @@ from app.schemas.chat import (
     ChatMessageListResponse,
     ChatMessageResponse,
     ChatMessageSendRequest,
+    ChatReadAllResponse,
+    ChatReadRequest,
+    ChatReadResponse,
     ChatRoomDetailResponse,
     ChatRoomListResponse,
+    ChatUnreadSummaryResponse,
 )
 from app.schemas.common import ApiResponse
 from app.services.chat.chat_message_service import ChatMessageService
+from app.services.chat.chat_read_service import ChatReadService
 from app.services.chat.chat_room_service import ChatRoomService, list_rooms
 
 
@@ -58,6 +66,43 @@ def list_chat_rooms(
     db: Session = Depends(get_db),
 ) -> ApiResponse[ChatRoomListResponse]:
     return ApiResponse(success=True, data=list_rooms(db, current_user.id, cursor, size), message="Success")
+
+
+# 고정 경로(/unread-count, /read-all)는 /{room_id}보다 먼저 등록한다.
+@router.get(
+    "/unread-count",
+    response_model=ApiResponse[ChatUnreadSummaryResponse],
+    status_code=status.HTTP_200_OK,
+    summary="안읽음 수 조회",
+    description=(
+        "행님·꼬붕 역할과 관계없이 내 채팅방별 안읽음 수와 전체 합계를 조회합니다. 안읽음이 있는 채팅방만 담습니다. "
+        "종료된 채팅방과 차단한 상대의 채팅방도 포함합니다. 합계는 앱 아이콘 배지 계산에 씁니다."
+    ),
+    responses={200: success_response(CHAT_UNREAD_COUNT_EXAMPLE), **error_responses(AppError.INVALID_TOKEN)},
+)
+def get_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[ChatUnreadSummaryResponse]:
+    return ApiResponse(success=True, data=ChatReadService.unread_summary(db, current_user.id), message="Success")
+
+
+@router.post(
+    "/read-all",
+    response_model=ApiResponse[ChatReadAllResponse],
+    status_code=status.HTTP_200_OK,
+    summary="전체 읽음",
+    description=(
+        "역할과 관계없이 내 모든 채팅방을 요청 시점의 마지막 채팅까지 읽음 처리합니다. 그 뒤에 저장된 채팅은 읽지 않습니다. "
+        "이미 더 뒤까지 읽은 채팅방은 그대로 두고, 상대방의 읽음 위치는 바꾸지 않습니다."
+    ),
+    responses={200: success_response(CHAT_READ_ALL_EXAMPLE), **error_responses(AppError.INVALID_TOKEN)},
+)
+def read_all_chat_rooms(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[ChatReadAllResponse]:
+    return ApiResponse(success=True, data=ChatReadService.read_all(db, current_user.id), message="Success")
 
 
 @router.get(
@@ -128,3 +173,24 @@ def send_chat_message(
     db: Session = Depends(get_db),
 ) -> ApiResponse[ChatMessageResponse]:
     return ApiResponse(success=True, data=ChatMessageService.send(db, room_id, current_user.id, request), message="Success")
+
+
+@router.post(
+    "/{room_id}/read",
+    response_model=ApiResponse[ChatReadResponse],
+    status_code=status.HTTP_200_OK,
+    summary="읽음 처리",
+    description=(
+        "채팅방에 들어갔거나 보고 있는 중에 받은 채팅을 seq까지 읽음 처리합니다. 읽음 위치는 뒤로만 움직여서, "
+        "이미 읽은 위치와 같거나 앞선 seq도 성공으로 응답하고 위치를 유지합니다. 채팅방에 없는 seq는 400 CHAT_READ_SEQ_INVALID입니다. "
+        "채팅방 상태나 차단과 관계없이 읽을 수 있습니다."
+    ),
+    responses={200: success_response(CHAT_READ_EXAMPLE), **ROOM_ERRORS, **error_responses(AppError.CHAT_READ_SEQ_INVALID)},
+)
+def read_chat_room(
+    request: ChatReadRequest,
+    room_id: int = Path(..., gt=0, description="채팅방 ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[ChatReadResponse]:
+    return ApiResponse(success=True, data=ChatReadService.read(db, room_id, current_user.id, request.seq), message="Success")
