@@ -234,18 +234,21 @@ def test_processing_delivery_is_leased_and_reclaimed_after_five_minutes(db):
     from app.models.outbox import DeliveryStatus, EventDelivery
     from app.services.outbox.delivery import claim_due_deliveries
 
-    delivery = make_delivery(db, "test.a", "PENDING", finished_at=None)
+    delivery_id = make_delivery(db, "test.a", "PENDING", finished_at=None).id
+    first, second, third = TestSessionLocal(), TestSessionLocal(), TestSessionLocal()
+    try:
+        assert [d.id for d in claim_due_deliveries(first, now=NOW)] == [delivery_id]
 
-    claimed = claim_due_deliveries(TestSessionLocal(), now=NOW)
-    assert [d.id for d in claimed] == [delivery.id]
+        db.rollback()  # 다른 세션이 커밋한 값을 보려면 이 세션의 트랜잭션(REPEATABLE READ 스냅샷)을 끝낸다
+        stored = db.get(EventDelivery, delivery_id)
+        assert stored.status == DeliveryStatus.PROCESSING
+        assert stored.locked_until == NOW + timedelta(minutes=5)
 
-    db.expire_all()
-    stored = db.get(EventDelivery, delivery.id)
-    assert stored.status == DeliveryStatus.PROCESSING
-    assert stored.locked_until == NOW + timedelta(minutes=5)
-
-    assert claim_due_deliveries(TestSessionLocal(), now=NOW + timedelta(minutes=1)) == []
-    assert [d.id for d in claim_due_deliveries(TestSessionLocal(), now=NOW + timedelta(minutes=6))] == [delivery.id]
+        assert claim_due_deliveries(second, now=NOW + timedelta(minutes=1)) == []
+        assert [d.id for d in claim_due_deliveries(third, now=NOW + timedelta(minutes=6))] == [delivery_id]
+    finally:
+        for session in (first, second, third):
+            session.close()
 
 
 # ------------------------------------------------------------------ DEAD와 수동 재처리 (OUTBOX-REQ-006)
@@ -324,14 +327,15 @@ def test_concurrent_admin_retries_reprocess_only_once(db, admin_user):
     from app.models.outbox import DeliveryStatus, EventDelivery
     from app.services.outbox.admin import OutboxAdminService
 
-    delivery = make_delivery(db, "test.a", "DEAD")
+    delivery_id = make_delivery(db, "test.a", "DEAD").id
+    admin_id = admin_user.id  # 스레드가 메인 세션 객체를 건드리지 않게 값만 넘긴다
 
-    results, errors = run_in_threads(lambda session: OutboxAdminService.retry_delivery(session, delivery.id, admin_user.id))
+    results, errors = run_in_threads(lambda session: OutboxAdminService.retry_delivery(session, delivery_id, admin_id))
 
     assert sum(result is not None for result in results) == 1
     assert sum(error is not None for error in errors) == 1
-    db.expire_all()
-    stored = db.get(EventDelivery, delivery.id)
+    db.rollback()  # 스레드 세션이 커밋한 값을 보려면 이 세션의 스냅샷을 끝낸다
+    stored = db.get(EventDelivery, delivery_id)
     assert stored.status == DeliveryStatus.PENDING
     assert stored.manual_retry_count == 1
 
@@ -383,12 +387,14 @@ def test_cleanup_deletes_only_events_finished_more_than_seven_days_ago(db):
     failed = make_delivery(db, "test.a", "FAILED", finished_at=None, aggregate_id="failed")
     unpublished = record(db, aggregate_id="unpublished")
     db.commit()
+    old_id = old_done.event_id
+    kept_ids = {recent_done.event_id, dead.event_id, failed.event_id, unpublished.event_id}
 
     deleted = cleanup_finished_events(db, now=NOW)
 
     assert deleted == 1
     db.expire_all()
     remaining_events = {event.event_id for event in db.query(OutboxEvent).all()}
-    assert old_done.event_id not in remaining_events
-    assert {recent_done.event_id, dead.event_id, failed.event_id, unpublished.event_id} <= remaining_events
-    assert db.query(EventDelivery).filter(EventDelivery.event_id == old_done.event_id).count() == 0
+    assert old_id not in remaining_events
+    assert kept_ids <= remaining_events
+    assert db.query(EventDelivery).filter(EventDelivery.event_id == old_id).count() == 0

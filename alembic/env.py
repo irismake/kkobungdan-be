@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401
     dispute_survey,
     mission,
     notification,
+    outbox,
     offer,
     proposal,
     refund,

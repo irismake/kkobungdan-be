@@ -78,6 +78,7 @@
 | 403 | `FORBIDDEN` | 권한이 없습니다. | |
 | 403 | `PROPOSAL_SELF_REPORT_NOT_ALLOWED` | 본인의 요청은 신고할 수 없습니다. | |
 | 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없습니다. | |
+| 404 | `OUTBOX_DELIVERY_NOT_FOUND` | 전달 기록을 찾을 수 없습니다. | 관리자 웹 전용 |
 | 404 | `DISPUTE_EVIDENCE_NOT_FOUND` | 분쟁 증빙을 찾을 수 없습니다. | |
 | 404 | `MISSION_NOT_FOUND` | 임무를 찾을 수 없습니다. | 관리자 웹 전용 |
 | 404 | `NOTIFICATION_NOT_FOUND` | 알림을 찾을 수 없습니다. | |
@@ -92,6 +93,7 @@
 | 409 | `DUPLICATE_PROPOSAL_REPORT` | 이미 해당 요청을 신고했습니다. | |
 | 409 | `OFFER_NOT_ACCEPTABLE` | 수락할 수 없는 지원 상태입니다. | |
 | 409 | `OFFER_NOT_CANCELLABLE` | 취소할 수 없는 지원 상태입니다. | |
+| 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD 상태인 전달만 다시 처리할 수 있습니다. | 관리자 웹 전용 |
 | 409 | `MISSION_NOT_RESOLVABLE` | 분쟁 중인 임무만 판정할 수 있습니다. | 관리자 웹 전용 |
 | 409 | `MISSION_NOT_SETTLEABLE` | 수행비를 지급할 수 없는 임무 상태입니다. | 관리자 웹 전용 |
 | 409 | `OFFER_NOT_UPDATABLE` | 변경할 수 없는 지원 상태입니다. | |

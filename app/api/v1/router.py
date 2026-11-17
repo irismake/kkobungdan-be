@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin.admin_auth_router import router as admin_auth_router
+from app.api.v1.admin.admin_outbox_router import router as admin_outbox_router
 from app.api.v1.admin.admin_router import router as admin_router
 from app.api.v1.chat.chat_router import router as chat_router
 from app.api.v1.dispute.dispute_evidence_router import router as dispute_evidence_router
@@ -31,3 +32,4 @@ api_router.include_router(settlement_router)
 api_router.include_router(notification_router)
 api_router.include_router(admin_auth_router)
 api_router.include_router(admin_router)
+api_router.include_router(admin_outbox_router)

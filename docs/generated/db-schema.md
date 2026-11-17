@@ -36,6 +36,8 @@ native ENUM으로 남아 있던 6개 컬럼은 `0029_replace_mysql_enums_with_va
 | `refunds` | refund | O | `docs/design-docs/refund-lifecycle.md` | 입금 확인된 요청의 환불 처리 정본 |
 | `chat_rooms` | chat | O | `docs/design-docs/chat-architecture.md` | 지원 1건당 행님–꼬붕 1:1 채팅방 |
 | `chat_messages` | chat | O | `docs/design-docs/chat-architecture.md` | 채팅방의 일반·시스템 채팅 |
+| `outbox_events` | outbox | O | `docs/design-docs/outbox.md` | 상태 변경과 같은 트랜잭션에 기록한 이벤트 |
+| `event_deliveries` | outbox | O | `docs/design-docs/outbox.md` | 전달 대상별 처리 기록 (중복 방지·재시도·DEAD) |
 | `dispute_evidences` | execution/dispute-evidence | O | `docs/domain.md` | 분쟁 사유 증빙 |
 | `dispute_survey_questions` | dispute-survey | O | `docs/api-spec/README.md` | 분쟁 접수 전 설문 질문 마스터 |
 | `proposal_report_reason_questions` | proposal-report | O | `docs/product-specs/proposal-reporting.md` | 게시글 신고 사유 마스터 |
@@ -344,6 +346,47 @@ Legacy `phone_verifications`도 migration 기준으로 감사 컬럼이 있다.
 | `system_event_key` | `varchar(100)` | YES | UNIQUE `uk_chat_messages_room_system_event_key` 일부 | 같은 사건 중복 저장 방지 키 |
 | `client_message_id` | `varchar(64)` | YES | UNIQUE `uk_chat_messages_sender_client_message_id` 일부 | 앱 전송 ID (중복 전송 방지) |
 | `created_at` | `datetime(6)` | NO |  | 전송 시각 |
+
+## `outbox_events`
+
+공통 Transactional Outbox의 이벤트다. 0036_create_outbox_tables에서 생성한다. 컬럼 설명은 [`outbox.md`](../design-docs/outbox.md#outbox_events)가 정본이다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 |
+|------|------|------|-----------|
+| `id` | `bigint` | NO | PK, `idx_outbox_events_unpublished`·`idx_outbox_events_aggregate` 일부 |
+| `event_id` | `varchar(36)` | NO | UNIQUE `uk_outbox_events_event_id` |
+| `event_type` | `varchar(60)` | NO | |
+| `aggregate_type` | `varchar(30)` | NO | INDEX `idx_outbox_events_aggregate` |
+| `aggregate_id` | `varchar(64)` | NO | INDEX `idx_outbox_events_aggregate` |
+| `schema_version` | `smallint` | NO | |
+| `payload` | `json` | NO | |
+| `occurred_at` | `datetime` | NO | |
+| `published_at` | `datetime` | YES | INDEX `idx_outbox_events_unpublished` |
+| `publish_attempts` | `int` | NO | |
+| `next_publish_at` | `datetime` | YES | INDEX `idx_outbox_events_unpublished` |
+| `last_publish_error` | `varchar(500)` | YES | |
+
+## `event_deliveries`
+
+전달 대상별 처리 기록이다. 컬럼 설명은 [`outbox.md`](../design-docs/outbox.md#event_deliveries)가 정본이다.
+
+| 컬럼 | 타입 | Null | 키/인덱스 |
+|------|------|------|-----------|
+| `id` | `bigint` | NO | PK |
+| `event_id` | `varchar(36)` | NO | UNIQUE `uk_event_deliveries_event_consumer` 일부 |
+| `consumer` | `varchar(50)` | NO | UNIQUE `uk_event_deliveries_event_consumer` 일부, INDEX `idx_event_deliveries_consumer_status_finished` |
+| `status` | `varchar(12)` | NO | CHECK `ck_event_deliveries_status_values`, INDEX `idx_event_deliveries_status_next_attempt`·`idx_event_deliveries_status_locked` |
+| `attempts` | `int` | NO | |
+| `next_attempt_at` | `datetime` | YES | |
+| `locked_until` | `datetime` | YES | |
+| `last_error` | `varchar(500)` | YES | |
+| `skip_reason` | `varchar(50)` | YES | |
+| `dead_alerted_at` | `datetime` | YES | |
+| `manual_retry_count` | `int` | NO | |
+| `last_manual_retry_by` | `varchar(36)` | YES | |
+| `finished_at` | `datetime` | YES | |
+| `created_at` | `datetime` | NO | |
+| `updated_at` | `datetime` | NO | |
 
 ## `dispute_evidences`
 

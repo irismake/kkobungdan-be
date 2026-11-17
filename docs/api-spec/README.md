@@ -363,6 +363,32 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | systemEvent | string, null | 시스템 채팅 사건 코드 (예: `OFFER_CREATED`) |
 | createdAt | string | 전송 시각 |
 
+### OutboxDeliveryResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 전달 기록 ID |
+| eventId | string | 이벤트 ID (UUID) |
+| eventType | string | 이벤트 유형 (예: `chat.message.created`) |
+| aggregateType | string | 대상 종류 (예: `chat_room`) |
+| aggregateId | string | 대상 ID (순서 키) |
+| consumer | string | 전달 대상 (예: `chat.push`) |
+| status | string | `PENDING`, `PROCESSING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `DEAD` |
+| attempts | number | 이번 회차의 시도 횟수. 수동 재처리 때 0 |
+| lastError | string, null | 마지막 오류 |
+| skipReason | string, null | `SKIPPED` 이유 (예: `expired`) |
+| manualRetryCount | number | 수동 재처리 횟수 |
+| occurredAt | string | 이벤트 발생 시각 |
+| nextAttemptAt | string, null | 다음 시도 시각 (`FAILED`일 때) |
+| finishedAt | string, null | 끝난 시각 (`SUCCEEDED`·`SKIPPED`·`DEAD`) |
+
+### OutboxBulkRetryResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| consumer | string | 전달 대상 |
+| retriedCount | number | 다시 처리하도록 바꾼 DEAD 전달 수 |
+
 ### DisputeEvidenceResponse
 
 | 필드 | 타입 | 설명 |
@@ -545,6 +571,19 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 채팅 조회 (최근 30개) | `GET` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
 
 채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다. 나머지 채팅 API(목록, 전송, 읽음, 실시간)는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
+
+### Admin Outbox API
+
+공통 Transactional Outbox의 전달 기록 조회와 DEAD 수동 재처리다 ([`outbox.md`](../design-docs/outbox.md), OUTBOX-REQ-006). 관리자만 가능하다.
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 전달 목록 조회 | `GET` | `/v1/admin/outbox/deliveries?status=DEAD&consumer=&from=&to=&page=&size=` | 관리자 | `200 OK` | `PageResponse<OutboxDeliveryResponse>` |
+| DEAD 전달 재처리 | `POST` | `/v1/admin/outbox/deliveries/{deliveryId}/retry` | 관리자 | `200 OK` | `OutboxDeliveryResponse` |
+| 전달 대상의 DEAD 일괄 재처리 | `POST` | `/v1/admin/outbox/deliveries/retry?consumer=` | 관리자 | `200 OK` | `OutboxBulkRetryResponse` |
+
+- `status` 기본값은 `DEAD`. `from`(포함)·`to`(미포함)는 끝난 시각(`finishedAt`) 기준이다.
+- 재처리는 `DEAD`인 전달만 가능하다. 아니면 `409 OUTBOX_DELIVERY_NOT_RETRYABLE`. 동시에 여러 번 요청해도 한 번만 바뀐다.
 
 ### Admin Execution API
 
@@ -875,6 +914,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 404 | `PROPOSAL_NOT_FOUND` | Proposal을 찾을 수 없음 |
 | 404 | `OFFER_NOT_FOUND` | Offer를 찾을 수 없음 |
 | 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없음 |
+| 404 | `OUTBOX_DELIVERY_NOT_FOUND` | 전달 기록을 찾을 수 없음 (관리자) |
+| 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD가 아닌 전달을 재처리하려 함 (관리자) |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 사용 중인 전화번호 |
 | 409 | `DUPLICATE_OFFER` | 동일 Proposal에 중복 Offer 제출 |
 | 409 | `PROPOSAL_NOT_OPEN` | Offer를 받을 수 없는 Proposal 상태 |

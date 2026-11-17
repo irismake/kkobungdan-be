@@ -14,7 +14,7 @@
 - [`api-router-organization.md`](./api-router-organization.md): API 라우터의 도메인 패키지, 명명, 버전별 조립 원칙
 - [`refund-lifecycle.md`](./refund-lifecycle.md): 환불 정본 테이블과 분쟁 종결·취소 상태 전이 결정
 - [`tdd-workflow.md`](./tdd-workflow.md): 저장소 전체 TDD 개발 흐름과 문서·테스트 연결 규칙 (초안)
-- [`outbox.md`](./outbox.md): 공통 Transactional Outbox 설계. 기록·발행·전달 처리·재시도·DEAD·재처리·정리, Kafka 확장 (설계 확정, 구현 전)
+- [`outbox.md`](./outbox.md): 공통 Transactional Outbox 설계. 기록·발행·전달 처리·재시도·DEAD·재처리·정리, Kafka 확장 (구현됨)
 - [`chat-architecture.md`](./chat-architecture.md): 채팅 서버 구성(WebSocket 수신·REST 전송), 데이터 모델, 모듈·의존성 규칙 (설계 확정, 구현 전)
 - [`../api-spec/README.md`](../api-spec/README.md): 외부 API 요청/응답 계약 정본
 - [`../domain.md`](../domain.md): 도메인 상태와 정책 정본

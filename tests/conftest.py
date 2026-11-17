@@ -22,6 +22,8 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("AWS_SNS_ACCESS_KEY_ID", "test-access-key")
 os.environ.setdefault("AWS_SNS_SECRET_ACCESS_KEY", "test-secret-key")
 os.environ.setdefault("AWS_SNS_SMS_SENDER_ID", "OrderRun")
+# Outbox 주기 작업이 테스트 도중 이벤트를 집어 가지 않게 끈다. 테스트는 함수를 직접 부른다.
+os.environ.setdefault("OUTBOX_WORKER_ENABLED", "false")
 
 from app.core.config import settings
 from app.core.database import Base, get_db

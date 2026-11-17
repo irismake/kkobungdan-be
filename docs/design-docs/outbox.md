@@ -1,6 +1,6 @@
 # Transactional Outbox
 
-> 상태: 설계 확정 (2026-11-17), 구현 전
+> 상태: 구현됨 (2026-11-17, 0036_create_outbox_tables)
 > 관련 문서: [`../product-specs/event-delivery.md`](../product-specs/event-delivery.md) (`OUTBOX-REQ-*`), [`../domains/outbox/test-scenarios.md`](../domains/outbox/test-scenarios.md) (`OUTBOX-TS-*`), [`chat-architecture.md`](./chat-architecture.md) (첫 사용처)
 
 ## 배경
@@ -62,16 +62,16 @@
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | `id` | BIGINT PK | 기록 순서. 발행 순서 |
-| `event_id` | CHAR(36), UNIQUE | 이벤트 ID(UUID). 전달 중복 방지 키 |
+| `event_id` | VARCHAR(36), UNIQUE | 이벤트 ID(UUID). 전달 중복 방지 키 |
 | `event_type` | VARCHAR(60) | 예: `chat.message.created`, 이후 `payment.approved` |
 | `aggregate_type` | VARCHAR(30) | 예: `chat_room`, `payment`. Kafka 토픽 선택 기준 |
 | `aggregate_id` | VARCHAR(64) | 순서 키. Kafka 파티션 키 |
 | `schema_version` | SMALLINT | 내용 형식 버전 |
 | `payload` | JSON | 이벤트 내용 |
-| `occurred_at` | DATETIME(6) | 사건 시각(UTC). 유효 시간 계산 기준 |
-| `published_at` | DATETIME(6), NULL | 발행 완료 시각. NULL이면 미발행 |
+| `occurred_at` | DATETIME | 사건 시각(UTC). 유효 시간 계산 기준 |
+| `published_at` | DATETIME, NULL | 발행 완료 시각. NULL이면 미발행 |
 | `publish_attempts` | INT, 기본 0 | 발행 시도 횟수 |
-| `next_publish_at` | DATETIME(6), NULL | 발행 실패 후 다음 시도 시각 |
+| `next_publish_at` | DATETIME, NULL | 발행 실패 후 다음 시도 시각 |
 | `last_publish_error` | VARCHAR(500), NULL | |
 
 - 인덱스: (`published_at`, `next_publish_at`, `id`)로 발행할 이벤트를 순서대로 꺼낸다. 발행 지연 점검은 미발행 중 가장 작은 `id`의 `occurred_at`을 본다.
@@ -81,19 +81,19 @@
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | `id` | BIGINT PK | |
-| `event_id` | CHAR(36) | |
+| `event_id` | VARCHAR(36) | |
 | `consumer` | VARCHAR(50) | 예: `chat.realtime`, `chat.push`. Kafka consumer group에 대응 |
 | `status` | VARCHAR(12) CHECK | `PENDING`, `PROCESSING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `DEAD` |
 | `attempts` | INT, 기본 0 | 이번 회차의 시도 횟수. 수동 재처리 때 0으로 되돌린다 |
-| `next_attempt_at` | DATETIME(6), NULL | `FAILED`일 때 다음 시도 시각 |
-| `locked_until` | DATETIME(6), NULL | `PROCESSING` 임대 만료 시각(집은 뒤 5분) |
+| `next_attempt_at` | DATETIME, NULL | `FAILED`일 때 다음 시도 시각 |
+| `locked_until` | DATETIME, NULL | `PROCESSING` 임대 만료 시각(집은 뒤 5분) |
 | `last_error` | VARCHAR(500), NULL | |
 | `skip_reason` | VARCHAR(50), NULL | `SKIPPED` 이유 (예: `expired`, `not_connected`) |
-| `dead_alerted_at` | DATETIME(6), NULL | DEAD 알림을 보낸 시각. 한 번만 알리기 위함 |
+| `dead_alerted_at` | DATETIME, NULL | DEAD 알림을 보낸 시각. 한 번만 알리기 위함 |
 | `manual_retry_count` | INT, 기본 0 | 수동 재처리 횟수 |
-| `last_manual_retry_by` | VARCHAR(36), NULL | 마지막 재처리를 요청한 관리자 |
-| `finished_at` | DATETIME(6), NULL | `SUCCEEDED`·`SKIPPED`·`DEAD`가 된 시각. 정리 기준 |
-| `created_at`, `updated_at` | DATETIME(6) | |
+| `last_manual_retry_by` | VARVARCHAR(36), NULL | 마지막 재처리를 요청한 관리자 |
+| `finished_at` | DATETIME, NULL | `SUCCEEDED`·`SKIPPED`·`DEAD`가 된 시각. 정리 기준 |
+| `created_at`, `updated_at` | DATETIME | |
 
 - UNIQUE (`event_id`, `consumer`): 같은 이벤트를 같은 전달 대상이 두 번 처리하지 않는다. Kafka를 도입해도 같은 메시지가 다시 올 수 있으므로(at-least-once) 이 테이블이 중복 방지(inbox) 역할을 그대로 한다.
 - 인덱스: (`status`, `next_attempt_at`), (`status`, `locked_until`), (`consumer`, `status`, `finished_at`).

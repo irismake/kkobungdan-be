@@ -1145,3 +1145,41 @@ CHAT_MESSAGE_LIST_EXAMPLE = {
     },
     "message": "Success",
 }
+
+
+OUTBOX_DELIVERY_EXAMPLE = {
+    "id": 7,
+    "eventId": "8f0c7d6e-0000-4000-8000-000000000001",
+    "eventType": "chat.message.created",
+    "aggregateType": "chat_room",
+    "aggregateId": "42",
+    "consumer": "chat.push",
+    "status": "DEAD",
+    "attempts": 6,
+    "lastError": "RuntimeError: FCM 발송 실패",
+    "skipReason": None,
+    "manualRetryCount": 0,
+    "occurredAt": EXAMPLE_CREATED_AT,
+    "nextAttemptAt": None,
+    "finishedAt": EXAMPLE_UPDATED_AT,
+}
+
+ADMIN_OUTBOX_DELIVERY_PAGE_EXAMPLE = _admin_page(OUTBOX_DELIVERY_EXAMPLE)
+
+ADMIN_OUTBOX_RETRY_EXAMPLE = {
+    "success": True,
+    "data": {
+        **OUTBOX_DELIVERY_EXAMPLE,
+        "status": "PENDING",
+        "attempts": 0,
+        "manualRetryCount": 1,
+        "finishedAt": None,
+    },
+    "message": "전달을 다시 처리하도록 바꿨습니다.",
+}
+
+ADMIN_OUTBOX_BULK_RETRY_EXAMPLE = {
+    "success": True,
+    "data": {"consumer": "chat.push", "retriedCount": 3},
+    "message": "전달을 다시 처리하도록 바꿨습니다.",
+}

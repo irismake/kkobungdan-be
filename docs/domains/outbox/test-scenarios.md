@@ -1,6 +1,6 @@
 # Outbox Test Scenarios
 
-> 상태: 구현 전 (모든 시나리오가 아직 테스트로 작성되지 않음)
+> 상태: 구현됨 (모든 시나리오가 테스트에 연결됨)
 > 요구사항 정본: [`event-delivery.md`](../../product-specs/event-delivery.md) (`OUTBOX-REQ-*`)
 
 기준 테스트 파일: `tests/test_outbox_service.py`(단위), `tests/test_outbox_integration.py`(통합)
