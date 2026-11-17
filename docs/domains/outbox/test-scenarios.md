@@ -38,4 +38,4 @@
 | OUTBOX-TS-020 | OUTBOX-REQ-006 | Given 관리자가 아닌 사용자 / When `DEAD` 목록 조회나 재처리 요청 / Then 기존 관리자 API와 같이 거부된다 | integration | `api` |
 | OUTBOX-TS-021 | OUTBOX-REQ-007 | Given 모든 전달이 `SUCCEEDED`·`SKIPPED`이고 끝난 지 8일 된 이벤트, 6일 된 이벤트, `DEAD`가 있는 이벤트, `FAILED`가 있는 이벤트, 미발행 이벤트 / When 정리 작업 실행 / Then 8일 된 이벤트와 그 전달 기록만 지워지고 나머지는 모두 남는다 | integration | `api` |
 | OUTBOX-TS-022 | OUTBOX-REQ-002, OUTBOX-REQ-007 | Given 앱 시작 / When Outbox 주기 작업을 등록 / Then 10초마다 도는 처리 작업과 매일 04:00 정리 작업 두 개만 등록되고, 커밋 직후 깨우면 처리 작업이 바로 한 번 실행되도록 예약된다 | unit | `service` |
-| OUTBOX-TS-023 | OUTBOX-REQ-002, OUTBOX-REQ-003, OUTBOX-REQ-005 | Given 미발행 이벤트와 재시도 시각이 된 전달 / When 10초 처리 작업이 한 번 실행됨 / Then 미발행 이벤트를 모두 발행하고, 처리할 전달을 처리하고, 발행 지연을 점검하는 순서로 한 번에 돈다 | unit | `service` |
+| OUTBOX-TS-023 | OUTBOX-REQ-002, OUTBOX-REQ-003, OUTBOX-REQ-005 | Given 미발행 이벤트와 재시도 시각이 된 전달 / When 10초 처리 작업이 한 번 실행됨 / Then 미발행 이벤트를 모두 발행하고, 처리할 전달이 없을 때까지 전달을 처리하고, 발행 지연을 점검하는 순서로 한 번에 돈다 | unit | `service` |

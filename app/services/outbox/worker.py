@@ -25,6 +25,9 @@ from app.services.outbox.writer import RECORDED_FLAG
 
 logger = logging.getLogger(__name__)
 
+#: 한 주기에서 전달 처리를 반복하는 최대 횟수
+MAX_PROCESS_ROUNDS = 20
+
 CYCLE_INTERVAL_SECONDS = 10
 CLEANUP_HOUR = 4
 
@@ -91,9 +94,7 @@ class OutboxWorker:
             return
         try:
             self._with_session(self._publish_all)
-            self._with_session(
-                lambda db: process_due_deliveries(db, self._registry, utcnow_naive(), get_admin_alert_sender())
-            )
+            self._with_session(self._process_all)
             self._with_session(lambda db: self._monitor.check(oldest_unpublished_at(db), utcnow_naive()))
         finally:
             self._cycle_lock.release()
@@ -106,6 +107,18 @@ class OutboxWorker:
     def _publish_all(self, db: Session) -> None:
         while publish_pending(db, self._publisher, utcnow_naive()) > 0:
             pass
+
+    def _process_all(self, db: Session) -> None:
+        """처리할 전달이 없을 때까지 반복한다.
+
+        순서를 지키려고 한 번에 같은 대상(예: 채팅방)의 전달은 하나만 집으므로, 한 트랜잭션에서 생긴
+        이벤트 여러 개(예: 지원 등록 안내 + 첫 인사)가 다음 주기까지 밀리지 않게 바로 이어서 처리한다.
+        한 주기가 끝없이 길어지지 않게 횟수를 제한한다.
+        """
+        alert_sender = get_admin_alert_sender()
+        for _ in range(MAX_PROCESS_ROUNDS):
+            if process_due_deliveries(db, self._registry, utcnow_naive(), alert_sender) == 0:
+                return
 
     def _with_session(self, work):
         db = self._session_factory()

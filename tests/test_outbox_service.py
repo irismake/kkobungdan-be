@@ -295,11 +295,18 @@ def test_one_cycle_publishes_then_processes_deliveries_then_checks_delay(monkeyp
         return next(publish_results)
 
     monkeypatch.setattr(outbox_worker, "publish_pending", fake_publish)
-    monkeypatch.setattr(outbox_worker, "process_due_deliveries", lambda db, registry, now, alert_sender: calls.append("deliveries"))
+    delivery_results = iter([2, 1, 0])
+
+    def fake_deliveries(db, registry, now, alert_sender):
+        calls.append("deliveries")
+        return next(delivery_results)
+
+    monkeypatch.setattr(outbox_worker, "process_due_deliveries", fake_deliveries)
     monkeypatch.setattr(outbox_worker, "oldest_unpublished_at", lambda db: calls.append("oldest") or None)
     monkeypatch.setattr(outbox_worker, "get_admin_alert_sender", lambda: RecordingAlerts())
 
     session = SimpleNamespace(close=lambda: None, rollback=lambda: None)
     outbox_worker.OutboxWorker(lambda: session).run_cycle()
 
-    assert calls == ["publish", "publish", "publish", "deliveries", "oldest"]
+    # 같은 대상은 한 번에 하나씩 집으므로, 처리할 전달이 없을 때까지 이어서 처리한다
+    assert calls == ["publish", "publish", "publish", "deliveries", "deliveries", "deliveries", "oldest"]

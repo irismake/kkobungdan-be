@@ -1526,8 +1526,11 @@ def run_chat_push(sender, *extra_consumers, now: datetime | None = None) -> None
         registry.register(consumer)
     now = now or utcnow_naive()
     with TestSessionLocal() as session:
-        publish_pending(session, InProcessEventPublisher(registry), now)
-        process_due_deliveries(session, registry, now, NoAlerts())
+        while publish_pending(session, InProcessEventPublisher(registry), now) > 0:
+            pass
+        # 워커처럼 처리할 전달이 없을 때까지 반복한다 (같은 채팅방은 한 번에 하나씩 집는다)
+        while process_due_deliveries(session, registry, now, NoAlerts()) > 0:
+            pass
 
 
 def for_seq(pushes: list[dict], room_id: int, seq: int) -> list[dict]:
