@@ -1,6 +1,6 @@
 """채팅 단위 테스트 (DB 없이 서비스·도메인 규칙 검증).
 
-시나리오 정본: docs/product-specs/chat-requirements.md 의 CHAT-TS-*
+시나리오 정본: docs/domains/chat/test-scenarios.md 의 CHAT-TS-*
 TDD 흐름: docs/design-docs/tdd-workflow.md
 """
 

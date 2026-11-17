@@ -10,7 +10,8 @@
 |------|------|
 | `AGENTS.md` (TDD 개발 규칙 섹션) | AI가 지켜야 할 개발 규칙과 문서 위치 |
 | `docs/design-docs/tdd-workflow.md` | 저장소 전체 TDD 흐름과 문서·테스트 연결 규칙 |
-| `docs/product-specs/chat-requirements.md` | 채팅 요구사항과 테스트 시나리오 |
+| `docs/product-specs/chat-requirements.md` | 채팅 요구사항 |
+| `docs/domains/chat/test-scenarios.md` | 채팅 테스트 시나리오 |
 | `docs/design-docs/chat-architecture.md` | 채팅 서버 구성과 의존성 규칙 |
 | `tests/test_chat_service.py`, `tests/test_chat_integration.py` | 채팅 TDD 단위 테스트와 통합 테스트 자리 |
 | `scripts/verify.sh` | 테스트·정적 검사 자동 실행 |

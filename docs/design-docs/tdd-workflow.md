@@ -17,7 +17,7 @@
 
 하네스 엔지니어링의 문서 → 계획 → 코드 → 검증 순서 안에서 코드 단계를 Red → Green → Refactor로 진행한다.
 
-1. **문서**: `docs/product-specs/`에 요구사항(`{DOMAIN}-REQ-*`)과 테스트 시나리오(`{DOMAIN}-TS-*`)를 적는다.
+1. **문서**: `docs/product-specs/`에 요구사항(`{DOMAIN}-REQ-*`)을, `docs/domains/{domain}/test-scenarios.md`에 테스트 시나리오(`{DOMAIN}-TS-*`)를 적는다. 시나리오마다 연결된 요구사항 ID를 적는다.
 2. **Red**: 시나리오마다 실패하는 테스트를 먼저 작성하고, 실패를 확인한다.
 3. **Green**: 테스트를 통과하는 최소한의 코드를 작성한다.
 4. **Refactor**: 테스트를 유지한 채 구조를 정리한다.

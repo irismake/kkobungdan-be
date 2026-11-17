@@ -45,19 +45,21 @@
 ### 문서 위치
 - [`docs/design-docs/tdd-workflow.md`](./docs/design-docs/tdd-workflow.md): TDD 흐름과 문서·테스트 연결 규칙
 - [`docs/references/testing-guidelines.md`](./docs/references/testing-guidelines.md): 테스트 종류, 파일명, 검증 규칙
-- `docs/product-specs/*.md`: 기능별 요구사항과 테스트 시나리오
+- `docs/product-specs/*.md`: 기능별 요구사항(`{DOMAIN}-REQ-*`)
+- `docs/domains/{domain}/test-scenarios.md`: 도메인별 테스트 시나리오(`{DOMAIN}-TS-*`)
 - `tests/`: 단위 테스트(`test_{module}.py`)와 통합 테스트(`test_{domain}_integration.py`)
 - [`scripts/verify.sh`](./scripts/verify.sh): 테스트·정적 검사 자동 실행
 - [`.github/workflows/test.yml`](./.github/workflows/test.yml): PR 생성 시 자동 검증
 
 ### 규칙
-- 요구사항(`{DOMAIN}-REQ-*`)과 테스트 시나리오(`{DOMAIN}-TS-*`)를 먼저 스펙 문서에 적는다.
+- 요구사항(`{DOMAIN}-REQ-*`)을 스펙 문서에, 테스트 시나리오(`{DOMAIN}-TS-*`)를 도메인 시나리오 문서에 먼저 적는다. 시나리오마다 연결된 요구사항 ID를 적는다.
 - 시나리오마다 실패하는 테스트를 먼저 작성하고 실패를 확인한 뒤 구현한다.
 - 완료 전 `scripts/verify.sh`가 통과해야 한다.
 - TODO: 추가 규칙
 
 ### 채팅 (첫 적용 기능)
-- [`docs/product-specs/chat-requirements.md`](./docs/product-specs/chat-requirements.md): 채팅 요구사항과 테스트 시나리오
+- [`docs/product-specs/chat-requirements.md`](./docs/product-specs/chat-requirements.md): 채팅 요구사항
+- [`docs/domains/chat/test-scenarios.md`](./docs/domains/chat/test-scenarios.md): 채팅 테스트 시나리오
 - [`docs/design-docs/chat-architecture.md`](./docs/design-docs/chat-architecture.md): 채팅 서버 구성과 의존성 규칙
 
 ## 마이그레이션 규칙
