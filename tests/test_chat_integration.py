@@ -1686,3 +1686,294 @@ def test_runner_completion_is_not_chat_pushed_to_the_orderer_who_gets_the_notifi
     assert sender.to(journey.orderer) == []  # 행님은 기존 알림 푸시만 받는다
     assert [p["body"] for p in sender.to(runner)] == ["행님의 임무 완료 확인을 기다리고 있어요."]
     assert unread_summary(client, factory, journey.orderer)[room_id] == before + 1
+
+
+# ================================================================== 4-7 실시간
+
+ORDERER_CANCEL_TEXT = "꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요."
+RUNNER_CANCEL_TEXT = "지원을 취소했어요. 채팅이 자동으로 종료돼요."
+
+
+def ws_connect(client, user, token: str | None = None):
+    from app.core.security import create_access_token
+
+    token = token or create_access_token({"sub": user.id})
+    return client.websocket_connect("/v1/chat/ws", headers={"Authorization": f"Bearer {token}"})
+
+
+def run_realtime(now: datetime | None = None) -> None:
+    """outbox 처리 한 바퀴를 chat.realtime만 등록해 돌린다(앱의 hub로 보낸다)."""
+    from app.core.time import utcnow_naive
+    from app.realtime.hub import chat_hub
+    from app.services.chat.chat_realtime import ChatRealtimeConsumer
+    from app.services.outbox.consumers import ConsumerRegistry
+    from app.services.outbox.delivery import process_due_deliveries
+    from app.services.outbox.publisher import InProcessEventPublisher
+    from app.services.outbox.relay import publish_pending
+    from tests.conftest import TestSessionLocal
+
+    registry = ConsumerRegistry()
+    registry.register(ChatRealtimeConsumer(TestSessionLocal, chat_hub))
+    now = now or utcnow_naive()
+    with TestSessionLocal() as session:
+        while publish_pending(session, InProcessEventPublisher(registry), now) > 0:
+            pass
+        while process_due_deliveries(session, registry, now, NoAlerts()) > 0:
+            pass
+
+
+def received(ws, user) -> list[dict]:
+    """지금까지 그 연결로 받은 이벤트. 끝 표시를 hub로 보내고 그 앞까지 모은다(ping 제외)."""
+    from app.realtime.hub import chat_hub
+
+    chat_hub.send(user.id, {"type": "test.end"})
+    events = []
+    while True:
+        event = ws.receive_json()
+        if event["type"] == "test.end":
+            return events
+        if event["type"] != "ping":
+            events.append(event)
+
+
+def of_type(events: list[dict], event_type: str, room_id: int | None = None) -> list[dict]:
+    return [e for e in events if e["type"] == event_type and (room_id is None or e["roomId"] == room_id)]
+
+
+# ------------------------------------------------------------------ 실시간 채팅 수신 (CHAT-REQ-015)
+
+
+@pytest.mark.scenario("CHAT-TS-041")
+def test_one_connection_receives_chats_from_every_room_in_both_roles(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01076000001", "꼬붕 하나")
+    other_orderer = factory.user("01076000002", name="다른 행님")
+    as_orderer = setup_room(db, factory, sample_user, runner, title="내 요청")
+    as_runner = setup_room(db, factory, other_orderer, sample_user, title="남의 요청")
+
+    with ws_connect(client, sample_user) as ws:
+        send(client, factory, as_orderer.id, runner, content="A방 채팅", client_message_id="a-1")
+        send(client, factory, as_runner.id, other_orderer, content="B방 채팅", client_message_id="b-1")
+        run_realtime()
+        events = of_type(received(ws, sample_user), "chat.message.created")
+
+    contents = {(e["roomId"], e["message"]["content"]) for e in events}
+    assert {(as_orderer.id, "A방 채팅"), (as_runner.id, "B방 채팅")} <= contents
+
+
+@pytest.mark.scenario("CHAT-TS-042")
+def test_non_participant_connection_receives_nothing(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01076000003", "꼬붕 하나")
+    outsider = factory.user("01076000004", name="제3자")
+    room = setup_room(db, factory, sample_user, runner)
+
+    with ws_connect(client, outsider) as ws:
+        send(client, factory, room.id, runner, content="둘만 보는 채팅")
+        run_realtime()
+        assert received(ws, outsider) == []
+
+
+@pytest.mark.scenario("CHAT-TS-043")
+def test_failed_save_sends_nothing_in_realtime(client, db, factory, sample_user, monkeypatch):
+    from app.services.chat import chat_events
+
+    runner = runner_with_account(factory, "01076000005", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    original = chat_events.record_message_created
+
+    def record_then_fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("저장 중 실패")
+
+    with ws_connect(client, runner) as ws:
+        run_realtime()
+        received(ws, runner)  # 지원 등록 때 쌓인 이벤트는 비운다
+        monkeypatch.setattr(chat_events, "record_message_created", record_then_fail)
+        with pytest.raises(RuntimeError, match="저장 중 실패"):
+            send(client, factory, room.id, sample_user, content="저장 안 되는 채팅")
+        monkeypatch.undo()
+        db.rollback()
+        run_realtime()
+        assert of_type(received(ws, runner), "chat.message.created") == []
+
+
+@pytest.mark.scenario("CHAT-TS-044")
+def test_realtime_chat_event_carries_chat_id_and_room_id(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01076000006", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+
+    with ws_connect(client, runner) as ws:
+        sent = send(client, factory, room.id, sample_user, content="ID 확인").json()["data"]
+        run_realtime()
+        events = of_type(received(ws, runner), "chat.message.created", room.id)
+
+    event = next(e for e in events if e["message"]["seq"] == sent["seq"])
+    assert event["roomId"] == room.id
+    assert event["message"]["id"] == sent["id"]
+    assert event["message"]["content"] == "ID 확인"
+
+
+@pytest.mark.scenario("CHAT-TS-084")
+def test_system_chat_arrives_in_realtime_in_each_viewers_wording(journey, client):
+    runner = journey.apply("01076000007", "꼬붕 하나")
+    room_id = journey.room(runner).id
+
+    with ws_connect(client, journey.orderer) as orderer_ws, ws_connect(client, runner) as runner_ws:
+        run_realtime()
+        received(orderer_ws, journey.orderer)
+        received(runner_ws, runner)
+        assert journey.cancel_offer(runner).status_code == 204
+        run_realtime()
+        orderer_chats = of_type(received(orderer_ws, journey.orderer), "chat.message.created", room_id)
+        runner_chats = of_type(received(runner_ws, runner), "chat.message.created", room_id)
+
+    assert [(e["message"]["systemEvent"], e["message"]["content"]) for e in orderer_chats] == [("OFFER_CANCELLED", ORDERER_CANCEL_TEXT)]
+    assert [(e["message"]["systemEvent"], e["message"]["content"]) for e in runner_chats] == [("OFFER_CANCELLED", RUNNER_CANCEL_TEXT)]
+
+
+# ------------------------------------------------------------------ 연결과 재연결 (CHAT-REQ-016)
+
+
+@pytest.mark.scenario("CHAT-TS-046")
+@pytest.mark.parametrize("token_case", ["expired", "missing"])
+def test_connection_with_expired_or_missing_token_is_refused(client, sample_user, token_case):
+    from starlette.websockets import WebSocketDisconnect
+
+    from app.core.security import create_access_token
+
+    with pytest.raises(WebSocketDisconnect) as refused:
+        if token_case == "expired":
+            expired = create_access_token({"sub": sample_user.id}, expires_delta=timedelta(seconds=-1))
+            with ws_connect(client, sample_user, token=expired):
+                pass
+        else:
+            with client.websocket_connect("/v1/chat/ws"):
+                pass
+    assert refused.value.code == 4401
+
+
+@pytest.mark.scenario("CHAT-TS-047")
+def test_server_closes_the_connection_when_the_token_expires(client, sample_user):
+    from starlette.websockets import WebSocketDisconnect
+
+    from app.core.security import create_access_token
+
+    short = create_access_token({"sub": sample_user.id}, expires_delta=timedelta(seconds=2))
+    with ws_connect(client, sample_user, token=short) as ws:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            while True:
+                ws.receive_json()
+    assert closed.value.code == 4401
+
+
+@pytest.mark.scenario("CHAT-TS-085")
+@pytest.mark.parametrize("room_state", ["CLOSED", "INACTIVE"])
+def test_missed_chats_after_close_or_pause_come_in_saved_order(journey, client, factory, db, room_state):
+    runner = journey.apply("01076000008", "꼬붕 하나")  # 1, 2
+    room = journey.room(runner)
+    if room_state == "INACTIVE":
+        journey.accept(runner)  # 3
+        add_user_chats(db, journey.room(runner), runner.id, 2)  # 4, 5
+        journey.dispute("ORDERER", runner)  # 6
+        expected = "DISPUTE_RAISED"
+    else:
+        add_user_chats(db, journey.room(runner), runner.id, 3)  # 3~5
+        journey.cancel_offer(runner)  # 6
+        expected = "OFFER_CANCELLED"
+
+    response = client.get(f"/v1/chat-room/{room.id}/messages", params={"afterSeq": 5}, headers=factory.headers_for(journey.orderer))
+
+    assert response.status_code == 200, response.json()
+    missed = response.json()["data"]["content"]
+    assert [(m["seq"], m["systemEvent"]) for m in missed] == [(6, expected)]
+    assert journey.state(runner)[0] == room_state
+
+
+# ------------------------------------------------------------------ 상태·읽음 실시간 반영 (CHAT-REQ-017, 028)
+
+
+@pytest.mark.scenario("CHAT-TS-048")
+def test_matching_sends_room_updates_to_every_participant(journey, client):
+    a = journey.apply("01076000009", "꼬붕 A")
+    b = journey.apply("01076000010", "꼬붕 B")
+    room_a, room_b = journey.room(a).id, journey.room(b).id
+
+    with ws_connect(client, journey.orderer) as o_ws, ws_connect(client, a) as a_ws, ws_connect(client, b) as b_ws:
+        journey.accept(a)
+        run_realtime()
+        orderer_events = of_type(received(o_ws, journey.orderer), "chat.room.updated")
+        a_events = of_type(received(a_ws, a), "chat.room.updated")
+        b_events = of_type(received(b_ws, b), "chat.room.updated")
+
+    def state(event):
+        return (event["roomId"], event["status"], event["statusReason"], event["proposalStatus"], event["offerStatus"])
+
+    selected = (room_a, "ACTIVE", None, "MATCHED", "ACCEPTED")
+    not_selected = (room_b, "CLOSED", "NOT_SELECTED", "MATCHED", "REJECTED")
+    assert {state(e) for e in orderer_events} == {selected, not_selected}
+    assert [state(e) for e in a_events] == [selected]
+    assert [state(e) for e in b_events] == [not_selected]
+
+
+@pytest.mark.scenario("CHAT-TS-049")
+def test_reading_sends_read_position_to_partner_and_unread_counts_to_reader(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01076000011", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    add_user_chats(db, room, sample_user.id, 2)  # 1~4
+
+    with ws_connect(client, sample_user) as o_ws, ws_connect(client, runner) as r_ws:
+        run_realtime()
+        received(o_ws, sample_user)
+        received(r_ws, runner)
+        assert read(client, factory, room.id, runner, 4).status_code == 200
+        run_realtime()
+        orderer_events = received(o_ws, sample_user)
+        runner_events = received(r_ws, runner)
+
+    [read_event] = of_type(orderer_events, "chat.read.updated", room.id)
+    assert read_event["lastReadSeq"] == 4
+    assert isinstance(read_event["version"], int)
+    [unread_event] = of_type(runner_events, "chat.unread.updated", room.id)
+    assert (unread_event["unreadCount"], unread_event["totalUnreadCount"]) == (0, 0)
+    assert of_type(runner_events, "chat.read.updated") == []  # 읽은 사람에게는 읽음 위치 이벤트가 없다
+
+
+@pytest.mark.scenario("CHAT-TS-050")
+@pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)")
+def test_block_and_unblock_are_sent_to_both_participants():
+    """한쪽이 차단 후 해제하면 양쪽이 차단 상태 변경 이벤트를 두 번 받는다."""
+
+
+@pytest.mark.scenario("CHAT-TS-078")
+def test_room_and_read_events_carry_an_increasing_order_value(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01076000012", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+
+    with ws_connect(client, sample_user) as ws:
+        read(client, factory, room.id, runner, 1)
+        read(client, factory, room.id, runner, 2)
+        assert client.delete(f"/v1/offer/{room.offer_id}", headers=factory.headers_for(runner)).status_code == 204
+        run_realtime()
+        events = [e for e in received(ws, sample_user) if e["type"] in ("chat.read.updated", "chat.room.updated")]
+
+    assert [e["type"] for e in events] == ["chat.read.updated", "chat.read.updated", "chat.room.updated"]
+    versions = [e["version"] for e in events]
+    assert versions == sorted(versions) and len(set(versions)) == 3
+
+
+@pytest.mark.scenario("CHAT-TS-086")
+def test_runner_completion_sends_offer_status_to_both(journey, client):
+    runner = journey.apply("01076000013", "꼬붕 하나")
+    journey.accept(runner)
+    room_id = journey.room(runner).id
+
+    with ws_connect(client, journey.orderer) as o_ws, ws_connect(client, runner) as r_ws:
+        run_realtime()
+        received(o_ws, journey.orderer)
+        received(r_ws, runner)
+        assert journey.runner_complete(runner).status_code == 200
+        run_realtime()
+        both = [of_type(received(o_ws, journey.orderer), "chat.room.updated", room_id),
+                of_type(received(r_ws, runner), "chat.room.updated", room_id)]
+
+    for events in both:
+        assert [(e["status"], e["offerStatus"], e["proposalStatus"]) for e in events] == [("ACTIVE", "RUNNER_COMPLETED", "MATCHED")]

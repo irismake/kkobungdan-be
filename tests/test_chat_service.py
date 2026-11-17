@@ -242,3 +242,51 @@ def test_push_retries_five_times_within_ten_minutes_then_dies_with_one_alert() -
     alert_dead_delivery(delivery, envelope, sender, now)
     alert_dead_delivery(delivery, envelope, sender, now)
     assert len(alerts) == 1
+
+
+# ------------------------------------------------------------------ 실시간 전달 (CHAT-REQ-016, 029)
+
+
+class _Hub:
+    def __init__(self, connected: bool, fail: bool = False):
+        self._connected, self._fail = connected, fail
+        self.sent = []
+
+    def is_connected(self, user_id: str) -> bool:
+        return self._connected
+
+    def send(self, user_id: str, event: dict) -> int:
+        if self._fail:
+            raise ConnectionError("WebSocket 전송 오류")
+        self.sent.append((user_id, event))
+        return 1
+
+
+@pytest.mark.scenario("CHAT-TS-110")
+@pytest.mark.parametrize("hub,reason", [(_Hub(connected=False), "not_connected"), (_Hub(connected=True, fail=True), "send_error")])
+def test_realtime_delivery_is_skipped_without_retry_when_nobody_can_receive(hub, reason) -> None:
+    from app.models.outbox import DeliveryStatus
+    from app.services.chat.chat_realtime import ChatRealtimeConsumer
+    from app.services.outbox.delivery import execute_delivery
+    from app.services.outbox.envelope import EventEnvelope
+
+    consumer = ChatRealtimeConsumer(_NoSession(), hub)
+    assert consumer.name == "chat.realtime"
+    assert consumer.retry_policy.max_retries == 0
+    envelope = EventEnvelope(
+        event_id="evt-2",
+        event_type="chat.room.updated",
+        aggregate_type="chat_room",
+        aggregate_id="1",
+        schema_version=1,
+        occurred_at=PUSH_AT,
+        payload={
+            "roomId": 1, "ordererId": "o-1", "runnerId": "r-1", "status": "CLOSED", "statusReason": "OFFER_CANCELLED",
+            "proposalStatus": "OFFERED", "offerStatus": "CANCELLED", "version": 3,
+        },
+    )
+
+    outcome = execute_delivery(consumer, envelope, attempts=0, now=PUSH_AT)
+
+    # SKIPPED는 끝난 전달이라 다시 시도하지 않고, DEAD가 아니라 모니터링 알림도 없다
+    assert (outcome.status, outcome.skip_reason) == (DeliveryStatus.SKIPPED, reason)
