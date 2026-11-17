@@ -13,6 +13,7 @@
 - 푸시는 기존 테스트처럼 가짜 FCM 발송기로 발송 내용을 확인한다.
 - **(차단 후)** 표시는 차단 구현([`user-block.md`](../../product-specs/user-block.md)) 뒤에 활성화한다. 그 전에는 skip으로 둔다.
 - **(동시)** 표시는 두 요청을 동시에 보내 결과를 확인하는 테스트다.
+- 공통 Outbox 동작(발행 재시도, 전달 중복 방지, DEAD 재처리, 정리)은 [`../outbox/test-scenarios.md`](../outbox/test-scenarios.md)(`OUTBOX-TS-*`)에서 확인한다. CHAT-TS-102~104, 107~109는 그 문서로 옮겼고 번호는 비워 둔다.
 - 앱이 지켜야 하는 규칙(채팅 ID로 중복 표시 제거, 오래된 이벤트 무시, 앱이 켜져 있을 때 푸시 표시 방식)은 서버 테스트 대상이 아니다. 서버는 그 규칙에 필요한 값(채팅 ID, 이벤트 순서 값)을 내려주는지만 검증한다.
 
 | ID | 요구사항 | 시나리오 (Given / When / Then) | 종류 | 테스트 위치 |
@@ -95,7 +96,7 @@
 | CHAT-TS-076 | CHAT-REQ-027 | Given 채팅 10개 / When 같은 사용자가 채팅 5와 채팅 9로 동시에 읽음 요청 **(동시)** / Then 읽음 위치는 채팅 9다 | integration | `api` |
 | CHAT-TS-077 | CHAT-REQ-027 | Given 읽음 요청이 채팅 9를 가리킴 / When 그 사이 채팅 10이 저장된 뒤 읽음이 처리 / Then 채팅 10은 안읽음으로 남는다 | integration | `api` |
 | CHAT-TS-078 | CHAT-REQ-028 | Given 실시간 연결 / When 같은 채팅방의 상태·읽음 이벤트가 여러 번 발생 / Then 각 이벤트에 순서 값이 있고 발생 순서대로 커진다 | integration | `realtime` |
-| CHAT-TS-079 | CHAT-REQ-018, CHAT-REQ-028 | Given FCM 발송이 실패하는 가짜 발송기 / When 상대가 채팅 전송 / Then 채팅은 저장되고 전송 응답은 성공이며, 푸시는 재시도 없이 1번만 시도된다 | integration | `api` |
+| CHAT-TS-079 | CHAT-REQ-018, CHAT-REQ-029 | Given 첫 시도에 실패하고 두 번째에 성공하는 가짜 FCM 발송기 / When 상대가 채팅 전송 후 재시도 처리 / Then 채팅 전송 응답은 성공이고, 푸시는 두 번째 시도에 성공해 성공 기준 1번만 나간다 | integration | `api` |
 | CHAT-TS-080 | CHAT-REQ-003, CHAT-REQ-006 | Given 빈 문자열, 공백만, 줄바꿈만, 공백과 줄바꿈이 섞인 내용 / When 채팅·첫 인사 내용을 검증 / Then 모두 거부되고, 앞뒤에 공백이 있어도 글자가 하나라도 있으면 통과한다 | unit | `service` |
 | CHAT-TS-081 | CHAT-REQ-002, CHAT-REQ-003 | Given 채팅방 / When 참여자가 아닌 사용자가 채팅 전송 / Then `403 FORBIDDEN`이고 채팅이 저장되지 않는다 | integration | `api` |
 | CHAT-TS-082 | CHAT-REQ-014 | Given 마지막 채팅이 시스템 채팅(매칭 미선정)인 채팅방 / When 꼬붕과 행님이 각각 채팅 목록 조회 / Then 마지막 채팅에 각자에게 보이는 시스템 채팅 문구가 나온다 | integration | `api` |
@@ -116,3 +117,9 @@
 | CHAT-TS-097 | CHAT-REQ-027, CHAT-REQ-012 | Given 채팅 10개가 있는 채팅방 / When 전체 읽음 처리 중에 채팅 11이 저장됨 **(동시)** / Then 채팅 11은 안읽음으로 남는다 | integration | `api` |
 | CHAT-TS-098 | CHAT-REQ-019 | Given 채팅방 / When 행님과 꼬붕이 우연히 같은 전송 ID로 각각 전송 / Then 두 채팅이 모두 저장된다 (중복 판단은 사용자별) | integration | `api` |
 | CHAT-TS-099 | CHAT-REQ-023 | Given 배포용 채팅방 생성 작업이 실행 중 / When 새 지원이 등록됨 **(동시)** / Then 새 지원의 채팅방은 1개이고 지원 등록 안내와 첫 인사가 있다 | integration | `api` |
+| CHAT-TS-100 | CHAT-REQ-029 | Given `ACTIVE` 채팅방 / When 채팅 전송이 커밋됨, 또는 같은 처리 중 오류로 롤백됨 / Then 커밋된 경우에만 `chat.message.created` 이벤트가 outbox에 1개 남고, 롤백되면 채팅과 이벤트 모두 없다 | integration | `api` |
+| CHAT-TS-101 | CHAT-REQ-029, CHAT-REQ-020 | Given 대기 중인 지원 / When 지원 취소 처리 중 시스템 채팅 저장 뒤에 오류로 롤백됨 / Then 지원 상태, 채팅방 상태, 시스템 채팅, outbox 이벤트가 모두 남지 않는다 | integration | `api` |
+| CHAT-TS-105 | CHAT-REQ-029 | Given 채팅 전송 이벤트의 실시간 전달은 성공하고 푸시는 실패 / When 재시도 처리 / Then 푸시만 다시 시도되고 실시간 이벤트는 다시 보내지 않는다 | integration | `api` |
+| CHAT-TS-106 | CHAT-REQ-018, CHAT-REQ-029 | Given 저장된 지 10분이 지난 채팅의 실패한 푸시 / When 재시도 처리 / Then 보내지 않고 `SKIPPED`로 끝낸다 | unit | `service` |
+| CHAT-TS-110 | CHAT-REQ-029, CHAT-REQ-016 | Given 받는 사람이 연결되어 있지 않거나 WebSocket 전송이 오류를 냄 / When `chat.realtime`이 이벤트를 처리 / Then `SKIPPED`로 끝나고 다시 시도하지 않으며 모니터링 알림도 없다 | unit | `service` |
+| CHAT-TS-111 | CHAT-REQ-018, CHAT-REQ-029 | Given 계속 실패하는 가짜 FCM 발송기 / When `chat.push`가 재시도를 반복 / Then 5초, 30초, 1분, 2분, 4분 간격으로 5회 재시도하고 모두 10분 안에 끝나며, 그 뒤 `DEAD`가 되어 모니터링 알림이 1번 나간다 | unit | `service` |

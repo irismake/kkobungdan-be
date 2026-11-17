@@ -14,6 +14,7 @@
 - [`2026-08-27-api-security-hardening.md`](./2026-08-27-api-security-hardening.md): CORS 화이트리스트, 평문 HTTP 제거, 보안 응답 헤더, 관리자 로그인 잠금, staging 문서 접근 제한
 - [`2026-08-27-admin-ops-alert.md`](./2026-08-27-admin-ops-alert.md): 분쟁 접수·미션 완료 시 관리자에게 Slack 운영 알림 발송
 - [`2026-11-14-tdd-harness.md`](./2026-11-14-tdd-harness.md): 저장소 전체 TDD 하네스(규칙·검증 스크립트·PR 검증) 도입, 첫 적용 기능은 채팅
+- [`2026-11-17-chat-implementation.md`](./2026-11-17-chat-implementation.md): 채팅 구현 단계와 TDD 묶음(4-1~4-8), 시나리오 배정
 - [`2026-11-18-nginx-recreate-on-config-change.md`](./2026-11-18-nginx-recreate-on-config-change.md): 배포 때 nginx 설정이 바뀌었으면 검사 후 다시 만들기(staging·production 공통 스크립트)
 
 ## 운영 규칙

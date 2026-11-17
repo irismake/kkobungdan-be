@@ -16,4 +16,4 @@ ChatRoom(채팅방)은 지원(Offer) 1건마다 만들어지는 행님과 꼬붕
 
 - 채팅방 상태(`ACTIVE`, `INACTIVE`, `CLOSED`)와 `statusReason`은 채팅 전송 가능 여부만 나타내며 요청·지원 상태 변화로만 바뀐다.
 - 읽음은 참여자별 마지막 읽은 채팅으로 기록하고, 안읽음 수는 그 위치에서 계산한다.
-- 채팅 푸시는 `notifications`에 저장하지 않고 재시도하지 않는다.
+- 채팅 푸시는 `notifications`에 저장하지 않는다. 실시간 이벤트와 푸시는 Transactional Outbox(`outbox_events`)로 같은 트랜잭션에 기록한 뒤 전달 대상별로 보내고, 실패하면 재시도한다.
