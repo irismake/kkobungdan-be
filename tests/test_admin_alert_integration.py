@@ -28,6 +28,7 @@ def _survey_question(db, target_type: DisputeSurveyTargetType) -> DisputeSurveyQ
 # ------------------------------------------------------------------ 분쟁 접수
 
 
+@pytest.mark.scenario("NOTI-TS-016")
 def test_runner_dispute_alerts_admin(client, db, factory, sample_user, admin_alerts):
     runner = factory.user("01077770001", name="홍길동")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -49,6 +50,7 @@ def test_runner_dispute_alerts_admin(client, db, factory, sample_user, admin_ale
     assert "5,000원" in text
 
 
+@pytest.mark.scenario("NOTI-TS-017")
 def test_orderer_dispute_alerts_admin(client, db, factory, sample_user, admin_alerts):
     runner = factory.user("01077770002")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -66,6 +68,7 @@ def test_orderer_dispute_alerts_admin(client, db, factory, sample_user, admin_al
     assert "분쟁이 접수됐어요" in admin_alerts.texts[0]
 
 
+@pytest.mark.scenario("NOTI-TS-018")
 def test_sync_does_not_realert_for_already_disputed_mission(db, factory, sample_user):
     """미션이 이미 분쟁중이면 상태 동기화가 다시 알림을 만들지 않는다.
 
@@ -86,6 +89,7 @@ def test_sync_does_not_realert_for_already_disputed_mission(db, factory, sample_
 # ------------------------------------------------------------------ 임무 완료
 
 
+@pytest.mark.scenario("NOTI-TS-019")
 def test_both_side_confirmation_alerts_admin_to_pay(client, db, factory, sample_user, admin_alerts):
     runner = factory.user("01077770004", name="김꼬붕")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -106,6 +110,7 @@ def test_both_side_confirmation_alerts_admin_to_pay(client, db, factory, sample_
     assert "5,000원" in text
 
 
+@pytest.mark.scenario("NOTI-TS-020")
 def test_admin_mission_resolve_completed_alerts_to_pay(client, factory, sample_user, admin_headers, admin_alerts):
     runner = factory.user("01077770005")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -122,6 +127,7 @@ def test_admin_mission_resolve_completed_alerts_to_pay(client, factory, sample_u
     assert "수행비 입금이 필요합니다" in admin_alerts.texts[0]
 
 
+@pytest.mark.scenario("NOTI-TS-021")
 def test_admin_mission_resolve_failed_does_not_alert(client, factory, sample_user, admin_headers, admin_alerts):
     runner = factory.user("01077770006")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -137,6 +143,7 @@ def test_admin_mission_resolve_failed_does_not_alert(client, factory, sample_use
     assert admin_alerts.sent == []
 
 
+@pytest.mark.scenario("NOTI-TS-022")
 def test_admin_dispute_resolve_completed_alerts_to_pay(client, factory, sample_user, admin_headers, admin_alerts):
     runner = factory.user("01077770007")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -154,6 +161,7 @@ def test_admin_dispute_resolve_completed_alerts_to_pay(client, factory, sample_u
     assert "수행비 입금이 필요합니다" in admin_alerts.texts[0]
 
 
+@pytest.mark.scenario("NOTI-TS-023")
 def test_recording_settlement_does_not_alert(client, factory, sample_user, admin_headers, admin_alerts):
     runner = factory.user("01077770008")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -172,6 +180,7 @@ def test_recording_settlement_does_not_alert(client, factory, sample_user, admin
 # ------------------------------------------------------------------ 발송기 자체
 
 
+@pytest.mark.scenario("NOTI-TS-024")
 def test_sender_is_noop_without_webhook_url():
     sender = SlackAdminAlertSender(webhook_url=None)
 
@@ -179,6 +188,7 @@ def test_sender_is_noop_without_webhook_url():
     sender.send(AdminAlert(headline="테스트"))  # 예외 없이 통과해야 한다
 
 
+@pytest.mark.scenario("NOTI-TS-025")
 def test_sender_posts_text_payload_to_webhook():
     posted: list[dict] = []
 
@@ -196,6 +206,7 @@ def test_sender_posts_text_payload_to_webhook():
     assert "임무 #1" in posted[0]["body"]
 
 
+@pytest.mark.scenario("NOTI-TS-026")
 def test_sender_swallows_failure_and_logs(caplog):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="slack down")
@@ -209,6 +220,7 @@ def test_sender_swallows_failure_and_logs(caplog):
     assert "관리자 Slack 알림 발송에 실패했습니다" in caplog.text
 
 
+@pytest.mark.scenario("NOTI-TS-027")
 def test_alert_link_uses_admin_web_base_url(monkeypatch):
     from app.core.config import settings
 
@@ -218,6 +230,7 @@ def test_alert_link_uses_admin_web_base_url(monkeypatch):
     assert "<https://admin.example.test/missions/7|열기>" in alert.to_text()
 
 
+@pytest.mark.scenario("NOTI-TS-028")
 def test_alert_omits_link_when_admin_web_base_url_missing(monkeypatch):
     from app.core.config import settings
 
@@ -227,6 +240,7 @@ def test_alert_omits_link_when_admin_web_base_url_missing(monkeypatch):
     assert alert.to_text() == "제목"
 
 
+@pytest.mark.scenario("NOTI-TS-029")
 @pytest.mark.parametrize("amount,expected", [(5000, "5,000원"), (150000, "150,000원")])
 def test_fee_is_thousand_separated(amount, expected):
     from app.listeners.admin_alert_listener import _fee

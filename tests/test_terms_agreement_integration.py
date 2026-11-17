@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.core.security import create_access_token
 from app.models.terms import TermsAgreement, TermsType
 from app.models.user import User
@@ -15,6 +17,7 @@ def _payload(**overrides):
     return data
 
 
+@pytest.mark.scenario("TERMS-TS-001")
 def test_terms_agreement_create_and_update(client, db, sample_user):
     token = create_access_token({"sub": str(sample_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
@@ -42,6 +45,7 @@ def test_terms_agreement_create_and_update(client, db, sample_user):
     assert agreement.agreed_at >= first_agreed_at
 
 
+@pytest.mark.scenario("TERMS-TS-002")
 def test_terms_agreement_validation_errors(client, sample_user):
     token = create_access_token({"sub": str(sample_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
@@ -71,6 +75,7 @@ def test_terms_agreement_validation_errors(client, sample_user):
     assert false_value.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("TERMS-TS-003")
 def test_terms_agreement_auth_errors(client, db):
     no_token = client.post("/v1/terms", json=_payload())
     assert no_token.status_code == 401
@@ -86,6 +91,7 @@ def test_terms_agreement_auth_errors(client, db):
     assert missing_user.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
+@pytest.mark.scenario("TERMS-TS-004")
 def test_terms_agreement_model_spec_matches_docs():
     assert str(TermsAgreement.__table__.c.id.type).upper() == "BIGINT"
     assert str(TermsAgreement.__table__.c.user_id.type).upper() == "VARCHAR(36)"

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from app.models.settlement import SettlementAccount
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-001")
 def test_get_settlement_account_returns_null_when_missing(client, auth_headers):
     response = client.get("/v1/settlement/account", headers=auth_headers)
 
@@ -14,6 +17,7 @@ def test_get_settlement_account_returns_null_when_missing(client, auth_headers):
     }
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-002")
 def test_save_and_update_settlement_account(client, db, auth_headers, sample_user):
     create_response = client.put(
         "/v1/settlement/account",
@@ -55,6 +59,7 @@ def test_save_and_update_settlement_account(client, db, auth_headers, sample_use
     assert db.query(SettlementAccount).filter(SettlementAccount.user_id == sample_user.id).count() == 1
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-003")
 def test_get_settlement_bank_names_requires_auth_and_returns_supported_names(client, auth_headers):
     unauthenticated = client.get("/v1/settlement/banks")
     response = client.get("/v1/settlement/banks", headers=auth_headers)
@@ -67,6 +72,7 @@ def test_get_settlement_bank_names_requires_auth_and_returns_supported_names(cli
     assert "신한은행" in bank_names
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-004")
 def test_settlement_account_validation_and_auth(client, auth_headers):
     unauthenticated = client.get("/v1/settlement/account")
     invalid = client.put(
@@ -85,6 +91,7 @@ def test_settlement_account_validation_and_auth(client, auth_headers):
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-005")
 def test_settlement_account_rejects_removed_fields_and_unsupported_bank(client, auth_headers):
     removed_fields = client.put(
         "/v1/settlement/account",
@@ -112,6 +119,7 @@ def test_settlement_account_rejects_removed_fields_and_unsupported_bank(client, 
     assert unsupported_bank.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("SETTLEMENT-TS-006")
 def test_settlement_account_requires_account_holder(client, auth_headers):
     missing_holder = client.put(
         "/v1/settlement/account",

@@ -15,6 +15,7 @@ from app.main import (
 )
 
 
+@pytest.mark.scenario("HEALTH-TS-002")
 def test_settings_load_without_oauth_or_email_values():
     settings = Settings(
         secret_key="test-secret",
@@ -28,6 +29,7 @@ def test_settings_load_without_oauth_or_email_values():
     assert settings.jwt_secret == "test-jwt"
 
 
+@pytest.mark.scenario("HEALTH-TS-003")
 def test_settings_load_aws_sns_values():
     settings = Settings(
         secret_key="test-secret",
@@ -49,6 +51,7 @@ def test_settings_load_aws_sns_values():
     assert settings.aws_sns_sms_type == "Promotional"
 
 
+@pytest.mark.scenario("HEALTH-TS-004")
 def test_settings_logging_defaults_are_console_only():
     settings = Settings(
         secret_key="test-secret",
@@ -64,6 +67,7 @@ def test_settings_logging_defaults_are_console_only():
     assert settings.log_retention_days == 14
 
 
+@pytest.mark.scenario("HEALTH-TS-005")
 def test_api_docs_are_disabled_in_production(monkeypatch):
     monkeypatch.setattr("app.main.settings.app_env", "production")
 
@@ -82,22 +86,26 @@ def _settings(**overrides) -> Settings:
     )
 
 
+@pytest.mark.scenario("HEALTH-TS-006")
 def test_cors_allow_origin_list_splits_and_trims():
     settings = _settings(cors_allow_origins="https://a.example , https://b.example,")
 
     assert settings.cors_allow_origin_list == ["https://a.example", "https://b.example"]
 
 
+@pytest.mark.scenario("HEALTH-TS-007")
 def test_cors_allow_origin_list_is_empty_when_unset():
     assert _settings().cors_allow_origin_list == []
 
 
+@pytest.mark.scenario("HEALTH-TS-008")
 def test_cors_origins_use_configured_values(monkeypatch):
     monkeypatch.setattr("app.main.settings.cors_allow_origins", "https://order-run-fe.vercel.app")
 
     assert _cors_allow_origins() == ["https://order-run-fe.vercel.app"]
 
 
+@pytest.mark.scenario("HEALTH-TS-009")
 def test_cors_origins_fall_back_to_localhost_in_development(monkeypatch):
     monkeypatch.setattr("app.main.settings.cors_allow_origins", "")
     monkeypatch.setattr("app.main.settings.app_env", "development")
@@ -105,6 +113,7 @@ def test_cors_origins_fall_back_to_localhost_in_development(monkeypatch):
     assert _cors_allow_origins() == DEFAULT_DEV_CORS_ORIGINS
 
 
+@pytest.mark.scenario("HEALTH-TS-010")
 def test_cors_origins_required_outside_development(monkeypatch):
     monkeypatch.setattr("app.main.settings.cors_allow_origins", "")
     monkeypatch.setattr("app.main.settings.app_env", "staging")
@@ -113,6 +122,7 @@ def test_cors_origins_required_outside_development(monkeypatch):
         _cors_allow_origins()
 
 
+@pytest.mark.scenario("HEALTH-TS-011")
 def test_cors_origins_reject_wildcard(monkeypatch):
     """와일드카드 + allow_credentials는 Starlette이 요청 Origin을 그대로 반사하게 만든다."""
     monkeypatch.setattr("app.main.settings.cors_allow_origins", "*")
@@ -121,6 +131,7 @@ def test_cors_origins_reject_wildcard(monkeypatch):
         _cors_allow_origins()
 
 
+@pytest.mark.scenario("HEALTH-TS-012")
 def test_cors_rejects_unlisted_origin(client, monkeypatch):
     response = client.options(
         "/v1/health",
@@ -133,6 +144,7 @@ def test_cors_rejects_unlisted_origin(client, monkeypatch):
     assert "access-control-allow-origin" not in {key.lower() for key in response.headers}
 
 
+@pytest.mark.scenario("HEALTH-TS-013")
 def test_cors_allows_listed_origin(client):
     response = client.options(
         "/v1/health",
@@ -145,6 +157,7 @@ def test_cors_allows_listed_origin(client):
     assert response.headers["access-control-allow-origin"] == DEFAULT_DEV_CORS_ORIGINS[0]
 
 
+@pytest.mark.scenario("HEALTH-TS-014")
 def test_setup_logging_writes_daily_file_when_enabled(tmp_path, monkeypatch):
     root_logger = logging.getLogger()
     original_handlers = root_logger.handlers[:]

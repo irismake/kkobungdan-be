@@ -22,6 +22,7 @@ def _question(
     )
 
 
+@pytest.mark.scenario("ADMIN-TS-099")
 def test_list_order_dispute_survey_questions_returns_active_questions_in_display_order(client, db, auth_headers):
     older = _question(DisputeSurveyTargetType.ORDER, "두 번째 행님 질문", 2)
     first = _question(DisputeSurveyTargetType.ORDER, "첫 번째 행님 질문", 1)
@@ -41,6 +42,7 @@ def test_list_order_dispute_survey_questions_returns_active_questions_in_display
     assert {item["targetType"] for item in body["data"]} == {"ORDER"}
 
 
+@pytest.mark.scenario("ADMIN-TS-100")
 def test_list_runner_dispute_survey_questions_returns_runner_questions_only(client, db, auth_headers):
     db.add_all(
         [
@@ -59,6 +61,7 @@ def test_list_runner_dispute_survey_questions_returns_runner_questions_only(clie
     assert {item["targetType"] for item in body["data"]} == {"RUNNER"}
 
 
+@pytest.mark.scenario("ADMIN-TS-101")
 def test_list_dispute_survey_questions_returns_empty_list(client, auth_headers):
     response = client.get("/v1/dispute-survey/questions?targetType=ORDER", headers=auth_headers)
 
@@ -66,6 +69,7 @@ def test_list_dispute_survey_questions_returns_empty_list(client, auth_headers):
     assert response.json() == {"success": True, "data": [], "message": "Success"}
 
 
+@pytest.mark.scenario("ADMIN-TS-102")
 def test_list_dispute_survey_questions_validation_and_auth_errors(client, auth_headers):
     invalid_target = client.get("/v1/dispute-survey/questions?targetType=CUSTOMER", headers=auth_headers)
     assert invalid_target.status_code == 400
@@ -76,6 +80,7 @@ def test_list_dispute_survey_questions_validation_and_auth_errors(client, auth_h
     assert no_token.json()["error"]["code"] == "INVALID_TOKEN"
 
 
+@pytest.mark.scenario("ADMIN-TS-103")
 def test_dispute_survey_question_model_spec_matches_plan():
     table = DisputeSurveyQuestion.__table__
 
@@ -93,6 +98,7 @@ def test_dispute_survey_question_model_spec_matches_plan():
     assert "idx_dispute_survey_questions_lookup" in index_names
 
 
+@pytest.mark.scenario("ADMIN-TS-104")
 def test_enum_column_declares_named_check_constraint():
     """CLAUDE.md: 상태 컬럼은 VARCHAR + 이름 붙인 CHECK로 허용값을 고정한다."""
     table = DisputeSurveyQuestion.__table__
@@ -105,6 +111,7 @@ def test_enum_column_declares_named_check_constraint():
     assert "ck_dispute_survey_questions_target_type_values" in checks
 
 
+@pytest.mark.scenario("ADMIN-TS-105")
 def test_enum_check_constraint_rejects_value_outside_the_enum(db):
     """DB가 열거형 밖의 값을 실제로 거부한다. 앱을 우회한 SQL도 막혀야 한다."""
     with pytest.raises((IntegrityError, OperationalError)):
@@ -118,6 +125,7 @@ def test_enum_check_constraint_rejects_value_outside_the_enum(db):
     db.rollback()
 
 
+@pytest.mark.scenario("ADMIN-TS-106")
 def test_dispute_evidence_model_requires_survey_question_and_mission():
     table = DisputeEvidence.__table__
 

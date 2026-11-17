@@ -94,6 +94,7 @@ def _signup(client, sms_sender, name="홍길동", phone="010-1234-5678", carrier
     return confirm_payload["data"]
 
 
+@pytest.mark.scenario("AUTH-TS-001")
 def test_signup_login_refresh_and_logout_flow(client, db, sms_sender):
     signup_data = _signup(client, sms_sender)
 
@@ -149,6 +150,7 @@ def test_signup_login_refresh_and_logout_flow(client, db, sms_sender):
     assert db.query(UserFCMToken).filter(UserFCMToken.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-002")
 def test_login_confirm_reassigns_fcm_token_registered_to_another_user(client, db, factory, sms_sender):
     holder = factory.user(phone="01012340099", name="이전 로그인 유저")
     db.add(UserFCMToken(user_id=holder.id, fcm_token="shared-device-token"))
@@ -170,6 +172,7 @@ def test_login_confirm_reassigns_fcm_token_registered_to_another_user(client, db
     assert new_holder.user_id == signup_data["userId"]
 
 
+@pytest.mark.scenario("AUTH-TS-003")
 def test_signup_confirm_accepts_and_stores_fcm_token(client, db, sms_sender):
     signup_send = client.post(
         "/v1/auth/signup/send",
@@ -195,6 +198,7 @@ def test_signup_confirm_accepts_and_stores_fcm_token(client, db, sms_sender):
     assert fcm.fcm_token == "signup-token"
 
 
+@pytest.mark.scenario("AUTH-TS-004")
 def test_signup_confirm_rejects_blank_fcm_token(client, sms_sender):
     signup_send = client.post(
         "/v1/auth/signup/send",
@@ -212,6 +216,7 @@ def test_signup_confirm_rejects_blank_fcm_token(client, sms_sender):
     assert signup_confirm.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("AUTH-TS-005")
 def test_demo_login_uses_fixed_code_without_sending_sms(client, db, sms_sender):
     # given: 로그인 데모 사용자가 아직 없는 DB
     assert db.query(User).filter(User.phone == DEMO_LOGIN_PHONE).first() is None
@@ -234,6 +239,7 @@ def test_demo_login_uses_fixed_code_without_sending_sms(client, db, sms_sender):
     assert user.name == "오더런 데모"
 
 
+@pytest.mark.scenario("AUTH-TS-006")
 def test_demo_login_phone_rejects_signup_without_sending_sms(client, sms_sender):
     sent_count = len(sms_sender.sent_messages)
 
@@ -247,6 +253,7 @@ def test_demo_login_phone_rejects_signup_without_sending_sms(client, sms_sender)
     assert len(sms_sender.sent_messages) == sent_count
 
 
+@pytest.mark.scenario("AUTH-TS-007")
 def test_login_confirm_returns_user_not_found_when_user_does_not_exist(client):
     # when: 존재하지 않는 일반 번호로 로그인 확인 요청
     response = client.post(
@@ -259,6 +266,7 @@ def test_login_confirm_returns_user_not_found_when_user_does_not_exist(client):
     assert response.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
+@pytest.mark.scenario("AUTH-TS-008")
 def test_login_confirm_returns_not_found_when_no_pending_verification(client, sms_sender):
     # given: 가입된 일반 유저, 인증 요청 없음
     _signup(client, sms_sender)
@@ -274,6 +282,7 @@ def test_login_confirm_returns_not_found_when_no_pending_verification(client, sm
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_NOT_FOUND"
 
 
+@pytest.mark.scenario("AUTH-TS-009")
 def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
     # given: 가입된 유저와 임의 인증번호
     _signup(client, sms_sender)
@@ -297,6 +306,7 @@ def test_login_confirm_returns_code_mismatch_when_wrong_code_submitted(client, s
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_CODE_MISMATCH"
 
 
+@pytest.mark.scenario("AUTH-TS-010")
 def test_signup_confirm_returns_code_mismatch_when_wrong_code_submitted(client, sms_sender, monkeypatch):
     # given: 일반 번호의 임의 회원가입 인증번호
     monkeypatch.setattr(
@@ -322,6 +332,7 @@ def test_signup_confirm_returns_code_mismatch_when_wrong_code_submitted(client, 
     assert response.json()["error"]["code"] == "PHONE_VERIFICATION_CODE_MISMATCH"
 
 
+@pytest.mark.scenario("AUTH-TS-011")
 def test_user_detail_alarm_and_fcm_token_flow(client, db, sms_sender):
     _signup(client, sms_sender)
     user = db.query(User).filter(User.phone == "01012345678").first()
@@ -392,6 +403,7 @@ def test_user_detail_alarm_and_fcm_token_flow(client, db, sms_sender):
     assert blank_fcm.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("AUTH-TS-012")
 def test_update_user_name_requires_auth_and_updates_only_current_user(client, db, factory):
     user = factory.user(phone="01012340001", name="기존닉네임")
     other_user = factory.user(phone="01012340002", name="다른사용자")
@@ -422,6 +434,7 @@ def test_update_user_name_requires_auth_and_updates_only_current_user(client, db
     assert detail_payload["data"]["lastLoginAt"] is None
 
 
+@pytest.mark.scenario("AUTH-TS-013")
 def test_update_user_name_validation_errors(client, factory):
     user = factory.user(phone="01012340003", name="기존닉네임")
     headers = factory.headers_for(user)
@@ -443,6 +456,7 @@ def test_update_user_name_validation_errors(client, factory):
     assert extra_field.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("AUTH-TS-014")
 def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(client, db, factory):
     reason = seed_withdrawal_reasons(db)[0]
     user = factory.user(phone="01012340004", name="탈퇴사용자")
@@ -551,6 +565,7 @@ def test_withdraw_user_hard_deletes_pii_and_keeps_anonymized_activity_history(cl
     assert withdrawal.withdrawn_at == withdrawn_user.deleted_at
 
 
+@pytest.mark.scenario("AUTH-TS-015")
 def test_list_user_withdrawal_reasons_returns_active_ordered_questions(client, db, auth_headers):
     reasons = seed_withdrawal_reasons(db)
     db.add(
@@ -577,6 +592,7 @@ def test_list_user_withdrawal_reasons_returns_active_ordered_questions(client, d
     ]
 
 
+@pytest.mark.scenario("AUTH-TS-016")
 def test_withdraw_user_stores_reason_and_detail(client, db, factory):
     reasons = seed_withdrawal_reasons(db)
     reason = reasons[0]
@@ -602,6 +618,7 @@ def test_withdraw_user_stores_reason_and_detail(client, db, factory):
     assert data["userId"] == user.id
 
 
+@pytest.mark.scenario("AUTH-TS-017")
 def test_withdraw_user_requires_detail_for_other_reason(client, db, factory):
     reasons = seed_withdrawal_reasons(db)
     other_reason = next(reason for reason in reasons if reason.requires_detail)
@@ -618,6 +635,7 @@ def test_withdraw_user_requires_detail_for_other_reason(client, db, factory):
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-018")
 def test_withdraw_user_requires_reason_question_id(client, db, factory):
     """탈퇴 사유는 필수다. 신고·분쟁과 같은 정책이다."""
     seed_withdrawal_reasons(db)
@@ -636,6 +654,7 @@ def test_withdraw_user_requires_reason_question_id(client, db, factory):
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-019")
 def test_withdraw_user_rejects_inactive_or_unknown_reason(client, db, factory):
     inactive_reason = UserWithdrawalReasonQuestion(
         question_text="비활성",
@@ -658,6 +677,7 @@ def test_withdraw_user_rejects_inactive_or_unknown_reason(client, db, factory):
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-020")
 def test_withdraw_user_auto_cancels_only_waiting_offers(db, factory):
     """돈이 오간 적 없는 대기 지원만 탈퇴와 함께 종결한다."""
     reason = seed_withdrawal_reasons(db)[0]
@@ -683,6 +703,7 @@ def test_withdraw_user_auto_cancels_only_waiting_offers(db, factory):
     assert user.deleted is True
 
 
+@pytest.mark.scenario("AUTH-TS-021")
 @pytest.mark.parametrize(
     ("proposal_status", "expected_code"),
     [
@@ -712,6 +733,7 @@ def test_withdraw_user_blocks_when_user_has_open_proposal(db, factory, proposal_
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-022")
 @pytest.mark.parametrize(
     "offer_status",
     [OfferStatus.ACCEPTED, OfferStatus.RUNNER_COMPLETED, OfferStatus.DISPUTED],
@@ -734,6 +756,7 @@ def test_withdraw_user_blocks_when_user_has_open_offer(db, factory, offer_status
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-023")
 def test_withdraw_user_blocks_while_refund_is_pending(db, factory):
     orderer = factory.user(phone="01012340017", name="환불대기행님")
     runner = factory.user(phone="01012340018", name="꼬붕")
@@ -748,6 +771,7 @@ def test_withdraw_user_blocks_while_refund_is_pending(db, factory):
     assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_REFUND
 
 
+@pytest.mark.scenario("AUTH-TS-024")
 @pytest.mark.parametrize(
     ("refund_status", "blocked"),
     [
@@ -777,6 +801,7 @@ def test_withdraw_user_blocks_until_refund_is_terminal(db, factory, refund_statu
         assert orderer.deleted is True
 
 
+@pytest.mark.scenario("AUTH-TS-025")
 def test_withdraw_user_keeps_holding_proposal_when_blocked(db, factory):
     """HOLDING은 차단 대상이므로 탈퇴 실패 시 요청이 취소되지 않는다."""
     user = factory.user(phone="01012340022", name="입금대기행님")
@@ -792,6 +817,7 @@ def test_withdraw_user_keeps_holding_proposal_when_blocked(db, factory):
     assert db.query(Refund).filter(Refund.proposal_id == proposal.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-026")
 def test_withdraw_user_allows_runner_after_payout_is_rejected(db, factory):
     """지급 반려된 COMPLETED 미션은 꼬붕 쪽 의무가 끝난 종결 상태다."""
     reason = seed_withdrawal_reasons(db)[0]
@@ -806,6 +832,7 @@ def test_withdraw_user_allows_runner_after_payout_is_rejected(db, factory):
     assert runner.deleted is True
 
 
+@pytest.mark.scenario("AUTH-TS-027")
 def test_withdraw_user_allows_runner_when_mission_failed(db, factory):
     """FAILED 미션은 수행비 지급 대상이 아니라 지급 시각이 비어 있어도 종결이다."""
     reason = seed_withdrawal_reasons(db)[0]
@@ -820,6 +847,7 @@ def test_withdraw_user_allows_runner_when_mission_failed(db, factory):
     assert runner.deleted is True
 
 
+@pytest.mark.scenario("AUTH-TS-028")
 def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
     orderer = factory.user(phone="01012340019", name="행님")
     runner = factory.user(phone="01012340020", name="지급대기꼬붕")
@@ -833,6 +861,7 @@ def test_withdraw_user_blocks_while_payout_is_pending(db, factory):
     assert exc_info.value.detail["code"] == ErrorCode.USER_WITHDRAWAL_BLOCKED_PAYOUT
 
 
+@pytest.mark.scenario("AUTH-TS-029")
 def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, factory, monkeypatch):
     reason = seed_withdrawal_reasons(db)[0]
     user = factory.user(phone="01012340015", name="지원사용자")
@@ -857,6 +886,7 @@ def test_withdraw_user_rolls_back_all_changes_when_anonymization_fails(db, facto
     assert db.query(UserWithdrawal).filter(UserWithdrawal.user_id == user.id).first() is None
 
 
+@pytest.mark.scenario("AUTH-TS-030")
 def test_signup_verification_resend_is_allowed_within_ttl(client, db, sms_sender):
     """Resending before the previous code expires is allowed and supersedes it."""
     phone = "010-9999-1111"
@@ -893,6 +923,7 @@ def test_signup_verification_resend_is_allowed_within_ttl(client, db, sms_sender
     assert confirm.status_code == 200
 
 
+@pytest.mark.scenario("AUTH-TS-031")
 def test_signup_verification_send_is_rate_limited(client, db):
     phone = "010-3333-4444"
     normalized = "01033334444"
@@ -919,6 +950,7 @@ def test_signup_verification_send_is_rate_limited(client, db):
     )
 
 
+@pytest.mark.scenario("AUTH-TS-032")
 def test_verification_send_outside_window_is_allowed(client, db):
     phone = "010-5555-6666"
     normalized = "01055556666"
@@ -946,6 +978,7 @@ def test_verification_send_outside_window_is_allowed(client, db):
     assert reopened.status_code == 200
 
 
+@pytest.mark.scenario("AUTH-TS-033")
 def test_successful_verification_resets_send_rate_limit(client, db, sms_sender):
     phone = "010-1234-5678"
     normalized = "01012345678"
@@ -979,6 +1012,7 @@ def test_successful_verification_resets_send_rate_limit(client, db, sms_sender):
     assert client.post("/v1/auth/login/send", json={"phone": phone}).status_code == 200
 
 
+@pytest.mark.scenario("AUTH-TS-034")
 def test_verification_state_rules(client, db, sms_sender):
     first = client.post(
         "/v1/auth/signup/send",
@@ -1044,6 +1078,7 @@ def test_verification_state_rules(client, db, sms_sender):
     assert expired_confirm.json()["error"]["code"] == "PHONE_VERIFICATION_EXPIRED"
 
 
+@pytest.mark.scenario("AUTH-TS-035")
 def test_signup_confirm_rolls_back_verification_when_user_becomes_duplicate(client, db, sms_sender, factory):
     phone = "01044445555"
     response = client.post(
@@ -1067,6 +1102,7 @@ def test_signup_confirm_rolls_back_verification_when_user_becomes_duplicate(clie
     assert verification.verified_at is None
 
 
+@pytest.mark.scenario("AUTH-TS-036")
 def test_signup_send_persists_verification_even_if_background_sms_fails(client, db):
     class FailingSmsSender:
         def send(self, phone: str, message: str) -> None:
@@ -1090,6 +1126,7 @@ def test_signup_send_persists_verification_even_if_background_sms_fails(client, 
     assert verification.status == PhoneVerificationStatus.PENDING
 
 
+@pytest.mark.scenario("AUTH-TS-037")
 def test_login_send_on_unregistered_phone_returns_user_not_found(client, db):
     """미가입 번호는 인증 실패가 아니라 대상 부재다. 401이면 클라 인터셉터가 세션을 건드린다."""
     response = client.post("/v1/auth/login/send", json={"phone": "010-9999-8888"})
@@ -1102,6 +1139,7 @@ def test_login_send_on_unregistered_phone_returns_user_not_found(client, db):
     ).count() == 0
 
 
+@pytest.mark.scenario("AUTH-TS-038")
 def test_login_send_persists_verification_even_if_background_sms_fails(client, db, factory):
     class FailingSmsSender:
         def send(self, phone: str, message: str) -> None:
@@ -1123,6 +1161,7 @@ def test_login_send_persists_verification_even_if_background_sms_fails(client, d
     assert verification.status == PhoneVerificationStatus.PENDING
 
 
+@pytest.mark.scenario("AUTH-TS-039")
 def test_verification_send_does_not_persist_when_sms_sender_is_missing(client, db, factory):
     login_user = factory.user(phone="01033334446")
     app.dependency_overrides[get_sms_sender] = lambda: None
@@ -1142,6 +1181,7 @@ def test_verification_send_does_not_persist_when_sms_sender_is_missing(client, d
     ).count() == 0
 
 
+@pytest.mark.scenario("AUTH-TS-040")
 def test_model_spec_matches_user_auth_docs():
     assert str(User.__table__.c.id.type).upper() == "VARCHAR(36)"
     assert str(User.__table__.c.phone.type).upper() == "VARCHAR(20)"

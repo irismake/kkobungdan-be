@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -56,6 +58,7 @@ def notification_count(db, user_id: str, notification_type: NotificationType, re
     )
 
 
+@pytest.mark.scenario("OFFER-TS-001")
 def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, db, factory, sample_user):
     runner = factory.user("01077770001", name="Runner One")
     factory.settlement_account(runner)
@@ -104,6 +107,7 @@ def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, d
     assert proposal.resolved_at is None
 
 
+@pytest.mark.scenario("OFFER-TS-002")
 def test_create_offer_requires_runner_settlement_account(client, db, factory, sample_user):
     runner = factory.user("01077770034", name="계좌 없는 꼬붕")
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -121,6 +125,7 @@ def test_create_offer_requires_runner_settlement_account(client, db, factory, sa
     assert proposal.status == ProposalStatus.POSTED
 
 
+@pytest.mark.scenario("OFFER-TS-003")
 def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770031", name="Runner Notify")
@@ -147,6 +152,7 @@ def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, 
     assert json.loads(runner_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
 
 
+@pytest.mark.scenario("OFFER-TS-004")
 def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, db, factory, sample_user):
     runner = factory.user("01077770032")
     factory.settlement_account(runner)
@@ -170,6 +176,7 @@ def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, d
     assert json.loads(runner_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
 
 
+@pytest.mark.scenario("OFFER-TS-005")
 def test_create_offer_queues_only_notifications_created_by_current_event(
     client,
     db,
@@ -214,6 +221,7 @@ def test_create_offer_queues_only_notifications_created_by_current_event(
     assert stale.id not in queued_ids
 
 
+@pytest.mark.scenario("OFFER-TS-006")
 def test_create_second_offer_keeps_proposal_offered(client, db, factory, sample_user):
     runner1 = factory.user("01077770002")
     runner2 = factory.user("01077770003")
@@ -230,6 +238,7 @@ def test_create_second_offer_keeps_proposal_offered(client, db, factory, sample_
     assert proposal.status == ProposalStatus.OFFERED
 
 
+@pytest.mark.scenario("OFFER-TS-007")
 def test_get_offers_returns_latest_first_and_supports_multi_status_filter(client, db, factory, sample_user):
     runner1 = factory.user("01077770004", name="Old Runner")
     runner2 = factory.user("01077770005", name="New Runner")
@@ -270,6 +279,7 @@ def test_get_offers_returns_latest_first_and_supports_multi_status_filter(client
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("OFFER-TS-008")
 def test_get_offer_detail_allows_any_logged_in_user(client, db, factory, sample_user):
     runner = factory.user("01077770007", name="Detail Runner")
     runner.level = 4
@@ -303,6 +313,7 @@ def test_get_offer_detail_allows_any_logged_in_user(client, db, factory, sample_
     assert runner_response.json()["data"]["runnerLevel"] == 4
 
 
+@pytest.mark.scenario("OFFER-TS-009")
 def test_get_offer_detail_returns_state_timestamps_when_accepted(client, db, factory, sample_user):
     runner = factory.user("01077770020")
     proposal = factory.proposal(sample_user.id, ProposalStatus.MATCHED)
@@ -325,6 +336,7 @@ def test_get_offer_detail_returns_state_timestamps_when_accepted(client, db, fac
     assert "missionId" not in response.json()["data"]
 
 
+@pytest.mark.scenario("OFFER-TS-010")
 def test_get_offer_detail_returns_open_chat_url_only_to_matched_participants(client, db, factory, sample_user):
     """오픈채팅방 URL은 관리자가 입금 확인 때 요청에 저장한 값을 매칭 당사자에게만 내려준다."""
     runner = factory.user("01077770029")
@@ -348,6 +360,7 @@ def test_get_offer_detail_returns_open_chat_url_only_to_matched_participants(cli
     assert stranger_response.json()["data"]["openChatUrl"] is None
 
 
+@pytest.mark.scenario("OFFER-TS-011")
 def test_get_offer_detail_masks_open_chat_url_before_accepted_status(client, db, factory, sample_user):
     runner = factory.user("01077770031")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -362,6 +375,7 @@ def test_get_offer_detail_masks_open_chat_url_before_accepted_status(client, db,
     assert response.json()["data"]["openChatUrl"] is None
 
 
+@pytest.mark.scenario("OFFER-TS-012")
 def test_get_own_offers_supports_paging_and_multi_status_filter(client, db, factory, sample_user):
     runner = factory.user("01077770009")
     other_runner = factory.user("01077770010")
@@ -387,6 +401,7 @@ def test_get_own_offers_supports_paging_and_multi_status_filter(client, db, fact
     assert all("receiptConfirmedAt" not in item for item in page["content"])
 
 
+@pytest.mark.scenario("OFFER-TS-013")
 def test_get_own_offers_orders_by_badge_then_latest(client, db, factory, sample_user):
     """내 활동 - 수행 기록은 배지 순으로 묶이고, 같은 배지 안에서는 최신순이다."""
     runner = factory.user("01077770020")
@@ -424,6 +439,7 @@ def test_get_own_offers_orders_by_badge_then_latest(client, db, factory, sample_
     ]
 
 
+@pytest.mark.scenario("OFFER-TS-014")
 def test_accept_offer_updates_states_and_timestamps(client, db, factory, sample_user):
     runner1 = factory.user("01077770011")
     runner2 = factory.user("01077770012")
@@ -477,6 +493,7 @@ def test_accept_offer_updates_states_and_timestamps(client, db, factory, sample_
     assert proposal.resolved_at is None
 
 
+@pytest.mark.scenario("OFFER-TS-015")
 def test_accept_offer_creates_selected_and_rejected_runner_notifications(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner1 = factory.user("01077770033")
@@ -516,6 +533,7 @@ def test_accept_offer_creates_selected_and_rejected_runner_notifications(client,
     )
 
 
+@pytest.mark.scenario("OFFER-TS-016")
 def test_accept_offer_stores_skipped_runner_notifications_when_alarm_disabled(client, db, factory, sample_user):
     runner1 = factory.user("01077770038")
     runner2 = factory.user("01077770039")
@@ -537,6 +555,7 @@ def test_accept_offer_stores_skipped_runner_notifications_when_alarm_disabled(cl
     assert rejected_notification.status == NotificationStatus.SKIPPED
 
 
+@pytest.mark.scenario("OFFER-TS-017")
 def test_accept_offer_domain_and_validation_errors(client, db, factory, sample_user):
     runner = factory.user("01077770013")
     other_user = factory.user("01077770014")
@@ -574,6 +593,7 @@ def test_accept_offer_domain_and_validation_errors(client, db, factory, sample_u
     assert not_matchable.json()["error"]["code"] == "PROPOSAL_NOT_MATCHABLE"
 
 
+@pytest.mark.scenario("OFFER-TS-018")
 def test_existing_active_offer_blocks_accept(client, db, factory, sample_user):
     runner = factory.user("01077770015")
     other_runner = factory.user("01077770021")
@@ -592,6 +612,7 @@ def test_existing_active_offer_blocks_accept(client, db, factory, sample_user):
     assert response.json()["error"]["code"] == "PROPOSAL_NOT_MATCHABLE"
 
 
+@pytest.mark.scenario("OFFER-TS-019")
 def test_cancel_offer_author_and_status_rules(client, db, factory, sample_user):
     runner = factory.user("01077770016")
     other_runner = factory.user("01077770017")
@@ -616,6 +637,7 @@ def test_cancel_offer_author_and_status_rules(client, db, factory, sample_user):
     assert waiting.status == OfferStatus.CANCELLED
 
 
+@pytest.mark.scenario("OFFER-TS-020")
 def test_complete_delivery_marks_offer_completed_without_finishing_proposal(client, db, factory, sample_user):
     runner = factory.user("01077770022")
     proposal = factory.proposal(sample_user.id, ProposalStatus.MATCHED)
@@ -652,6 +674,7 @@ def test_complete_delivery_marks_offer_completed_without_finishing_proposal(clie
     assert db.query(DisputeEvidence).filter(DisputeEvidence.offer_id == offer.id).count() == 0
 
 
+@pytest.mark.scenario("OFFER-TS-021")
 def test_complete_delivery_creates_meeting_confirmed_notification_for_orderer(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770035")
@@ -677,6 +700,7 @@ def test_complete_delivery_creates_meeting_confirmed_notification_for_orderer(cl
     assert notification_count(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
 
 
+@pytest.mark.scenario("OFFER-TS-022")
 def test_complete_delivery_after_orderer_completion_marks_both_all_completed(client, db, factory, sample_user):
     runner = factory.user("01077770025")
     sample_user.level = 7
@@ -718,6 +742,7 @@ def test_complete_delivery_after_orderer_completion_marks_both_all_completed(cli
     assert proposal.resolved_at is None
 
 
+@pytest.mark.scenario("OFFER-TS-023")
 def test_complete_delivery_after_orderer_completion_creates_execution_completed_notifications(
     client,
     db,
@@ -750,6 +775,7 @@ def test_complete_delivery_after_orderer_completion_creates_execution_completed_
     assert json.loads(runner_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
 
 
+@pytest.mark.scenario("OFFER-TS-024")
 def test_runner_level_counts_each_completed_offer(client, db, factory, sample_user):
     runner = factory.user("01077770028")
 
@@ -779,6 +805,7 @@ def test_runner_level_counts_each_completed_offer(client, db, factory, sample_us
     assert runner.level == 2
 
 
+@pytest.mark.scenario("OFFER-TS-025")
 def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770026")
@@ -836,6 +863,7 @@ def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, fa
     assert "꼬붕이 분쟁을 접수" in notification.body
 
 
+@pytest.mark.scenario("OFFER-TS-026")
 def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory, sample_user):
     runner = factory.user("01077770036")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -870,6 +898,7 @@ def test_raise_offer_dispute_rejects_invalid_survey_question(client, db, factory
     assert missing_reason.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("OFFER-TS-027")
 def test_raise_offer_dispute_requires_detail_only_for_etc_reason(client, db, factory, sample_user):
     """사유는 필수이고, 기타 사유를 고를 때만 상세 사유가 필수다. 신고·탈퇴와 같은 정책이다."""
     runner = factory.user("01077770037")
@@ -908,6 +937,7 @@ def test_raise_offer_dispute_requires_detail_only_for_etc_reason(client, db, fac
     assert evidence.reason is None
 
 
+@pytest.mark.scenario("OFFER-TS-028")
 def test_raise_offer_dispute_rejects_all_completed(client, db, factory, sample_user):
     runner = factory.user("01077770027")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -933,6 +963,7 @@ def test_raise_offer_dispute_rejects_all_completed(client, db, factory, sample_u
     assert proposal.disputed_at is None
 
 
+@pytest.mark.scenario("OFFER-TS-029")
 def test_complete_delivery_forbidden_and_wrong_status_errors(client, db, factory, sample_user):
     runner = factory.user("01077770023")
     other_runner = factory.user("01077770024")
@@ -959,6 +990,7 @@ def test_complete_delivery_forbidden_and_wrong_status_errors(client, db, factory
     assert not_updatable.json()["error"]["code"] == "OFFER_NOT_UPDATABLE"
 
 
+@pytest.mark.scenario("OFFER-TS-030")
 def test_offer_validation_and_domain_errors(client, db, factory, sample_user):
     runner = factory.user("01077770018")
     factory.settlement_account(runner)

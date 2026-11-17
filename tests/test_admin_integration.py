@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 
 from app.tasks import payment_checker
@@ -10,6 +12,7 @@ from app.models.refund import Refund, RefundReason, RefundStatus
 from app.services.proposal.proposal_service import ProposalService
 
 
+@pytest.mark.scenario("ADMIN-TS-001")
 def test_confirm_payment_posts_holding_proposal_and_stores_open_chat_url(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
 
@@ -26,6 +29,7 @@ def test_confirm_payment_posts_holding_proposal_and_stores_open_chat_url(client,
     assert proposal.open_chat_url == "https://open.kakao.com/o/example"
 
 
+@pytest.mark.scenario("ADMIN-TS-002")
 def test_confirm_payment_rejects_invalid_open_chat_url(client, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
 
@@ -39,6 +43,7 @@ def test_confirm_payment_rejects_invalid_open_chat_url(client, factory, sample_u
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("ADMIN-TS-003")
 def test_confirm_payment_notifies_orderer(client, db, factory, sample_user, admin_headers):
     sample_user.alarm_enabled = True
     proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
@@ -62,6 +67,7 @@ def test_confirm_payment_notifies_orderer(client, db, factory, sample_user, admi
     assert notification.status == NotificationStatus.PENDING
 
 
+@pytest.mark.scenario("ADMIN-TS-004")
 def test_send_payment_reminders_targets_only_pending_payments_once(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     sample_user.alarm_enabled = True
@@ -96,6 +102,7 @@ def test_send_payment_reminders_targets_only_pending_payments_once(db, factory, 
     )
 
 
+@pytest.mark.scenario("ADMIN-TS-005")
 def test_send_payment_reminders_skips_notification_when_alarm_disabled(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     sample_user.alarm_enabled = False
@@ -113,6 +120,7 @@ def test_send_payment_reminders_skips_notification_when_alarm_disabled(db, facto
     assert notification.status == NotificationStatus.SKIPPED
 
 
+@pytest.mark.scenario("ADMIN-TS-006")
 def test_confirm_payment_rejects_non_holding_proposal(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
@@ -126,6 +134,7 @@ def test_confirm_payment_rejects_non_holding_proposal(client, db, factory, sampl
     assert response.json()["error"]["code"] == "INVALID_STATUS"
 
 
+@pytest.mark.scenario("ADMIN-TS-007")
 def test_cancel_expired_payment_proposals_only_cancels_holding_after_24_hours(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     expired_holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "expired")
@@ -159,6 +168,7 @@ def test_cancel_expired_payment_proposals_only_cancels_holding_after_24_hours(db
     assert {refund.amount for refund in refunds} == {expired_holding.errand_fee}
 
 
+@pytest.mark.scenario("ADMIN-TS-008")
 def test_cancel_expired_payment_proposals_notifies_orderer(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     sample_user.alarm_enabled = True
@@ -185,6 +195,7 @@ def test_cancel_expired_payment_proposals_notifies_orderer(db, factory, sample_u
     assert notification.body == "24시간 이내 입금이 확인되지 않아 요청이 취소 되었어요. 다시 요청 게시글을 올려주세요."
 
 
+@pytest.mark.scenario("ADMIN-TS-009")
 def test_cancel_expired_payment_proposals_skips_notification_when_alarm_disabled(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     sample_user.alarm_enabled = False
@@ -202,6 +213,7 @@ def test_cancel_expired_payment_proposals_skips_notification_when_alarm_disabled
     assert notification.status == NotificationStatus.SKIPPED
 
 
+@pytest.mark.scenario("ADMIN-TS-010")
 def test_cancel_expired_payment_proposals_creates_no_notification_when_nothing_expired(db, factory, sample_user):
     now = datetime(2026, 6, 2, 12, 0, 0)
     fresh = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "정상 요청")
@@ -212,6 +224,7 @@ def test_cancel_expired_payment_proposals_creates_no_notification_when_nothing_e
     assert db.query(Notification).count() == 0
 
 
+@pytest.mark.scenario("ADMIN-TS-011")
 def test_payment_checker_closes_session_and_returns_cancelled_count(monkeypatch):
     class FakeSession:
         closed = False
@@ -234,6 +247,7 @@ def test_payment_checker_closes_session_and_returns_cancelled_count(monkeypatch)
     assert fake_session.closed is True
 
 
+@pytest.mark.scenario("ADMIN-TS-012")
 def test_list_pending_payment_proposals_without_auth(client, factory, sample_user, admin_headers):
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
     factory.proposal(sample_user.id, ProposalStatus.POSTED)

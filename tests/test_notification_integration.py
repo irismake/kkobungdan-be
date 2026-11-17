@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 
 from app.api.v1.notification.notification_router import get_notification_dispatcher
@@ -56,6 +58,7 @@ class RecordingFCMService:
         return self.result
 
 
+@pytest.mark.scenario("NOTI-TS-001")
 def test_root_response_matches_openapi_example(client):
     response = client.get("/")
 
@@ -63,6 +66,7 @@ def test_root_response_matches_openapi_example(client):
     assert response.json()["docs"] == "/docs"
 
 
+@pytest.mark.scenario("NOTI-TS-002")
 def test_notification_list_stats_detail_and_mark_read(client, db, factory, auth_headers, sample_user):
     unread = factory.notification(sample_user.id)
     factory.notification(
@@ -105,6 +109,7 @@ def test_notification_list_stats_detail_and_mark_read(client, db, factory, auth_
     assert marked.json()["data"]["marked_count"] == 1
 
 
+@pytest.mark.scenario("NOTI-TS-003")
 def test_notification_list_filters_pages_and_isolates_users(client, factory, auth_headers, sample_user):
     other_user = factory.user(phone="01088880000", name="Other User")
     now = utcnow_naive()
@@ -132,6 +137,7 @@ def test_notification_list_filters_pages_and_isolates_users(client, factory, aut
     assert read.id not in [item["id"] for item in unread_only.json()["data"]["notifications"]]
 
 
+@pytest.mark.scenario("NOTI-TS-004")
 def test_notification_detail_and_mark_read_are_user_scoped(client, db, factory, auth_headers, sample_user):
     other_user = factory.user(phone="01077770000", name="Other User")
     other_notification = factory.notification(other_user.id)
@@ -162,6 +168,7 @@ def test_notification_detail_and_mark_read_are_user_scoped(client, db, factory, 
     assert own_unread.status == NotificationStatus.READ
 
 
+@pytest.mark.scenario("NOTI-TS-005")
 def test_notification_send_and_failure_cases(client, db, auth_headers, sample_user):
     app.dependency_overrides[get_notification_dispatcher] = lambda: RecordingNotificationDispatcher()
 
@@ -199,6 +206,7 @@ def test_notification_send_and_failure_cases(client, db, auth_headers, sample_us
     assert unauthenticated.status_code == 401
 
 
+@pytest.mark.scenario("NOTI-TS-006")
 def test_notification_worker_sends_pending_notification_with_fcm_data(db, factory, sample_user):
     db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-1"))
     notification = factory.notification(
@@ -232,6 +240,7 @@ def test_notification_worker_sends_pending_notification_with_fcm_data(db, factor
     assert notification.sent_at is not None
 
 
+@pytest.mark.scenario("NOTI-TS-007")
 def test_notification_worker_flush_pending_limits_to_notification_ids(db, factory, sample_user):
     db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-filtered"))
     old_notification = factory.notification(
@@ -265,6 +274,7 @@ def test_notification_worker_flush_pending_limits_to_notification_ids(db, factor
     assert event_notification.fcm_message_id == "message-filtered"
 
 
+@pytest.mark.scenario("NOTI-TS-008")
 def test_send_to_user_stores_skipped_notification_when_alarm_disabled(db, factory):
     user = factory.user(phone="01088889999")
     db.add(UserFCMToken(user_id=user.id, fcm_token="token-disabled"))
@@ -285,6 +295,7 @@ def test_send_to_user_stores_skipped_notification_when_alarm_disabled(db, factor
     assert notification.fcm_message_id is None
 
 
+@pytest.mark.scenario("NOTI-TS-009")
 def test_notification_worker_marks_failed_when_fcm_send_fails(db, factory, sample_user):
     db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-2"))
     notification = factory.notification(
@@ -312,6 +323,7 @@ def test_notification_worker_marks_failed_when_fcm_send_fails(db, factory, sampl
     assert notification.error_message == "temporary failure"
 
 
+@pytest.mark.scenario("NOTI-TS-010")
 def test_notification_worker_deletes_stale_token_when_fcm_reports_unregistered(db, factory, sample_user):
     user_id = sample_user.id
     db.add(UserFCMToken(user_id=user_id, fcm_token="stale-token"))
@@ -331,6 +343,7 @@ def test_notification_worker_deletes_stale_token_when_fcm_reports_unregistered(d
     assert db.query(UserFCMToken).filter(UserFCMToken.user_id == user_id).first() is None
 
 
+@pytest.mark.scenario("NOTI-TS-011")
 def test_notification_worker_fails_without_token_and_does_not_call_fcm(db, factory, sample_user):
     notification = factory.notification(
         sample_user.id,
@@ -355,6 +368,7 @@ def test_notification_worker_fails_without_token_and_does_not_call_fcm(db, facto
     assert notification.error_message == "No FCM token"
 
 
+@pytest.mark.scenario("NOTI-TS-012")
 def test_notification_worker_ignores_skipped_notifications(db, factory, sample_user):
     db.add(UserFCMToken(user_id=sample_user.id, fcm_token="token-skipped"))
     notification = factory.notification(

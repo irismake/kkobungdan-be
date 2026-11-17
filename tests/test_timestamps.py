@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime
 
 from app.models.user import AuthPhoneVerification, PhoneVerificationPurpose, PhoneVerificationStatus
 
 
+@pytest.mark.scenario("AUTH-TS-051")
 def test_auth_phone_verification_timestamps_are_orm_managed(db):
     created_at_column = AuthPhoneVerification.__table__.c.created_at
     updated_at_column = AuthPhoneVerification.__table__.c.updated_at

@@ -7,6 +7,7 @@ TDD 흐름: docs/design-docs/tdd-workflow.md
 import pytest
 
 
-@pytest.mark.skip(reason="CHAT-TS-002: 시나리오 작성 후 구현")
+@pytest.mark.scenario("CHAT-TS-002")
+@pytest.mark.skip(reason="구현 전")
 def test_chat_integration_placeholder() -> None:
-    """CHAT-TS-002"""
+    """채팅 테스트 자리. 시나리오 작성 후 실제 테스트로 바꾼다."""

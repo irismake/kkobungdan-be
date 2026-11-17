@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.services.sms_service import AwsSnsSmsSender
 
 
@@ -12,12 +14,14 @@ class FakeSnsClient:
         return {"MessageId": "message-1"}
 
 
+@pytest.mark.scenario("NOTI-TS-013")
 def test_aws_sns_sms_sender_formats_korean_phone_number():
     assert AwsSnsSmsSender._to_e164_kr("01012345678") == "+821012345678"
     assert AwsSnsSmsSender._to_e164_kr("010-1234-5678") == "+821012345678"
     assert AwsSnsSmsSender._to_e164_kr("+821012345678") == "+821012345678"
 
 
+@pytest.mark.scenario("NOTI-TS-014")
 def test_aws_sns_sms_sender_publishes_with_sms_attributes():
     sns_client = FakeSnsClient()
     sender = AwsSnsSmsSender(
@@ -47,6 +51,7 @@ def test_aws_sns_sms_sender_publishes_with_sms_attributes():
     ]
 
 
+@pytest.mark.scenario("NOTI-TS-015")
 def test_aws_sns_sms_sender_propagates_provider_errors():
     class FailingSnsClient:
         def publish(self, **kwargs):

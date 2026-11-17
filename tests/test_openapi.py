@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import ast
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from app.models.offer import OfferStatus
 ALLOWED_SCHEMA_BASES = {"BaseModel", "Generic", "str", "Enum"}
 
 
+@pytest.mark.scenario("API-TS-001")
 def test_openapi_contains_korean_api_metadata():
     schema = app.openapi()
 
@@ -19,6 +22,7 @@ def test_openapi_contains_korean_api_metadata():
     assert "OrderRun 백엔드 API" in schema["info"]["description"]
 
 
+@pytest.mark.scenario("API-TS-002")
 def test_user_alarm_openapi_exposes_only_patch():
     alarm_path = app.openapi()["paths"]["/v1/user/alarm"]
 
@@ -26,6 +30,7 @@ def test_user_alarm_openapi_exposes_only_patch():
     assert alarm_path["patch"]["summary"] == "알림 설정 변경"
 
 
+@pytest.mark.scenario("API-TS-003")
 def test_auth_signup_send_openapi_examples_match_response_shape():
     operation = app.openapi()["paths"]["/v1/auth/signup/send"]["post"]
 
@@ -51,6 +56,7 @@ def test_auth_signup_send_openapi_examples_match_response_shape():
     }
 
 
+@pytest.mark.scenario("API-TS-004")
 def test_validation_error_openapi_example_uses_standard_error_wrapper():
     operation = app.openapi()["paths"]["/v1/auth/login/confirm"]["post"]
 
@@ -63,6 +69,7 @@ def test_validation_error_openapi_example_uses_standard_error_wrapper():
     assert validation_example["timestamp"] == "2026-06-01T12:00:00+09:00"
 
 
+@pytest.mark.scenario("API-TS-005")
 def test_openapi_operations_have_success_examples_and_standard_error_examples():
     schema = app.openapi()
 
@@ -112,6 +119,7 @@ def test_openapi_operations_have_success_examples_and_standard_error_examples():
                     seen_error_cases.add(error_case)
 
 
+@pytest.mark.scenario("API-TS-006")
 def test_representative_success_examples_match_contracts():
     schema = app.openapi()
 
@@ -297,6 +305,7 @@ def test_representative_success_examples_match_contracts():
     assert notification["data"]["status"] == "sent"
 
 
+@pytest.mark.scenario("API-TS-007")
 def test_nullable_fields_stay_visible_in_examples():
     """값이 null인 필드가 예시에서 사라지면 안 된다.
 
@@ -325,12 +334,14 @@ def test_nullable_fields_stay_visible_in_examples():
     assert signup["message"] is None
 
 
+@pytest.mark.scenario("API-TS-008")
 def test_auth_login_confirm_request_exposes_explicit_fields():
     schema = app.openapi()["components"]["schemas"]["AuthLoginConfirmRequest"]
 
     assert set(schema["properties"]) == {"phone", "code", "fcmToken"}
 
 
+@pytest.mark.scenario("API-TS-009")
 def test_admin_confirm_payment_requires_open_chat_url():
     operation = app.openapi()["paths"]["/v1/admin/proposal/{proposal_id}/confirm-payment"]["post"]
 
@@ -340,6 +351,7 @@ def test_admin_confirm_payment_requires_open_chat_url():
     assert schema["required"] == ["openChatUrl"]
 
 
+@pytest.mark.scenario("API-TS-010")
 def test_refund_is_completed_only_through_refund_resource():
     paths = app.openapi()["paths"]
 
@@ -347,6 +359,7 @@ def test_refund_is_completed_only_through_refund_resource():
     assert "/v1/admin/refund/{refund_id}/reject" not in paths
 
 
+@pytest.mark.scenario("API-TS-011")
 def test_admin_proposal_contracts_use_dedicated_response_schemas():
     schemas = app.openapi()["components"]["schemas"]
 
@@ -356,6 +369,7 @@ def test_admin_proposal_contracts_use_dedicated_response_schemas():
     )
 
 
+@pytest.mark.scenario("API-TS-012")
 def test_admin_participant_names_are_required_non_nullable_strings():
     schemas = app.openapi()["components"]["schemas"]
     required_names = {
@@ -380,6 +394,7 @@ def test_admin_participant_names_are_required_non_nullable_strings():
     assert "acceptedRunnerName" not in schemas["AdminProposalDetailResponse"]["required"]
 
 
+@pytest.mark.scenario("API-TS-013")
 def test_admin_payout_list_uses_mission_response_with_settlement_status():
     schema = app.openapi()
     mission_schema = schema["components"]["schemas"]["MissionResponse"]
@@ -393,6 +408,7 @@ def test_admin_payout_list_uses_mission_response_with_settlement_status():
     assert item["status"] == "COMPLETED"
 
 
+@pytest.mark.scenario("API-TS-014")
 def test_proposal_and_offer_creation_document_required_settlement_account():
     schema = app.openapi()
     for path in ("/v1/proposal", "/v1/offer"):
@@ -401,6 +417,7 @@ def test_proposal_and_offer_creation_document_required_settlement_account():
         assert "SETTLEMENT_ACCOUNT_REQUIRED" in codes
 
 
+@pytest.mark.scenario("API-TS-015")
 def test_offer_accept_has_no_request_body_or_amount_response_fields():
     operation = app.openapi()["paths"]["/v1/offer/{offer_id}/accept"]["post"]
 
@@ -415,6 +432,7 @@ def test_offer_accept_has_no_request_body_or_amount_response_fields():
     assert {"runFee", "itemPrice", "totalAmount"}.isdisjoint(accept_schema["properties"])
 
 
+@pytest.mark.scenario("API-TS-016")
 def test_dispute_requests_require_reason_question_id_only():
     """사유 선택은 필수이고 상세 사유는 기타 사유에서만 필수라 스키마 required에는 사유만 남는다."""
     schema = app.openapi()
@@ -435,6 +453,7 @@ def test_dispute_requests_require_reason_question_id_only():
         assert body_schema["properties"]["reasonQuestionId"]["minimum"] == 1
 
 
+@pytest.mark.scenario("API-TS-017")
 def test_dispute_evidence_lookup_is_documented_with_exclusive_query_params():
     operation = app.openapi()["paths"]["/v1/dispute-evidence"]["get"]
     params = {param["name"]: param for param in operation["parameters"]}
@@ -454,12 +473,14 @@ def test_dispute_evidence_lookup_is_documented_with_exclusive_query_params():
     }
 
 
+@pytest.mark.scenario("API-TS-018")
 def test_mission_collection_get_is_not_documented():
     mission_collection = app.openapi()["paths"].get("/v1/mission")
 
     assert mission_collection is None or "get" not in mission_collection
 
 
+@pytest.mark.scenario("API-TS-019")
 def test_list_status_filters_are_repeatable_array_query_parameters():
     schema = app.openapi()
     targets = [
@@ -479,6 +500,7 @@ def test_list_status_filters_are_repeatable_array_query_parameters():
         assert "status=A&status=B" in status_param["description"]
 
 
+@pytest.mark.scenario("API-TS-020")
 def test_api_schemas_do_not_inherit_from_other_api_dtos():
     schema_dir = Path(__file__).resolve().parents[1] / "app" / "schemas"
     violations: list[str] = []
@@ -521,6 +543,7 @@ def _error_codes_in_openapi() -> set[str]:
     return codes
 
 
+@pytest.mark.scenario("API-TS-021")
 def test_every_catalog_error_code_appears_in_openapi():
     """카탈로그에 코드를 추가하면 어떤 엔드포인트든 문서화하도록 강제한다."""
     route_level = {ERRORS[error].code for error in ROUTE_LEVEL_ERRORS}
@@ -531,6 +554,7 @@ def test_every_catalog_error_code_appears_in_openapi():
     assert not missing, f"openapi.json에 없는 에러 코드: {sorted(missing)}"
 
 
+@pytest.mark.scenario("API-TS-022")
 def test_route_level_errors_are_documented_in_api_description():
     """오퍼레이션에 붙일 수 없는 전역 코드는 API 설명에 남아 있어야 한다."""
     description = app.openapi()["info"]["description"]
@@ -539,6 +563,7 @@ def test_route_level_errors_are_documented_in_api_description():
         assert ERRORS[error].code in description
 
 
+@pytest.mark.scenario("API-TS-023")
 def test_internal_server_error_is_declared_on_every_operation():
     for path, path_item in app.openapi()["paths"].items():
         for method, operation in path_item.items():

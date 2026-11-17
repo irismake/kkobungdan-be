@@ -35,6 +35,7 @@ def _account(db, user_id: str, holder: str) -> SettlementAccount:
 # ----------------------------------------------------------------- 요청
 
 
+@pytest.mark.scenario("ADMIN-TS-013")
 def test_list_proposals_filters_by_status_and_counts_offers(client, factory, sample_user, runner, admin_headers):
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
     posted = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -50,6 +51,7 @@ def test_list_proposals_filters_by_status_and_counts_offers(client, factory, sam
     assert holding.id not in [item["id"] for item in content]
 
 
+@pytest.mark.scenario("ADMIN-TS-014")
 def test_list_proposals_keyword_matches_id_and_orderer_name(client, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
@@ -60,6 +62,7 @@ def test_list_proposals_keyword_matches_id_and_orderer_name(client, factory, sam
     assert [item["id"] for item in by_name.json()["data"]["content"]] == [proposal.id]
 
 
+@pytest.mark.scenario("ADMIN-TS-015")
 def test_get_proposal_detail_exposes_accepted_offer_and_mission(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner)
     mission = factory.mission(proposal, offer)
@@ -74,6 +77,7 @@ def test_get_proposal_detail_exposes_accepted_offer_and_mission(client, factory,
     assert data["depositorName"] is None
 
 
+@pytest.mark.scenario("ADMIN-TS-016")
 def test_get_proposal_detail_returns_not_found(client, admin_headers):
     response = client.get("/v1/admin/proposal/999999", headers=admin_headers)
 
@@ -81,6 +85,7 @@ def test_get_proposal_detail_returns_not_found(client, admin_headers):
     assert response.json()["error"]["code"] == "PROPOSAL_NOT_FOUND"
 
 
+@pytest.mark.scenario("ADMIN-TS-017")
 def test_cancel_proposal_cascades_offer_and_mission(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner)
     mission = factory.mission(proposal, offer)
@@ -99,6 +104,7 @@ def test_cancel_proposal_cascades_offer_and_mission(client, db, factory, sample_
     assert refund.reason_detail == "행님 요청"
 
 
+@pytest.mark.scenario("ADMIN-TS-018")
 def test_cancel_proposal_rejects_already_cancelled(client, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
 
@@ -108,6 +114,7 @@ def test_cancel_proposal_rejects_already_cancelled(client, factory, sample_user,
     assert response.json()["error"]["code"] == "PROPOSAL_NOT_CANCELLABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-019")
 def test_cancel_paid_pre_match_proposal_creates_admin_refund(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
@@ -125,6 +132,7 @@ def test_cancel_paid_pre_match_proposal_creates_admin_refund(client, db, factory
     assert refund.reason_detail == "운영 취소"
 
 
+@pytest.mark.scenario("ADMIN-TS-020")
 def test_pending_payment_returns_page_of_holding_proposals(client, factory, sample_user, admin_headers):
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
     factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -140,6 +148,7 @@ def test_pending_payment_returns_page_of_holding_proposals(client, factory, samp
 # ----------------------------------------------------------------- 지원
 
 
+@pytest.mark.scenario("ADMIN-TS-021")
 def test_list_offers_reports_amount_accepted_and_dispute_flags(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner)
     factory.mission(proposal, offer)
@@ -155,6 +164,7 @@ def test_list_offers_reports_amount_accepted_and_dispute_flags(client, factory, 
     assert item["runnerName"] == runner.name
 
 
+@pytest.mark.scenario("ADMIN-TS-022")
 def test_list_offers_returns_proposal_open_chat_url(client, db, factory, sample_user, runner, admin_headers):
     """오픈채팅방 URL은 관리자가 입금 확인 때 요청에 저장한 값을 그대로 내려준다."""
     proposal, offer = factory.execution(sample_user, runner)
@@ -167,6 +177,7 @@ def test_list_offers_returns_proposal_open_chat_url(client, db, factory, sample_
     assert response.json()["data"]["content"][0]["openChatUrl"] == "https://open.kakao.com/o/proposal"
 
 
+@pytest.mark.scenario("ADMIN-TS-023")
 def test_list_offers_filters_by_dispute_absence(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner)
 
@@ -178,6 +189,7 @@ def test_list_offers_filters_by_dispute_absence(client, factory, sample_user, ru
     assert [item["id"] for item in response.json()["data"]["content"]] == [offer.id]
 
 
+@pytest.mark.scenario("ADMIN-TS-024")
 def test_list_offers_keeps_cancelled_mission_offer_in_accepted_filter(
     client, factory, sample_user, runner, admin_headers
 ):
@@ -198,6 +210,7 @@ def test_list_offers_keeps_cancelled_mission_offer_in_accepted_filter(
 # ----------------------------------------------------------------- 분쟁
 
 
+@pytest.mark.scenario("ADMIN-TS-025")
 def test_list_and_get_dispute_resolves_requester_and_target_roles(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
     mission = factory.mission(proposal, offer, MissionStatus.DISPUTED)
@@ -216,6 +229,7 @@ def test_list_and_get_dispute_resolves_requester_and_target_roles(client, factor
     assert data["proposalStatus"] == "DISPUTED"
 
 
+@pytest.mark.scenario("ADMIN-TS-026")
 def test_resolve_dispute_completes_mission_and_closes_proposal(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
     mission = factory.mission(proposal, offer, MissionStatus.DISPUTED)
@@ -238,6 +252,7 @@ def test_resolve_dispute_completes_mission_and_closes_proposal(client, db, facto
     assert offer.status == OfferStatus.ALL_COMPLETED
 
 
+@pytest.mark.scenario("ADMIN-TS-027")
 def test_resolve_dispute_with_failed_outcome_marks_mission_failed(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
     mission = factory.mission(proposal, offer, MissionStatus.DISPUTED)
@@ -257,6 +272,7 @@ def test_resolve_dispute_with_failed_outcome_marks_mission_failed(client, db, fa
     assert refund.reason_detail == evidence.reason
 
 
+@pytest.mark.scenario("ADMIN-TS-028")
 def test_resolve_dispute_rejects_already_reviewed(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
     factory.mission(proposal, offer, MissionStatus.DISPUTED)
@@ -273,6 +289,7 @@ def test_resolve_dispute_rejects_already_reviewed(client, factory, sample_user, 
 # ----------------------------------------------------------- 환불 / 수행비 지급
 
 
+@pytest.mark.scenario("ADMIN-TS-029")
 def test_list_refunds_returns_pending_refunds_with_proposal_status(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
     mission = factory.mission(proposal, offer, MissionStatus.FAILED)
@@ -289,6 +306,7 @@ def test_list_refunds_returns_pending_refunds_with_proposal_status(client, db, f
     assert item["reason"] == "DISPUTE_FAILED"
 
 
+@pytest.mark.scenario("ADMIN-TS-030")
 def test_list_refunds_filters_by_proposal_id(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
     mission = factory.mission(proposal, offer, MissionStatus.FAILED)
@@ -307,6 +325,7 @@ def test_list_refunds_filters_by_proposal_id(client, db, factory, sample_user, r
     assert content[0]["proposalId"] == proposal.id
 
 
+@pytest.mark.scenario("ADMIN-TS-031")
 def test_get_refund_detail_exposes_unmasked_account(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
     mission = factory.mission(proposal, offer, MissionStatus.FAILED)
@@ -323,6 +342,7 @@ def test_get_refund_detail_exposes_unmasked_account(client, db, factory, sample_
     assert data["reasonDetail"] == "약속한 물건과 다른 물건을 전달했습니다."
 
 
+@pytest.mark.scenario("ADMIN-TS-032")
 def test_complete_refund_records_and_cancels_proposal(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
     mission = factory.mission(proposal, offer, MissionStatus.FAILED)
@@ -338,6 +358,7 @@ def test_complete_refund_records_and_cancels_proposal(client, db, factory, sampl
     assert proposal.status == ProposalStatus.REFUNDED
 
 
+@pytest.mark.scenario("ADMIN-TS-033")
 def test_cancel_unpaid_proposal_leaves_a_deposit_review_refund(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
 
@@ -354,6 +375,7 @@ def test_cancel_unpaid_proposal_leaves_a_deposit_review_refund(client, db, facto
     assert refund.reason == RefundReason.ADMIN_CANCELLED.value
 
 
+@pytest.mark.scenario("ADMIN-TS-034")
 def test_confirm_deposit_promotes_review_refund_and_reopens_refund_pending(
     client, db, factory, sample_user, admin_headers
 ):
@@ -377,6 +399,7 @@ def test_confirm_deposit_promotes_review_refund_and_reopens_refund_pending(
     assert proposal.status == ProposalStatus.REFUNDED
 
 
+@pytest.mark.scenario("ADMIN-TS-035")
 def test_void_refund_closes_review_without_touching_the_cancelled_proposal(
     client, db, factory, sample_user, admin_headers
 ):
@@ -398,6 +421,7 @@ def test_void_refund_closes_review_without_touching_the_cancelled_proposal(
     assert proposal.status == ProposalStatus.CANCELLED
 
 
+@pytest.mark.scenario("ADMIN-TS-036")
 def test_void_refund_requires_an_admin_note(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
     refund = factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
@@ -408,6 +432,7 @@ def test_void_refund_requires_an_admin_note(client, db, factory, sample_user, ad
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("ADMIN-TS-037")
 def test_review_refund_cannot_skip_deposit_confirmation(client, db, factory, sample_user, admin_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.CANCELLED)
     refund = factory.refund(proposal, reason=RefundReason.USER_CANCELLED, status=RefundStatus.REVIEW)
@@ -418,6 +443,7 @@ def test_review_refund_cannot_skip_deposit_confirmation(client, db, factory, sam
     assert response.json()["error"]["code"] == "REFUND_NOT_PROCESSABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-038")
 def test_settled_refund_rejects_deposit_review_actions(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.REFUND_PENDING, OfferStatus.CANCELLED)
     mission = factory.mission(proposal, offer, MissionStatus.FAILED)
@@ -432,6 +458,7 @@ def test_settled_refund_rejects_deposit_review_actions(client, db, factory, samp
     assert voided.json()["error"]["code"] == "REFUND_NOT_PROCESSABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-039")
 def test_list_payouts_returns_completed_missions(client, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
     mission = factory.mission(proposal, offer, MissionStatus.COMPLETED)
@@ -447,6 +474,7 @@ def test_list_payouts_returns_completed_missions(client, factory, sample_user, r
     assert item["settlementStatus"] == "PENDING"
 
 
+@pytest.mark.scenario("ADMIN-TS-040")
 def test_complete_payout_records_settlement(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
     mission = factory.mission(proposal, offer, MissionStatus.COMPLETED)
@@ -464,6 +492,7 @@ def test_complete_payout_records_settlement(client, db, factory, sample_user, ru
     assert proposal.status == ProposalStatus.ALL_COMPLETED
 
 
+@pytest.mark.scenario("ADMIN-TS-041")
 def test_reject_payout_keeps_mission_status(client, db, factory, sample_user, runner, admin_headers):
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
     mission = factory.mission(proposal, offer, MissionStatus.COMPLETED)
@@ -476,6 +505,7 @@ def test_reject_payout_keeps_mission_status(client, db, factory, sample_user, ru
     assert mission.status == MissionStatus.COMPLETED.value
 
 
+@pytest.mark.scenario("ADMIN-TS-042")
 def test_payout_not_found(client, admin_headers):
     response = client.get("/v1/admin/payout/999999", headers=admin_headers)
 
@@ -486,6 +516,7 @@ def test_payout_not_found(client, admin_headers):
 # ----------------------------------------------------------------- 대시보드
 
 
+@pytest.mark.scenario("ADMIN-TS-043")
 def test_summary_counts_pending_work_per_domain(client, db, factory, sample_user, runner, admin_headers):
     factory.proposal(sample_user.id, ProposalStatus.HOLDING)
 
@@ -535,6 +566,7 @@ def test_summary_counts_pending_work_per_domain(client, db, factory, sample_user
 # ----------------------------------------------------------------- 사용자
 
 
+@pytest.mark.scenario("ADMIN-TS-044")
 def test_list_users_returns_signup_profile_and_excludes_admin_accounts(
     client, db, factory, sample_user, runner, admin_headers, admin_user
 ):
@@ -556,6 +588,7 @@ def test_list_users_returns_signup_profile_and_excludes_admin_accounts(
     assert listed[sample_user.id]["createdAt"] is not None
 
 
+@pytest.mark.scenario("ADMIN-TS-045")
 def test_list_users_keyword_matches_name_and_user_id(client, factory, sample_user, runner, admin_headers):
     by_name = client.get("/v1/admin/user", params={"keyword": "꼬붕"}, headers=admin_headers)
     by_id = client.get("/v1/admin/user", params={"keyword": sample_user.id}, headers=admin_headers)
@@ -564,6 +597,7 @@ def test_list_users_keyword_matches_name_and_user_id(client, factory, sample_use
     assert [item["id"] for item in by_id.json()["data"]["content"]] == [sample_user.id]
 
 
+@pytest.mark.scenario("ADMIN-TS-046")
 def test_list_users_shows_withdrawn_placeholder_name(client, db, factory, sample_user, runner, admin_headers):
     runner.withdraw(utcnow_naive())
     db.commit()
@@ -574,6 +608,7 @@ def test_list_users_shows_withdrawn_placeholder_name(client, db, factory, sample
     assert listed[runner.id]["name"] == "탈퇴한 사용자"
 
 
+@pytest.mark.scenario("ADMIN-TS-047")
 def test_list_users_paginates_by_page_and_size(client, factory, sample_user, runner, admin_headers):
     response = client.get("/v1/admin/user", params={"page": 0, "size": 1}, headers=admin_headers)
 

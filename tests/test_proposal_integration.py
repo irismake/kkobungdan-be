@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -69,6 +71,7 @@ def notification_count(db, user_id: str, notification_type: NotificationType, re
     )
 
 
+@pytest.mark.scenario("PROPOSAL-TS-001")
 def test_list_public_requires_auth_and_supports_multi_status_filter(client, db, factory, auth_headers, sample_user):
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING, "holding")
     posted = factory.proposal(sample_user.id, ProposalStatus.POSTED, "posted")
@@ -99,6 +102,7 @@ def test_list_public_requires_auth_and_supports_multi_status_filter(client, db, 
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-002")
 def test_list_public_orders_by_latest_creation_time(client, db, factory, auth_headers, sample_user):
     """홈 화면은 마감 기한과 무관하게 최신 게시글이 최상단에 온다."""
     oldest = factory.proposal(sample_user.id, ProposalStatus.POSTED, "oldest")
@@ -118,6 +122,7 @@ def test_list_public_orders_by_latest_creation_time(client, db, factory, auth_he
     assert ordered_ids[:3] == [newest.id, middle.id, oldest.id]
 
 
+@pytest.mark.scenario("PROPOSAL-TS-003")
 def test_detail_returns_proposal_regardless_of_status(client, db, factory, auth_headers, sample_user):
     sample_user.level = 2
     db.commit()
@@ -147,6 +152,7 @@ def test_detail_returns_proposal_regardless_of_status(client, db, factory, auth_
     assert data["offers"] == []
 
 
+@pytest.mark.scenario("PROPOSAL-TS-004")
 def test_detail_returns_state_timestamps_when_matched(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01099990003", name="Matched Runner")
     runner.level = 5
@@ -176,6 +182,7 @@ def test_detail_returns_state_timestamps_when_matched(client, db, factory, auth_
     assert data["offers"][0]["runnerLevel"] == 5
 
 
+@pytest.mark.scenario("PROPOSAL-TS-005")
 def test_detail_returns_open_chat_url_only_to_matched_participants(client, db, factory, auth_headers, sample_user):
     """오픈채팅방 URL은 관리자가 입금 확인 때 요청에 저장한 값을 매칭 당사자에게만 내려준다."""
     runner = factory.user("01055550004", name="Chat Runner")
@@ -200,6 +207,7 @@ def test_detail_returns_open_chat_url_only_to_matched_participants(client, db, f
     assert stranger_response.json()["data"]["openChatUrl"] is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-006")
 def test_detail_masks_open_chat_url_before_matched_status(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550006", name="Waiting Chat Runner")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -214,6 +222,7 @@ def test_detail_masks_open_chat_url_before_matched_status(client, db, factory, a
     assert response.json()["data"]["openChatUrl"] is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-007")
 def test_list_own_returns_only_current_user_with_offers_and_multi_status_filter(client, db, factory, auth_headers, sample_user):
     other_user = factory.user(name="Old Offer Runner")
     own_posted = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -254,6 +263,7 @@ def test_list_own_returns_only_current_user_with_offers_and_multi_status_filter(
     }
 
 
+@pytest.mark.scenario("PROPOSAL-TS-008")
 def test_list_own_orders_by_badge_then_latest(client, db, factory, auth_headers, sample_user):
     """내 활동 - 요청은 배지 순으로 묶이고, 같은 배지 안에서는 최신순이다."""
     # 생성 순서와 배지 순서를 서로 어긋나게 하고, created_at도 id 순서와 일부러 뒤집어
@@ -296,6 +306,7 @@ def test_list_own_orders_by_badge_then_latest(client, db, factory, auth_headers,
     ]
 
 
+@pytest.mark.scenario("PROPOSAL-TS-009")
 def test_create_proposal_validates_contract_and_stores_holding(client, db, factory, auth_headers, sample_user):
     db.add(
         SettlementAccount(
@@ -319,6 +330,7 @@ def test_create_proposal_validates_contract_and_stores_holding(client, db, facto
     assert proposal.status == ProposalStatus.HOLDING
 
 
+@pytest.mark.scenario("PROPOSAL-TS-010")
 def test_create_proposal_requires_settlement_account(client, auth_headers):
     response = client.post("/v1/proposal", json=proposal_payload(), headers=auth_headers)
 
@@ -326,6 +338,7 @@ def test_create_proposal_requires_settlement_account(client, auth_headers):
     assert response.json()["error"]["code"] == "SETTLEMENT_ACCOUNT_REQUIRED"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-011")
 def test_create_proposal_validation_errors(client, factory, auth_headers, sample_user):
     # 정산 계좌가 없으면 SETTLEMENT_ACCOUNT_REQUIRED(409)가 먼저 반환되므로 계좌를 준비한다.
     factory.settlement_account(sample_user)
@@ -349,6 +362,7 @@ def test_create_proposal_validation_errors(client, factory, auth_headers, sample
         assert response.json()["error"]["code"] == expected_code
 
 
+@pytest.mark.scenario("PROPOSAL-TS-012")
 def test_update_proposal_author_and_status_rules(client, db, factory, auth_headers, sample_user):
     other_user = factory.user()
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
@@ -384,6 +398,7 @@ def test_update_proposal_author_and_status_rules(client, db, factory, auth_heade
     assert missing.json()["error"]["code"] == "PROPOSAL_NOT_FOUND"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-013")
 def test_cancel_proposal_author_status_rules_and_rejects_waiting_offers(client, db, factory, auth_headers, sample_user):
     other_user = factory.user()
     holding = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
@@ -448,6 +463,7 @@ def test_cancel_proposal_author_status_rules_and_rejects_waiting_offers(client, 
         assert response.json()["error"]["code"] == "PROPOSAL_NOT_CANCELLABLE"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-014")
 def test_confirm_received_marks_proposal_completed_without_finishing_offer(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550001")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -476,6 +492,7 @@ def test_confirm_received_marks_proposal_completed_without_finishing_offer(clien
     assert offer.resolved_at is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-015")
 def test_confirm_received_creates_meeting_confirmed_notification_for_runner(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550031")
     runner.alarm_enabled = True
@@ -495,6 +512,7 @@ def test_confirm_received_creates_meeting_confirmed_notification_for_runner(clie
     assert notification_count(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
 
 
+@pytest.mark.scenario("PROPOSAL-TS-016")
 def test_confirm_received_after_runner_completion_marks_both_all_completed(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550002")
     sample_user.level = 6
@@ -527,6 +545,7 @@ def test_confirm_received_after_runner_completion_marks_both_all_completed(clien
     assert offer.resolved_at is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-017")
 def test_confirm_received_after_runner_completion_creates_execution_completed_notifications(
     client,
     db,
@@ -557,6 +576,7 @@ def test_confirm_received_after_runner_completion_creates_execution_completed_no
     assert json.loads(runner_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
 
 
+@pytest.mark.scenario("PROPOSAL-TS-018")
 def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550003")
     runner.alarm_enabled = True
@@ -610,6 +630,7 @@ def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db,
     assert "행님이 분쟁을 접수" in notification.body
 
 
+@pytest.mark.scenario("PROPOSAL-TS-019")
 def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550033")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -652,6 +673,7 @@ def test_raise_proposal_dispute_rejects_invalid_survey_question(client, db, fact
     assert blank_detail.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-020")
 def test_raise_proposal_dispute_requires_detail_only_for_etc_reason(client, db, factory, auth_headers, sample_user):
     """사유는 필수이고, 기타 사유를 고를 때만 상세 사유가 필수다. 신고·탈퇴와 같은 정책이다."""
     runner = factory.user("01055550035")
@@ -691,6 +713,7 @@ def test_raise_proposal_dispute_requires_detail_only_for_etc_reason(client, db, 
     assert evidence.reason is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-021")
 def test_raise_proposal_dispute_accepts_etc_reason_with_detail(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550036")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -712,6 +735,7 @@ def test_raise_proposal_dispute_accepts_etc_reason_with_detail(client, db, facto
     assert evidence.reason == "연락이 되지 않아요"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-022")
 def test_raise_proposal_dispute_rejects_all_completed(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550004")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -737,6 +761,7 @@ def test_raise_proposal_dispute_rejects_all_completed(client, db, factory, auth_
     assert offer.disputed_at is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-023")
 def test_proposal_model_contract(db):
     table = inspect(db.bind).get_columns("proposals")
     columns = {column["name"]: column for column in table}

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.core.time import utcnow_naive
 from app.models.mission import Mission, MissionStatus
 from app.models.offer import Offer, OfferStatus
@@ -27,6 +29,7 @@ def _survey_question(db, target_type: DisputeSurveyTargetType) -> DisputeSurveyQ
     return question
 
 
+@pytest.mark.scenario("ADMIN-TS-048")
 def test_accepting_offer_starts_mission(client, db, factory, sample_user):
     runner = factory.user("01055550001")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -45,6 +48,7 @@ def test_accepting_offer_starts_mission(client, db, factory, sample_user):
     assert mission.settlement_paid is False
 
 
+@pytest.mark.scenario("ADMIN-TS-049")
 def test_accept_response_does_not_expose_mission(client, factory, sample_user):
     runner = factory.user("01055550002")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -57,6 +61,7 @@ def test_accept_response_does_not_expose_mission(client, factory, sample_user):
     assert "missionStatus" not in data
 
 
+@pytest.mark.scenario("ADMIN-TS-050")
 def test_both_side_confirmation_completes_mission(client, db, factory, sample_user):
     runner = factory.user("01055550003")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -73,6 +78,7 @@ def test_both_side_confirmation_completes_mission(client, db, factory, sample_us
     assert mission.settlement_paid is False
 
 
+@pytest.mark.scenario("ADMIN-TS-051")
 def test_runner_dispute_moves_mission_to_disputed(client, db, factory, sample_user):
     runner = factory.user("01055550004")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -91,6 +97,7 @@ def test_runner_dispute_moves_mission_to_disputed(client, db, factory, sample_us
     assert mission.disputed_at is not None
 
 
+@pytest.mark.scenario("ADMIN-TS-052")
 def test_orderer_dispute_moves_mission_to_disputed(client, db, factory, sample_user):
     runner = factory.user("01055550005")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -108,6 +115,7 @@ def test_orderer_dispute_moves_mission_to_disputed(client, db, factory, sample_u
     assert mission.status == MissionStatus.DISPUTED.value
 
 
+@pytest.mark.scenario("ADMIN-TS-053")
 def test_admin_resolves_dispute_as_completed(client, db, factory, sample_user, admin_headers):
     runner = factory.user("01055550006")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -128,6 +136,7 @@ def test_admin_resolves_dispute_as_completed(client, db, factory, sample_user, a
     assert proposal.status == ProposalStatus.ALL_COMPLETED
 
 
+@pytest.mark.scenario("ADMIN-TS-054")
 def test_admin_resolves_dispute_as_failed(client, db, factory, sample_user, admin_headers):
     runner = factory.user("01055550007")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -149,6 +158,7 @@ def test_admin_resolves_dispute_as_failed(client, db, factory, sample_user, admi
     assert refund.reason == RefundReason.DISPUTE_FAILED.value
 
 
+@pytest.mark.scenario("ADMIN-TS-055")
 def test_resolve_rejects_mission_that_is_not_disputed(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550008")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -160,6 +170,7 @@ def test_resolve_rejects_mission_that_is_not_disputed(client, factory, sample_us
     assert response.json()["error"]["code"] == "MISSION_NOT_RESOLVABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-056")
 def test_resolve_requires_resolution_field(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550009")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
@@ -171,6 +182,7 @@ def test_resolve_requires_resolution_field(client, factory, sample_user, admin_h
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("ADMIN-TS-057")
 def test_settlement_marks_mission_paid(client, db, factory, sample_user, admin_headers):
     runner = factory.user("01055550010")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -192,6 +204,7 @@ def test_settlement_marks_mission_paid(client, db, factory, sample_user, admin_h
     assert mission.payout_memo == "이체 참조번호 20260601-001"
 
 
+@pytest.mark.scenario("ADMIN-TS-058")
 def test_settlement_rejects_mission_that_is_not_completed(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550012")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -203,6 +216,7 @@ def test_settlement_rejects_mission_that_is_not_completed(client, factory, sampl
     assert response.json()["error"]["code"] == "MISSION_NOT_SETTLEABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-059")
 def test_duplicate_settlement_is_rejected(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550014")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -216,6 +230,7 @@ def test_duplicate_settlement_is_rejected(client, factory, sample_user, admin_he
     assert second.json()["error"]["code"] == "MISSION_NOT_SETTLEABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-060")
 def test_terminal_mission_is_not_resolvable(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550015")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.ALL_COMPLETED, OfferStatus.ALL_COMPLETED)
@@ -227,6 +242,7 @@ def test_terminal_mission_is_not_resolvable(client, factory, sample_user, admin_
     assert response.json()["error"]["code"] == "MISSION_NOT_RESOLVABLE"
 
 
+@pytest.mark.scenario("ADMIN-TS-061")
 def test_mission_not_found_returns_404(client, admin_headers):
     response = client.get("/v1/admin/missions/99999", headers=admin_headers)
 
@@ -234,6 +250,7 @@ def test_mission_not_found_returns_404(client, admin_headers):
     assert response.json()["error"]["code"] == "MISSION_NOT_FOUND"
 
 
+@pytest.mark.scenario("ADMIN-TS-062")
 def test_mission_detail_exposes_each_side_confirmation_time(client, db, factory, sample_user, admin_headers):
     """관리자가 누가 언제 눌렀는지 미션 한 곳에서 볼 수 있어야 한다."""
     runner = factory.user("01055550020")
@@ -259,6 +276,7 @@ def test_mission_detail_exposes_each_side_confirmation_time(client, db, factory,
     assert after_both["status"] == "COMPLETED"
 
 
+@pytest.mark.scenario("ADMIN-TS-063")
 def test_mission_list_exposes_confirmation_times(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550021")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -272,6 +290,7 @@ def test_mission_list_exposes_confirmation_times(client, factory, sample_user, a
     assert item["ordererConfirmedAt"] is None
 
 
+@pytest.mark.scenario("ADMIN-TS-064")
 def test_mission_detail_exposes_participant_names(client, factory, sample_user, admin_headers):
     """관리자 웹이 행님·꼬붕을 UUID가 아닌 이름으로 식별할 수 있어야 한다."""
     runner = factory.user("01055550022", name="꼬붕 하나")
@@ -284,6 +303,7 @@ def test_mission_detail_exposes_participant_names(client, factory, sample_user, 
     assert data["runnerName"] == "꼬붕 하나"
 
 
+@pytest.mark.scenario("ADMIN-TS-065")
 def test_mission_list_exposes_participant_names(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550023", name="꼬붕 둘")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -295,6 +315,7 @@ def test_mission_list_exposes_participant_names(client, factory, sample_user, ad
     assert item["runnerName"] == "꼬붕 둘"
 
 
+@pytest.mark.scenario("ADMIN-TS-066")
 def test_mission_detail_exposes_proposal_open_chat_url(client, db, factory, sample_user, admin_headers):
     """지원에 링크가 없으면 입금 확인 때 요청에 저장한 링크를 반환한다."""
     runner = factory.user("01055550025")
@@ -308,6 +329,7 @@ def test_mission_detail_exposes_proposal_open_chat_url(client, db, factory, samp
     assert data["openChatUrl"] == "https://open.kakao.com/o/proposal"
 
 
+@pytest.mark.scenario("ADMIN-TS-067")
 def test_mission_list_returns_proposal_open_chat_url(client, db, factory, sample_user, admin_headers):
     """목록도 상세와 같이 입금 확인 때 요청에 저장한 링크를 내려준다."""
     runner = factory.user("01055550026")
@@ -321,6 +343,7 @@ def test_mission_list_returns_proposal_open_chat_url(client, db, factory, sample
     assert item["openChatUrl"] == "https://open.kakao.com/o/proposal"
 
 
+@pytest.mark.scenario("ADMIN-TS-068")
 def test_mission_name_uses_display_text_for_withdrawn_participant(client, db, factory, sample_user, admin_headers):
     """탈퇴해 이름이 지워져도 관리자 화면에는 식별 가능한 문구를 내려준다."""
     runner = factory.user("01055550024", name="탈퇴 예정")
@@ -335,6 +358,7 @@ def test_mission_name_uses_display_text_for_withdrawn_participant(client, db, fa
     assert response.json()["data"]["runnerName"] == "탈퇴한 사용자"
 
 
+@pytest.mark.scenario("ADMIN-TS-069")
 def test_mission_detail_exposes_payout_flags(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550016")
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
@@ -349,6 +373,7 @@ def test_mission_detail_exposes_payout_flags(client, factory, sample_user, admin
     assert data["settlementPaid"] is False
 
 
+@pytest.mark.scenario("ADMIN-TS-070")
 def test_mission_list_filters_by_status(client, factory, sample_user, admin_headers):
     runner_one = factory.user("01055550017")
     runner_two = factory.user("01055550018")
@@ -368,6 +393,7 @@ def test_mission_list_filters_by_status(client, factory, sample_user, admin_head
     assert [item["id"] for item in content] == [disputed.id]
 
 
+@pytest.mark.scenario("ADMIN-TS-071")
 def test_offer_resolve_endpoint_is_removed(client, factory, sample_user, admin_headers):
     runner = factory.user("01055550019")
     _, offer = factory.execution(sample_user, runner, ProposalStatus.DISPUTED, OfferStatus.DISPUTED)
