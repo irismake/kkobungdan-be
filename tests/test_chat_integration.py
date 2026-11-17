@@ -1977,3 +1977,430 @@ def test_runner_completion_sends_offer_status_to_both(journey, client):
 
     for events in both:
         assert [(e["status"], e["offerStatus"], e["proposalStatus"]) for e in events] == [("ACTIVE", "RUNNER_COMPLETED", "MATCHED")]
+
+
+# ================================================================== 4-8 중복·동시성
+#
+# 요청마다 새 DB 세션을 쓰는 클라이언트로 실제로 동시에 보낸다. 두 요청이 "검사를 마치고 상태를 바꾸기 직전"에
+# 서로를 기다리게(최대 1초) 해서, 잠금이 없으면 둘 다 같은 옛 상태로 검사를 통과하게 만든다.
+# 잠금이 있으면 뒤 요청은 앞 요청이 커밋할 때까지 잠금에서 기다리므로 만나지 못하고 1초 뒤 각자 진행한다.
+
+import threading  # noqa: E402
+
+from app.models.offer import OfferStatus  # noqa: E402
+
+
+class Parallel:
+    """요청마다 새 세션을 쓰는 API 호출 도우미."""
+
+    __test__ = False
+
+    def __init__(self, factory, admin_headers):
+        self.factory = factory
+        self.admin_headers = admin_headers
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        return TestClient(app, raise_server_exceptions=False)
+
+    def call(self, method: str, url: str, user=None, json=None, headers=None):
+        headers = headers or (self.factory.headers_for(user) if user is not None else {})
+        return self._client().request(method, url, json=json, headers=headers)
+
+    def at_once(self, *requests):
+        """(method, url, user, json[, headers]) 여러 개를 동시에 보내고 응답을 순서대로 돌려준다."""
+        # 헤더는 메인 스레드에서 만든다. 스레드에서 테스트 세션의 객체를 건드리면 세션을 함께 쓰게 된다.
+        prepared = []
+        for method, url, user, json, *rest in requests:
+            headers = rest[0] if rest else self.factory.headers_for(user)
+            prepared.append((method, url, None, json, headers))
+        responses = [None] * len(requests)
+        start = threading.Barrier(len(requests))
+
+        def run(index, request):
+            start.wait()
+            responses[index] = self.call(*request)
+
+        threads = [threading.Thread(target=run, args=(i, r)) for i, r in enumerate(prepared)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        return responses
+
+
+@pytest.fixture
+def parallel(db, factory, admin_headers, admin_alerts, sms_sender, monkeypatch):
+    """`client` fixture와 같은 가짜(알림 워커·SMS)를 쓰되, DB 세션만 요청마다 새로 연다."""
+    from app.core.database import get_db
+    from app.main import app
+    from app.services.sms_service import get_sms_sender
+    from tests.conftest import NoopNotificationWorker, TestSessionLocal
+
+    def new_session():
+        session = TestSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    for target in (
+        "app.main.get_notification_worker",
+        "app.api.v1.offer.offer_router.get_notification_worker",
+        "app.api.v1.proposal.proposal_router.get_notification_worker",
+        "app.api.v1.admin.admin_router.get_notification_worker",
+    ):
+        monkeypatch.setattr(target, lambda: NoopNotificationWorker())
+    app.dependency_overrides[get_db] = new_session
+    app.dependency_overrides[get_sms_sender] = lambda: sms_sender
+    yield Parallel(factory, admin_headers)
+    app.dependency_overrides.clear()
+
+
+def meet_before(monkeypatch, *targets) -> None:
+    """두 요청이 (클래스, 메서드) 중 하나를 부르기 직전에 서로를 최대 1초 기다리게 한다."""
+    barrier = threading.Barrier(2, timeout=1.0)
+    for cls, name in targets:
+        original = getattr(cls, name)
+
+        def wrapper(self, *args, __original=original, **kwargs):
+            try:
+                barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+            return __original(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, name, wrapper)
+
+
+def fresh_room(db, offer_id: int):
+    db.rollback()  # 다른 세션이 커밋한 결과를 읽는다
+    return room_for_offer(db, offer_id)
+
+
+def system_events(db, room_id: int) -> list[str]:
+    from app.models.chat import ChatMessage, ChatMessageType
+
+    db.rollback()
+    rows = (
+        db.query(ChatMessage.system_event)
+        .filter(ChatMessage.room_id == room_id, ChatMessage.type == ChatMessageType.SYSTEM)
+        .order_by(ChatMessage.seq)
+        .all()
+    )
+    return [row[0].value for row in rows]
+
+
+def open_proposal(factory, orderer):
+    return factory.proposal(orderer.id, ProposalStatus.POSTED)
+
+
+def p_apply(parallel, proposal, runner) -> int:
+    response = parallel.call("POST", "/v1/offer", runner, {"proposalId": proposal.id, "greeting": GREETING})
+    assert response.status_code == 201, response.json()
+    return response.json()["data"]["id"]
+
+
+def p_accept(parallel, offer_id, orderer):
+    response = parallel.call("POST", f"/v1/offer/{offer_id}/accept", orderer)
+    assert response.status_code == 201, response.json()
+
+
+def dispute_question(db, target: str) -> int:
+    from app.models.dispute_survey import DisputeSurveyQuestion, DisputeSurveyTargetType
+
+    question = DisputeSurveyQuestion(
+        target_type=DisputeSurveyTargetType(target), question_text="문제가 있었어요", display_order=1, is_active=True, requires_detail=False
+    )
+    db.add(question)
+    db.commit()
+    return question.id
+
+
+def statuses(responses) -> list[int]:
+    return sorted(r.status_code for r in responses)
+
+
+@pytest.mark.scenario("CHAT-TS-068")
+def test_same_runner_applying_twice_at_once_leaves_one_of_everything(parallel, db, factory, sample_user):
+    from app.models.chat import ChatMessage, ChatRoom
+
+    runner = runner_with_account(factory, "01077000001", "꼬붕 하나")
+    proposal = open_proposal(factory, sample_user)
+    body = {"proposalId": proposal.id, "greeting": GREETING}
+
+    responses = parallel.at_once(("POST", "/v1/offer", runner, body), ("POST", "/v1/offer", runner, body))
+
+    assert statuses(responses) == [201, 409]
+    db.rollback()
+    offers = db.query(Offer).filter(Offer.proposal_id == proposal.id).all()
+    assert len(offers) == 1
+    rooms = db.query(ChatRoom).filter(ChatRoom.proposal_id == proposal.id).all()
+    assert len(rooms) == 1
+    kinds = [(m.type.value, m.system_event.value if m.system_event else None) for m in db.query(ChatMessage).filter(ChatMessage.room_id == rooms[0].id).order_by(ChatMessage.seq)]
+    assert kinds == [("SYSTEM", "OFFER_CREATED"), ("USER", None)]
+
+
+@pytest.mark.scenario("CHAT-TS-070")
+def test_chats_sent_at_once_by_both_get_distinct_gapless_seqs(parallel, db, factory, sample_user):
+    runner = runner_with_account(factory, "01077000002", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    room = fresh_room(db, offer_id)
+    requests = [
+        ("POST", f"/v1/chat-room/{room.id}/messages", user, {"clientMessageId": f"{tag}-{i}", "content": f"{tag} {i}"})
+        for i in range(4)
+        for user, tag in ((sample_user, "o"), (runner, "r"))
+    ]
+
+    responses = parallel.at_once(*requests)
+
+    assert all(r.status_code == 201 for r in responses), [r.json() for r in responses]
+    seqs = sorted(r.json()["data"]["seq"] for r in responses)
+    assert seqs == list(range(3, 11))  # 1·2는 지원 등록 안내·첫 인사
+    after = parallel.call("GET", f"/v1/chat-room/{room.id}/messages", sample_user).json()["data"]["content"]
+    assert [m["seq"] for m in after] == list(range(1, 11))
+
+
+@pytest.mark.scenario("CHAT-TS-071")
+def test_chat_racing_with_room_close_never_lands_after_the_close_notice(parallel, db, factory, sample_user, monkeypatch):
+    from app.models.chat import ChatMessage, ChatMessageType
+
+    runner = runner_with_account(factory, "01077000003", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    room = fresh_room(db, offer_id)
+
+    send_response, cancel_response = parallel.at_once(
+        ("POST", f"/v1/chat-room/{room.id}/messages", sample_user, {"clientMessageId": "race-1", "content": "마지막 채팅"}),
+        ("DELETE", f"/v1/offer/{offer_id}", runner, None),
+    )
+
+    assert cancel_response.status_code == 204
+    assert send_response.status_code in (201, 409)
+    db.rollback()
+    chats = db.query(ChatMessage).filter(ChatMessage.room_id == room.id).order_by(ChatMessage.seq).all()
+    close_seq = next(m.seq for m in chats if m.system_event and m.system_event.value == "OFFER_CANCELLED")
+    assert not [m for m in chats if m.type == ChatMessageType.USER and m.seq > close_seq]
+
+
+@pytest.mark.scenario("CHAT-TS-072")
+def test_matching_two_runners_at_once_matches_only_one(parallel, db, factory, sample_user, monkeypatch):
+    from app.models.chat import ChatRoom, ChatRoomStatus
+
+    proposal = open_proposal(factory, sample_user)
+    a = p_apply(parallel, proposal, runner_with_account(factory, "01077000004", "꼬붕 A"))
+    b = p_apply(parallel, proposal, runner_with_account(factory, "01077000005", "꼬붕 B"))
+    meet_before(monkeypatch, (Offer, "accept"))
+
+    responses = parallel.at_once(
+        ("POST", f"/v1/offer/{a}/accept", sample_user, None),
+        ("POST", f"/v1/offer/{b}/accept", sample_user, None),
+    )
+
+    assert statuses(responses) == [201, 409], [r.json() for r in responses]
+    db.rollback()
+    accepted = db.query(Offer).filter(Offer.proposal_id == proposal.id, Offer.status == OfferStatus.ACCEPTED).count()
+    assert accepted == 1
+    active = db.query(ChatRoom).filter(ChatRoom.proposal_id == proposal.id, ChatRoom.status == ChatRoomStatus.ACTIVE).count()
+    assert active == 1
+
+
+@pytest.mark.scenario("CHAT-TS-073")
+def test_matching_and_runner_cancel_at_once_settle_on_one(parallel, db, factory, sample_user, monkeypatch):
+    runner = runner_with_account(factory, "01077000006", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    meet_before(monkeypatch, (Offer, "accept"), (Offer, "cancel"))
+
+    accept, cancel = parallel.at_once(
+        ("POST", f"/v1/offer/{offer_id}/accept", sample_user, None),
+        ("DELETE", f"/v1/offer/{offer_id}", runner, None),
+    )
+
+    assert sorted([accept.status_code, cancel.status_code]) in ([201, 409], [204, 409]), (accept.json(), cancel.status_code)
+    room = fresh_room(db, offer_id)
+    events = system_events(db, room.id)
+    assert not {"MATCHED", "OFFER_CANCELLED"} <= set(events)
+    if accept.status_code == 201:
+        assert (room.status.value, events[-1]) == ("ACTIVE", "MATCHED")
+    else:
+        assert (room.status.value, events[-1]) == ("CLOSED", "OFFER_CANCELLED")
+
+
+@pytest.mark.scenario("CHAT-TS-074")
+def test_both_completions_at_once_close_the_room_once(parallel, db, factory, sample_user, monkeypatch):
+    from app.models.proposal import Proposal
+
+    runner = runner_with_account(factory, "01077000007", "꼬붕 하나")
+    proposal = open_proposal(factory, sample_user)
+    offer_id = p_apply(parallel, proposal, runner)
+    p_accept(parallel, offer_id, sample_user)
+    meet_before(monkeypatch, (Offer, "confirm_runner_completion"), (Proposal, "confirm_orderer_completion"))
+
+    responses = parallel.at_once(
+        ("POST", f"/v1/offer/{offer_id}/complete-delivery", runner, None),
+        ("POST", f"/v1/proposal/{proposal.id}/confirm-received", sample_user, None),
+    )
+
+    assert [r.status_code for r in responses] == [200, 200], [r.json() for r in responses]
+    db.rollback()
+    assert db.get(Proposal, proposal.id).status == ProposalStatus.ALL_COMPLETED
+    assert db.get(Offer, offer_id).status == OfferStatus.ALL_COMPLETED
+    room = fresh_room(db, offer_id)
+    assert (room.status.value, room.status_reason.value) == ("CLOSED", "ALL_CONFIRMED")
+    events = system_events(db, room.id)
+    assert events.count("ALL_CONFIRMED") == 1
+    assert events[-1] == "ALL_CONFIRMED"
+
+
+@pytest.mark.scenario("CHAT-TS-075")
+def test_late_dispute_or_status_change_never_reopens_a_closed_room(parallel, db, factory, sample_user):
+    from app.models.chat import ChatRole
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+
+    runner = runner_with_account(factory, "01077000008", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    assert parallel.call("DELETE", f"/v1/offer/{offer_id}", runner).status_code == 204
+    room = fresh_room(db, offer_id)
+    before = system_events(db, room.id)
+
+    offer = db.get(Offer, offer_id)
+    ChatLifecycle.on_dispute_raised(db, offer, raised_by=ChatRole.ORDERER)  # 늦게 도착한 분쟁 접수
+    ChatLifecycle.on_offer_accepted(db, offer)  # 늦게 도착한 매칭
+    ChatLifecycle.on_runner_completed(db, offer, all_confirmed=False)
+    db.commit()
+
+    room = fresh_room(db, offer_id)
+    assert (room.status.value, room.status_reason.value) == ("CLOSED", "OFFER_CANCELLED")
+    assert system_events(db, room.id) == before
+
+
+@pytest.mark.scenario("CHAT-TS-076")
+def test_two_reads_at_once_keep_the_furthest_position(parallel, db, factory, sample_user):
+    runner = runner_with_account(factory, "01077000009", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    room = fresh_room(db, offer_id)
+    add_user_chats(db, room, runner.id, 8)  # 1~10
+
+    responses = parallel.at_once(
+        ("POST", f"/v1/chat-room/{room.id}/read", sample_user, {"seq": 5}),
+        ("POST", f"/v1/chat-room/{room.id}/read", sample_user, {"seq": 9}),
+    )
+
+    assert [r.status_code for r in responses] == [200, 200]
+    assert fresh_room(db, offer_id).orderer_last_read_seq == 9
+
+
+@pytest.mark.scenario("CHAT-TS-077")
+def test_chat_saved_after_the_read_target_stays_unread(parallel, db, factory, sample_user):
+    runner = runner_with_account(factory, "01077000010", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    room = fresh_room(db, offer_id)
+    add_user_chats(db, room, runner.id, 7)  # 1~9 (앱은 채팅 9까지 봤다)
+    add_user_chats(db, fresh_room(db, offer_id), runner.id, 1)  # 그 사이 채팅 10 저장
+
+    response = parallel.call("POST", f"/v1/chat-room/{room.id}/read", sample_user, {"seq": 9})
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"roomId": room.id, "lastReadSeq": 9, "unreadCount": 1}
+
+
+@pytest.mark.scenario("CHAT-TS-095")
+@pytest.mark.parametrize("canceller", ["orderer", "admin"])
+def test_matching_racing_with_a_cancel_follows_only_the_winner(parallel, db, factory, sample_user, monkeypatch, canceller):
+    from app.models.proposal import Proposal
+
+    runner = runner_with_account(factory, "01077000011", "꼬붕 하나")
+    proposal = open_proposal(factory, sample_user)
+    offer_id = p_apply(parallel, proposal, runner)
+    meet_before(monkeypatch, (Offer, "accept"), (Proposal, "cancel"), (Proposal, "mark_refund_pending"))
+    if canceller == "orderer":
+        cancel_request = ("POST", f"/v1/proposal/{proposal.id}/cancel", sample_user, None)
+    else:
+        cancel_request = ("POST", f"/v1/admin/proposal/{proposal.id}/cancel", None, {"adminNote": "운영 취소"}, parallel.admin_headers)
+
+    accept, cancel = parallel.at_once(("POST", f"/v1/offer/{offer_id}/accept", sample_user, None), cancel_request)
+
+    assert accept.status_code in (201, 409) and cancel.status_code in (200, 409), (accept.json(), cancel.json())
+    room = fresh_room(db, offer_id)
+    events = system_events(db, room.id)
+    if accept.status_code == 201 and cancel.status_code == 200:
+        # 매칭이 먼저 확정되고, 관리자 취소가 매칭 후 취소로 처리됐다
+        assert canceller == "admin"
+        assert events == ["OFFER_CREATED", "MATCHED", "ADMIN_CANCELLED_AFTER_MATCH"]
+    elif accept.status_code == 201:
+        assert (room.status.value, events) == ("ACTIVE", ["OFFER_CREATED", "MATCHED"])
+    else:
+        assert cancel.status_code == 200
+        assert room.status.value == "CLOSED"
+        assert events == ["OFFER_CREATED", "PROPOSAL_CANCELLED"]
+
+
+@pytest.mark.scenario("CHAT-TS-096")
+def test_completion_racing_with_a_dispute_applies_in_a_valid_order(parallel, db, factory, sample_user, monkeypatch):
+    from app.models.proposal import Proposal
+
+    runner = runner_with_account(factory, "01077000012", "꼬붕 하나")
+    proposal = open_proposal(factory, sample_user)
+    offer_id = p_apply(parallel, proposal, runner)
+    p_accept(parallel, offer_id, sample_user)
+    question_id = dispute_question(db, "ORDER")
+    meet_before(monkeypatch, (Offer, "confirm_runner_completion"), (Proposal, "raise_dispute"))
+
+    complete, dispute = parallel.at_once(
+        ("POST", f"/v1/offer/{offer_id}/complete-delivery", runner, None),
+        ("POST", f"/v1/proposal/{proposal.id}/dispute", sample_user, {"reasonQuestionId": question_id, "detailReason": "물건이 달라요"}),
+    )
+
+    assert dispute.status_code == 200, dispute.json()
+    assert complete.status_code in (200, 409), complete.json()
+    room = fresh_room(db, offer_id)
+    assert (room.status.value, room.status_reason.value) == ("INACTIVE", "ORDERER_DISPUTED")
+    events = system_events(db, room.id)
+    if complete.status_code == 200:
+        assert events == ["OFFER_CREATED", "MATCHED", "RUNNER_COMPLETED", "DISPUTE_RAISED"]
+    else:
+        assert events == ["OFFER_CREATED", "MATCHED", "DISPUTE_RAISED"]
+
+
+@pytest.mark.scenario("CHAT-TS-097")
+def test_chat_saved_while_read_all_runs_stays_unread(parallel, db, factory, sample_user, monkeypatch):
+    from app.services.chat.chat_read_service import ChatReadService
+
+    runner = runner_with_account(factory, "01077000013", "꼬붕 하나")
+    offer_id = p_apply(parallel, open_proposal(factory, sample_user), runner)
+    room = fresh_room(db, offer_id)
+    add_user_chats(db, room, runner.id, 8)  # 1~10
+    targets_taken, chat_saved = threading.Event(), threading.Event()
+    original_targets = ChatReadService.read_all_targets
+    original_apply = ChatReadService.apply_read_targets
+
+    def take_targets(*args, **kwargs):
+        targets = original_targets(*args, **kwargs)
+        targets_taken.set()
+        return targets
+
+    def apply_after_chat(*args, **kwargs):
+        chat_saved.wait(timeout=5)  # 전체 읽음 처리 중에 채팅 11이 저장된다
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(ChatReadService, "read_all_targets", staticmethod(take_targets))
+    monkeypatch.setattr(ChatReadService, "apply_read_targets", staticmethod(apply_after_chat))
+
+    result = {}
+    orderer_headers = factory.headers_for(sample_user)
+    worker = threading.Thread(
+        target=lambda: result.setdefault("read_all", parallel.call("POST", "/v1/chat-room/read-all", headers=orderer_headers))
+    )
+    worker.start()
+    assert targets_taken.wait(timeout=5)
+    sent = parallel.call("POST", f"/v1/chat-room/{room.id}/messages", runner, {"clientMessageId": "late-11", "content": "채팅 11"})
+    chat_saved.set()
+    worker.join(timeout=10)
+
+    assert sent.status_code == 201 and sent.json()["data"]["seq"] == 11
+    assert result["read_all"].status_code == 200
+    assert fresh_room(db, offer_id).orderer_last_read_seq == 10
+    unread = parallel.call("GET", "/v1/chat-room/unread-count", sample_user).json()["data"]
+    assert unread["totalUnreadCount"] == 1
