@@ -242,3 +242,64 @@ def test_manual_retry_of_an_expired_delivery_ends_skipped() -> None:
     assert outcome.status == DeliveryStatus.SKIPPED
     assert outcome.skip_reason == "expired"
     assert consumer.calls == 0
+
+
+# ------------------------------------------------------------------ 주기 작업 (OUTBOX-REQ-002·003·005·007)
+
+
+@dataclass
+class RecordingScheduler:
+    jobs: list = field(default_factory=list)
+
+    def add_job(self, func, trigger=None, **kwargs) -> None:
+        self.jobs.append((func, trigger, kwargs))
+
+
+@pytest.mark.scenario("OUTBOX-TS-022")
+def test_outbox_registers_a_ten_second_cycle_and_a_daily_cleanup() -> None:
+    from app.services.outbox import worker as outbox_worker
+
+    scheduler = RecordingScheduler()
+    worker = SimpleNamespace(run_cycle=lambda: None, cleanup=lambda: None)
+
+    try:
+        outbox_worker.register_outbox_jobs(scheduler, worker)
+
+        jobs = {kwargs["id"]: (func, trigger, kwargs) for func, trigger, kwargs in scheduler.jobs}
+        assert set(jobs) == {"outbox_cycle", "outbox_cleanup"}
+        cycle_func, cycle_trigger, cycle_kwargs = jobs["outbox_cycle"]
+        assert (cycle_func, cycle_trigger, cycle_kwargs["seconds"]) == (worker.run_cycle, "interval", 10)
+        cleanup_func, cleanup_trigger, cleanup_kwargs = jobs["outbox_cleanup"]
+        assert (cleanup_func, cleanup_trigger) == (worker.cleanup, "cron")
+        assert (cleanup_kwargs["hour"], cleanup_kwargs["minute"]) == (4, 0)
+
+        # 커밋 직후 깨우면 처리 작업을 바로 한 번 실행하도록 예약한다(정상 채팅은 10초를 기다리지 않는다).
+        outbox_worker.wake_after_commit()
+        func, trigger, kwargs = scheduler.jobs[-1]
+        assert func is worker.run_cycle
+        assert trigger is None  # 트리거가 없으면 APScheduler는 바로 한 번 실행한다
+        assert kwargs["id"] == "outbox_cycle_now"
+    finally:
+        outbox_worker.set_wake_callback(None)
+
+
+@pytest.mark.scenario("OUTBOX-TS-023")
+def test_one_cycle_publishes_then_processes_deliveries_then_checks_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.outbox import worker as outbox_worker
+
+    calls: list[str] = []
+    publish_results = iter([100, 3, 0])
+
+    def fake_publish(db, publisher, now):
+        calls.append("publish")
+        return next(publish_results)
+
+    monkeypatch.setattr(outbox_worker, "publish_pending", fake_publish)
+    monkeypatch.setattr(outbox_worker, "process_due_deliveries", lambda db, registry, now, alert_sender: calls.append("deliveries"))
+    monkeypatch.setattr(outbox_worker, "oldest_unpublished_at", lambda db: calls.append("oldest") or None)
+    monkeypatch.setattr(outbox_worker, "get_admin_alert_sender", lambda: RecordingAlerts())
+
+    session = SimpleNamespace(close=lambda: None, rollback=lambda: None)
+    outbox_worker.OutboxWorker(lambda: session).run_cycle()
+
+    assert calls == ["publish", "publish", "publish", "deliveries", "oldest"]
