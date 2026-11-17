@@ -49,14 +49,14 @@
 | CHAT-TS-029 | CHAT-REQ-009 | Given 한쪽이 차단한 `ACTIVE` 채팅방 / When 양쪽이 각각 전송 / Then 둘 다 거부된다 **(차단 후)** | integration | `api` |
 | CHAT-TS-030 | CHAT-REQ-010 | Given 안읽은 채팅 3개 / When 채팅방에 들어감 / Then 그 시점의 마지막 채팅까지 읽음 처리되고 안읽음 수가 0 | integration | `api` |
 | CHAT-TS-031 | CHAT-REQ-010 | Given 상대 채팅 2개를 읽지 않은 상태 / When 내가 채팅을 전송 / Then 내 채팅 앞의 채팅까지 읽음 처리된다 | integration | `api` |
-| CHAT-TS-032 | CHAT-REQ-010 | Given 읽음 위치가 채팅 10 / When 채팅 7로 읽음 요청 / Then 성공 응답이고 읽음 위치는 10으로 유지된다 | unit | `service` |
+| CHAT-TS-032 | CHAT-REQ-010 | Given 읽음 위치가 채팅 10 / When 채팅 7로 읽음 요청 / Then 성공 응답이고 읽음 위치는 10으로 유지된다 | integration | `api` |
 | CHAT-TS-033 | CHAT-REQ-010 | Given 채팅방 A / When 채팅방 B의 채팅이나 없는 채팅으로 읽음 요청 / Then 거부된다 | integration | `api` |
 | CHAT-TS-034 | CHAT-REQ-010 | Given `CLOSED` 채팅방과 차단된 채팅방 / When 읽음 요청 / Then 읽음 처리된다 **(차단 후: 차단 경우)** | integration | `api` |
-| CHAT-TS-035 | CHAT-REQ-011 | Given 읽음 위치 이후 내 채팅 1, 상대 채팅 2, 시스템 채팅 1, 행님용 미선정 안내 1 / When 안읽음 수 계산 / Then 3 (행님 기준 미선정 안내 제외) | unit | `service` |
+| CHAT-TS-035 | CHAT-REQ-011 | Given 읽음 위치 이후 내 채팅 1, 상대 채팅 2, 시스템 채팅 1, 행님용 미선정 안내 1 / When 안읽음 수 계산 / Then 3 (행님 기준 미선정 안내 제외) | integration | `api` |
 | CHAT-TS-036 | CHAT-REQ-011, CHAT-REQ-006 | Given 게시된 요청 / When 꼬붕이 첫 인사와 함께 지원 / Then 행님의 그 채팅방 안읽음 수는 2(채팅 시작 안내, 첫 인사), 꼬붕은 1(채팅 시작 안내) | integration | `api` |
 | CHAT-TS-037 | CHAT-REQ-011 | Given 안읽은 채팅이 있는 `ACTIVE`·`CLOSED`·차단 채팅방 / When 안읽음 수 조회 / Then 채팅방별 수와 그 합계가 오고 `CLOSED`·차단 방도 합계에 포함된다 **(차단 후: 차단 경우)** | integration | `api` |
 | CHAT-TS-038 | CHAT-REQ-012 | Given 행님·꼬붕 역할이 섞인 채팅방 3개(`CLOSED`, 차단 채팅방 포함) / When 전체 읽음 / Then 모두 요청 시점까지 읽음 처리되고 상대방의 읽음 위치는 바뀌지 않는다 **(차단 후: 차단 경우)** | integration | `api` |
-| CHAT-TS-039 | CHAT-REQ-012 | Given 전체 읽음 요청 시점의 마지막 채팅이 채팅 10인데, 사용자가 그 사이 채팅방에 들어가 채팅 11까지 읽음 / When 전체 읽음이 처리 / Then 그 채팅방의 읽음 위치는 채팅 11로 유지된다 | unit | `service` |
+| CHAT-TS-039 | CHAT-REQ-012 | Given 전체 읽음 요청 시점의 마지막 채팅이 채팅 10인데, 사용자가 그 사이 채팅방에 들어가 채팅 11까지 읽음 / When 전체 읽음이 처리 / Then 그 채팅방의 읽음 위치는 채팅 11로 유지된다 | integration | `service` |
 | CHAT-TS-040 | CHAT-REQ-013 | Given 내가 보낸 채팅 3개 / When 상대가 2번째까지 읽은 뒤 채팅방 조회 / Then 응답에 상대의 마지막 읽은 채팅(2번째)이 담긴다 | integration | `api` |
 | CHAT-TS-041 | CHAT-REQ-015 | Given 채팅방 A·B에 참여하고 실시간 연결된 사용자 / When 두 방에 각각 상대가 채팅 / Then 하나의 연결로 두 채팅을 모두 받는다 | integration | `realtime` |
 | CHAT-TS-042 | CHAT-REQ-015 | Given 참여자가 아닌 사용자의 실시간 연결 / When 채팅방에 새 채팅 / Then 그 사용자는 받지 않는다 | integration | `realtime` |

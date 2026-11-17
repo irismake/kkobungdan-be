@@ -1218,3 +1218,235 @@ def test_failed_cancel_rolls_back_offer_room_chat_and_outbox_event(journey, db, 
     assert journey.state(runner) == ("ACTIVE", None)
     assert journey.events(runner) == chats_before
     assert len(outbox_events_for(db, "chat.message.created")) == events_before
+
+
+# ================================================================== 4-5 읽음과 안읽음
+
+
+def read(client, factory, room_id: int, viewer, seq: int):
+    return client.post(f"/v1/chat-room/{room_id}/read", json={"seq": seq}, headers=factory.headers_for(viewer))
+
+
+def unread_summary(client, factory, viewer) -> dict:
+    response = client.get("/v1/chat-room/unread-count", headers=factory.headers_for(viewer))
+    assert response.status_code == 200, response.json()
+    data = response.json()["data"]
+    return {"total": data["totalUnreadCount"], **{item["roomId"]: item["unreadCount"] for item in data["rooms"]}}
+
+
+def room_detail(client, factory, room_id: int, viewer) -> dict:
+    response = client.get(f"/v1/chat-room/{room_id}", headers=factory.headers_for(viewer))
+    assert response.status_code == 200, response.json()
+    return response.json()["data"]
+
+
+def add_system_chat(db, room, event) -> None:
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+
+    ChatLifecycle._add_system_chat(db, room, event, event_key=f"{event.value}:test:{room.last_seq}")
+    db.commit()
+
+
+def close_room(db, room) -> None:
+    from app.models.chat import ChatRoomStatus, ChatRoomStatusReason
+
+    room.status = ChatRoomStatus.CLOSED
+    room.status_reason = ChatRoomStatusReason.OFFER_CANCELLED
+    db.commit()
+
+
+# ------------------------------------------------------------------ 읽음 (CHAT-REQ-010)
+
+
+@pytest.mark.scenario("CHAT-TS-030")
+def test_entering_a_room_reads_everything_up_to_the_last_chat(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000001", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    add_user_chats(db, room, runner.id, 3)  # 시작 안내 1, 첫 인사 2, 채팅 3~5
+
+    response = read(client, factory, room.id, sample_user, 5)
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"] == {"roomId": room.id, "lastReadSeq": 5, "unreadCount": 0}
+    assert room_detail(client, factory, room.id, sample_user)["myLastReadSeq"] == 5
+    assert unread_summary(client, factory, sample_user)["total"] == 0
+
+
+@pytest.mark.scenario("CHAT-TS-031")
+def test_sending_a_chat_reads_everything_before_it(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000002", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    add_user_chats(db, room, runner.id, 2)  # 1~4
+
+    sent = send(client, factory, room.id, sample_user, content="답장")
+
+    assert sent.status_code == 201, sent.json()
+    assert sent.json()["data"]["seq"] == 5
+    assert room_detail(client, factory, room.id, sample_user)["myLastReadSeq"] == 4
+    assert unread_summary(client, factory, sample_user)["total"] == 0
+
+
+@pytest.mark.scenario("CHAT-TS-032")
+def test_read_position_only_moves_forward(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000003", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    add_user_chats(db, room, runner.id, 8)  # 1~10
+    assert read(client, factory, room.id, sample_user, 10).status_code == 200
+    version = room_detail(client, factory, room.id, sample_user)["version"]
+
+    late = read(client, factory, room.id, sample_user, 7)  # 늦게 도착한 이전 읽음 요청
+
+    assert late.status_code == 200, late.json()
+    assert late.json()["data"]["lastReadSeq"] == 10
+    detail = room_detail(client, factory, room.id, sample_user)
+    assert detail["myLastReadSeq"] == 10
+    assert detail["version"] == version  # 바뀐 것이 없으면 순서 값도 그대로
+
+
+@pytest.mark.scenario("CHAT-TS-033")
+def test_reading_a_chat_that_is_not_in_the_room_is_rejected(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000004", "꼬붕 하나")
+    room_a = setup_room(db, factory, sample_user, runner, title="요청 A")  # 1~2
+    room_b = setup_room(db, factory, sample_user, runner, title="요청 B")
+    add_user_chats(db, room_b, runner.id, 3)  # B에는 채팅 5까지 있다
+
+    for seq in (5, 999):  # B의 채팅 순번, 없는 채팅
+        response = read(client, factory, room_a.id, sample_user, seq)
+        assert response.status_code == 400, response.json()
+        assert response.json()["error"]["code"] == "CHAT_READ_SEQ_INVALID"
+    assert read(client, factory, room_a.id, sample_user, 0).status_code == 422
+    assert room_detail(client, factory, room_a.id, sample_user)["myLastReadSeq"] == 0
+
+
+@pytest.mark.scenario("CHAT-TS-034")
+@pytest.mark.parametrize(
+    "case",
+    ["closed", pytest.param("blocked", marks=pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)"))],
+)
+def test_closed_room_can_still_be_read(client, db, factory, sample_user, case):
+    runner = runner_with_account(factory, "01073000005", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    close_room(db, room)
+
+    response = read(client, factory, room.id, sample_user, 2)
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["lastReadSeq"] == 2
+
+
+# ------------------------------------------------------------------ 안읽음 수 (CHAT-REQ-011)
+
+
+@pytest.mark.scenario("CHAT-TS-035")
+def test_unread_count_counts_partner_and_visible_system_chats_only(client, db, factory, sample_user):
+    from app.models.chat import SystemChatEvent
+
+    runner = runner_with_account(factory, "01073000006", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    assert read(client, factory, room.id, sample_user, 2).status_code == 200
+    assert read(client, factory, room.id, runner, 2).status_code == 200
+
+    add_user_chats(db, room, sample_user.id, 1)  # 행님(나)의 채팅
+    add_user_chats(db, room, runner.id, 2)  # 상대 채팅 2
+    add_system_chat(db, room, SystemChatEvent.MATCHED)  # 시스템 채팅 1
+    add_system_chat(db, room, SystemChatEvent.NOT_SELECTED)  # 행님에게는 안읽음 제외
+
+    assert unread_summary(client, factory, sample_user)[room.id] == 3
+    # 꼬붕 기준: 행님 채팅 1 + 시스템 채팅 2 (꼬붕에게는 미선정 안내도 포함)
+    assert unread_summary(client, factory, runner)[room.id] == 3
+
+
+@pytest.mark.scenario("CHAT-TS-036")
+def test_application_leaves_two_unread_for_orderer_and_one_for_runner(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000007", "꼬붕 하나")
+    proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
+
+    offer_id = apply(client, factory, proposal, runner)
+
+    room = room_for_offer(db, offer_id)
+    assert unread_summary(client, factory, sample_user) == {"total": 2, room.id: 2}
+    assert unread_summary(client, factory, runner) == {"total": 1, room.id: 1}
+
+
+@pytest.mark.scenario("CHAT-TS-037")
+@pytest.mark.parametrize(
+    "case",
+    ["active-and-closed", pytest.param("blocked", marks=pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)"))],
+)
+def test_unread_summary_has_per_room_counts_and_a_total_including_closed_rooms(client, db, factory, sample_user, case):
+    runner = runner_with_account(factory, "01073000008", "꼬붕 하나")
+    active = setup_room(db, factory, sample_user, runner, title="요청 A")
+    closed = setup_room(db, factory, sample_user, runner, title="요청 B")
+    read_room = setup_room(db, factory, sample_user, runner, title="요청 C")
+    add_user_chats(db, active, runner.id, 1)  # 3
+    add_user_chats(db, closed, runner.id, 2)  # 4
+    close_room(db, closed)
+    assert read(client, factory, read_room.id, sample_user, 2).status_code == 200
+
+    summary = unread_summary(client, factory, sample_user)
+
+    assert summary == {"total": 7, active.id: 3, closed.id: 4}  # 다 읽은 채팅방은 목록에 없다
+
+
+# ------------------------------------------------------------------ 전체 읽음 (CHAT-REQ-012)
+
+
+@pytest.mark.scenario("CHAT-TS-038")
+@pytest.mark.parametrize(
+    "case",
+    ["mixed-roles", pytest.param("blocked", marks=pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)"))],
+)
+def test_read_all_reads_every_room_in_both_roles_without_touching_the_partner(client, db, factory, sample_user, case):
+    runner = runner_with_account(factory, "01073000009", "꼬붕 하나")
+    other_orderer = factory.user("01073000010", name="다른 행님")
+    factory.settlement_account(sample_user)
+    as_orderer = setup_room(db, factory, sample_user, runner, title="내 요청")
+    closed = setup_room(db, factory, sample_user, runner, title="닫힌 요청")
+    as_runner = setup_room(db, factory, other_orderer, sample_user, title="남의 요청")
+    add_user_chats(db, as_orderer, runner.id, 2)
+    add_user_chats(db, closed, runner.id, 1)
+    close_room(db, closed)
+    add_user_chats(db, as_runner, other_orderer.id, 3)
+
+    response = client.post("/v1/chat-room/read-all", headers=factory.headers_for(sample_user))
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"] == {"totalUnreadCount": 0}
+    for room in (as_orderer, closed, as_runner):
+        db.refresh(room)
+        assert room_detail(client, factory, room.id, sample_user)["myLastReadSeq"] == room.last_seq
+    # 상대방 읽음 위치는 그대로다
+    assert room_detail(client, factory, as_orderer.id, runner)["myLastReadSeq"] == 0
+    assert room_detail(client, factory, as_runner.id, other_orderer)["myLastReadSeq"] == 0
+
+
+@pytest.mark.scenario("CHAT-TS-039")
+def test_read_all_never_moves_a_room_back_behind_a_newer_read(client, db, factory, sample_user):
+    from app.services.chat.chat_read_service import ChatReadService
+
+    runner = runner_with_account(factory, "01073000011", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    add_user_chats(db, room, sample_user.id, 8)  # 1~10
+    targets = ChatReadService.read_all_targets(db, runner.id)  # 전체 읽음 요청 시점: 채팅 10까지
+
+    add_user_chats(db, room, sample_user.id, 1)  # 그 사이 채팅 11이 오고
+    assert read(client, factory, room.id, runner, 11).status_code == 200  # 채팅방에 들어가 11까지 읽음
+
+    ChatReadService.apply_read_targets(db, targets)
+    db.commit()
+
+    assert room_detail(client, factory, room.id, runner)["myLastReadSeq"] == 11
+
+
+# ------------------------------------------------------------------ 상대방 읽음 표시 (CHAT-REQ-013)
+
+
+@pytest.mark.scenario("CHAT-TS-040")
+def test_room_detail_shows_where_the_partner_has_read_up_to(client, db, factory, sample_user):
+    runner = runner_with_account(factory, "01073000012", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner)
+    seqs = [send(client, factory, room.id, sample_user, content=f"채팅 {i}", client_message_id=f"m-{i}").json()["data"]["seq"] for i in range(3)]
+
+    assert read(client, factory, room.id, runner, seqs[1]).status_code == 200
+
+    assert room_detail(client, factory, room.id, sample_user)["partnerLastReadSeq"] == seqs[1]
