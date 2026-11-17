@@ -163,6 +163,8 @@
 ### 요청·지원 상태와 함께 바뀌는 처리 (CHAT-REQ-007·020·023·026)
 
 - `ChatLifecycle`은 호출한 서비스의 트랜잭션 안에서 채팅방 행을 잠그고 상태·`statusReason`·`version`을 바꾸고 시스템 채팅을 저장한다. 상태 전이는 `ACTIVE → INACTIVE → CLOSED`, `ACTIVE → CLOSED`만 허용하고, `CLOSED`에서는 바꾸지 않는다(늦게 온 요청 무시).
+- 시스템 채팅은 `system_event_key`(기본 `{사건}:offer:{offerId}`, 수행비 입금 `PAYOUT_COMPLETED:mission:{missionId}`, 환불 완료 `REFUND_COMPLETED:refund:{refundId}`)로 사건당 한 번만 저장한다. 수행비 입금·환불 완료 안내는 `CLOSED` 채팅방에도 저장한다.
+- 채팅 기능 이전에 만들어진 지원처럼 채팅방이 없으면 `ChatLifecycle`은 아무것도 하지 않는다(백필은 4-9).
 - 서로 겹치는 동작(매칭과 지원 취소, 매칭과 요청 취소 등)이 하나로만 확정되도록, 해당 서비스들이 상태를 바꾸기 전에 요청(`proposals`) 행을 `SELECT … FOR UPDATE`로 잠그게 바꾼다. 지금은 잠금이 없다([`chat-requirements.md` 기존 기능 영향](../product-specs/chat-requirements.md#기존-기능-영향)).
 
 ### 읽음과 안읽음 (CHAT-REQ-010~013·027)

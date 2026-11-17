@@ -15,6 +15,7 @@ from app.models.refund import RefundReason
 from app.schemas.common import PageResponse
 from app.schemas.mission import MissionResponse
 from app.services.admin.admin_user_display import WITHDRAWN_USER_NAME, admin_user_names
+from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.refund.refund_service import RefundService
 
 
@@ -166,6 +167,7 @@ class MissionService:
         mission.resolved_by_admin_id = admin_id
         if evidence is not None and evidence.is_pending():
             evidence.mark_resolved(admin_id, None)
+        ChatLifecycle.on_dispute_resolved(db, offer.id, completed=resolution == MissionResolution.COMPLETED)
 
         MissionService.publish_transition_alert(db, mission, proposal, previous_status)
         db.commit()
@@ -185,6 +187,7 @@ class MissionService:
             raise api_error(AppError.MISSION_NOT_SETTLEABLE, f"status: {mission.status}")
 
         mission.record_settlement(admin_id, memo)
+        ChatLifecycle.on_payout_completed(db, mission)
         db.commit()
         db.refresh(mission)
         return MissionService._detail_response(db, mission)

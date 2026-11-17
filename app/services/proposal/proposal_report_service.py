@@ -15,6 +15,7 @@ from app.schemas.admin import AdminProposalReportResponse
 from app.schemas.common import PageResponse
 from app.schemas.proposal_report import ProposalReportCreateRequest, ProposalReportReasonQuestionResponse, ProposalReportResponse
 from app.services.admin.admin_user_display import WITHDRAWN_USER_NAME, admin_user_names
+from app.services.chat.chat_lifecycle import ChatLifecycle
 
 
 REPORTABLE_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
@@ -224,6 +225,7 @@ class ProposalReportService:
                 .filter(Offer.proposal_id == proposal.id, Offer.status == OfferStatus.WAITING)
                 .update({Offer.status: OfferStatus.REJECTED}, synchronize_session=False)
             )
+            ChatLifecycle.on_report_accepted(db, proposal.id)
         report.status = ProposalReportStatus.ACCEPTED
         report.reviewed_at = utcnow_naive()
         db.commit()

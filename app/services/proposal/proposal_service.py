@@ -16,6 +16,7 @@ from app.events.proposal_events import (
     PaymentReminderDueEvent,
     ProposalPaymentConfirmedEvent,
 )
+from app.models.chat import ChatRole
 from app.models.dispute_survey import DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.notification import Notification, NotificationType
@@ -26,6 +27,7 @@ from app.models.settlement import SettlementAccount
 from app.models.user import User
 from app.schemas.common import PageResponse
 from app.schemas.proposal import ProposalDetailResponse, ProposalOwnOfferResponse, ProposalOwnResponse, ProposalRequest
+from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
@@ -334,6 +336,7 @@ class ProposalService:
                 .filter(Offer.proposal_id == proposal.id, Offer.status == OfferStatus.WAITING)
                 .update({Offer.status: OfferStatus.REJECTED}, synchronize_session=False)
             )
+        ChatLifecycle.on_proposal_cancelled(db, proposal.id)
 
         db.commit()
         db.refresh(proposal)
@@ -372,6 +375,7 @@ class ProposalService:
         MissionService.sync_from_offer_and_proposal(db, offer, proposal)
         all_completed = proposal.status == ProposalStatus.ALL_COMPLETED and offer.status == OfferStatus.ALL_COMPLETED
         db.flush()
+        ChatLifecycle.on_orderer_confirmed(db, offer, all_confirmed=all_completed)
         EventBus.publish(MeetingConfirmedByOrdererEvent(
             offer_id=offer.id,
             proposal_id=proposal.id,
@@ -414,6 +418,7 @@ class ProposalService:
             reason=detail_reason,
         ))
         db.flush()
+        ChatLifecycle.on_dispute_raised(db, offer, raised_by=ChatRole.ORDERER)
         EventBus.publish(DisputeRaisedByOrdererEvent(
             offer_id=offer.id,
             proposal_id=proposal.id,

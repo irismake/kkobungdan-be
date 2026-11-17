@@ -11,6 +11,7 @@ from app.events.base import EventBus
 from app.events.execution_events import DisputeRaisedByRunnerEvent, MeetingConfirmedByRunnerEvent
 from app.events.offer_events import OfferAcceptedEvent, OfferCreatedEvent
 from app.models.dispute_survey import DisputeSurveyTargetType
+from app.models.chat import ChatRole
 from app.models.dispute_evidence import DisputeEvidence
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
@@ -243,6 +244,7 @@ class OfferService:
             raise api_error(AppError.OFFER_NOT_CANCELLABLE)
 
         offer.cancel()
+        ChatLifecycle.on_offer_cancelled(db, offer)
         db.commit()
 
     @staticmethod
@@ -293,6 +295,7 @@ class OfferService:
         )
         MissionService.create_for_accepted_offer(db, offer, proposal)
         db.flush()
+        ChatLifecycle.on_offer_accepted(db, offer)
         EventBus.publish(OfferAcceptedEvent(
             offer_id=offer.id,
             proposal_id=proposal.id,
@@ -347,6 +350,7 @@ class OfferService:
         OfferService._sync_all_completed(db, offer, proposal)
         MissionService.sync_from_offer_and_proposal(db, offer, proposal)
         all_completed = offer.status == OfferStatus.ALL_COMPLETED and proposal.status == ProposalStatus.ALL_COMPLETED
+        ChatLifecycle.on_runner_completed(db, offer, all_confirmed=all_completed)
         db.flush()
         EventBus.publish(MeetingConfirmedByRunnerEvent(
             offer_id=offer.id,
@@ -391,6 +395,7 @@ class OfferService:
             reason=detail_reason,
         ))
         db.flush()
+        ChatLifecycle.on_dispute_raised(db, offer, raised_by=ChatRole.RUNNER)
         EventBus.publish(DisputeRaisedByRunnerEvent(
             offer_id=offer.id,
             proposal_id=proposal.id,

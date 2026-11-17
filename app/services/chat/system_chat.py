@@ -55,3 +55,27 @@ def render_system_chat(event: SystemChatEvent, payload: dict[str, Any] | None, v
     orderer_text, runner_text = _TEXTS[event]
     text = orderer_text if viewer == ChatRole.ORDERER else runner_text
     return text.format(**(payload or {}))
+
+
+# 기존 알림(notifications)을 이미 받는 사람. 이 사람에게는 시스템 채팅 푸시를 보내지 않는다(중복 방지).
+# 분쟁 접수는 접수당한 쪽이 기존 알림을 받으므로 payload의 raisedBy로 따로 정한다.
+_EXISTING_NOTIFICATION: dict[SystemChatEvent, frozenset[ChatRole]] = {
+    SystemChatEvent.OFFER_CREATED: frozenset({ChatRole.ORDERER, ChatRole.RUNNER}),
+    SystemChatEvent.MATCHED: frozenset({ChatRole.ORDERER, ChatRole.RUNNER}),
+    SystemChatEvent.NOT_SELECTED: frozenset({ChatRole.RUNNER}),
+    SystemChatEvent.RUNNER_COMPLETED: frozenset({ChatRole.ORDERER}),
+    SystemChatEvent.ORDERER_CONFIRMED: frozenset({ChatRole.RUNNER}),
+    SystemChatEvent.ALL_CONFIRMED: frozenset({ChatRole.ORDERER, ChatRole.RUNNER}),
+    SystemChatEvent.PAYOUT_COMPLETED: frozenset({ChatRole.RUNNER}),
+}
+
+
+def system_chat_delivery(event: SystemChatEvent, role: ChatRole, payload: dict[str, Any] | None) -> tuple[bool, bool]:
+    """(안읽음에 포함, 푸시) — CHAT-REQ-021 표의 "기존 알림"·"안읽음·푸시" 칸."""
+    if event == SystemChatEvent.NOT_SELECTED and role == ChatRole.ORDERER:
+        # 행님에게는 안읽음·푸시 없이 기록만 남긴다.
+        return False, False
+    if event == SystemChatEvent.DISPUTE_RAISED:
+        raised_by = (payload or {}).get("raisedBy")
+        return True, role.value == raised_by
+    return True, role not in _EXISTING_NOTIFICATION.get(event, frozenset())

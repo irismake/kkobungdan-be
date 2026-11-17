@@ -17,6 +17,7 @@ from app.schemas.admin import (
     AdminRefundDetailResponse,
 )
 from app.services.admin.admin_query_service import AdminQueryService
+from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
 
@@ -96,6 +97,7 @@ class AdminCommandService:
                 RefundReason.ADMIN_CANCELLED,
                 reason_detail=admin_note,
             )
+        ChatLifecycle.on_admin_cancelled(db, proposal.id, after_match=mission is not None)
 
         db.commit()
         return AdminQueryService.get_proposal_detail(db, proposal_id)
@@ -161,6 +163,7 @@ class AdminCommandService:
         mission.resolved_by_admin_id = admin_id
 
         evidence.mark_resolved(admin_id, admin_note)
+        ChatLifecycle.on_dispute_resolved(db, offer.id, completed=outcome == MissionResolution.COMPLETED)
 
         MissionService.publish_transition_alert(db, mission, proposal, previous_mission_status)
         db.commit()
@@ -199,6 +202,7 @@ class AdminCommandService:
 
         refund.complete(admin_id, admin_note)
         proposal.mark_refunded()
+        ChatLifecycle.on_refund_completed(db, refund)
         db.commit()
         return AdminQueryService.get_refund_detail(db, refund_id)
 
@@ -244,6 +248,7 @@ class AdminCommandService:
             raise api_error(AppError.MISSION_NOT_SETTLEABLE, f"status: {mission.status}")
 
         mission.record_settlement(admin_id, admin_note)
+        ChatLifecycle.on_payout_completed(db, mission)
         db.commit()
         return AdminQueryService.get_payout_detail(db, payout_id)
 
