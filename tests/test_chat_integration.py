@@ -306,7 +306,10 @@ def test_participant_sends_text_chat_and_gets_it_back(client, db, factory, sampl
     assert data["type"] == "USER"
     assert data["senderId"] == sample_user.id
     assert data["content"] == "지금 어디세요?"
+    # 기존 API와 같이 UTC 시각이다. 시간대 표기가 없으면 UTC로 읽는다.
     sent_at = datetime.fromisoformat(data["createdAt"].replace("Z", "+00:00"))
+    if sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=timezone.utc)
     assert sent_at.utcoffset() == timedelta(0)
     assert before - timedelta(seconds=2) <= sent_at <= datetime.now(timezone.utc) + timedelta(seconds=2)
 

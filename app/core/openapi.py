@@ -1183,3 +1183,54 @@ ADMIN_OUTBOX_BULK_RETRY_EXAMPLE = {
     "data": {"consumer": "chat.push", "retriedCount": 3},
     "message": "전달을 다시 처리하도록 바꿨습니다.",
 }
+
+
+CHAT_ROOM_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": EXAMPLE_CHAT_ROOM_ID,
+                "proposalId": 1,
+                "offerId": 10,
+                "proposalTitle": "편의점 담배 심부름",
+                "myRole": "ORDERER",
+                "partnerId": EXAMPLE_RUNNER_ID,
+                "partnerName": EXAMPLE_RUNNER_NAME,
+                "lastMessage": {
+                    "id": 101,
+                    "seq": 2,
+                    "type": "USER",
+                    "senderId": EXAMPLE_RUNNER_ID,
+                    "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                    "createdAt": EXAMPLE_CREATED_AT,
+                },
+                "lastMessageAt": EXAMPLE_CREATED_AT,
+                "unreadCount": 2,
+                "status": "ACTIVE",
+                "statusReason": None,
+                "proposalStatus": "OFFERED",
+                "offerStatus": "WAITING",
+                "blockStatus": "NONE",
+                "createdAt": EXAMPLE_CREATED_AT,
+            }
+        ],
+        "nextCursor": None,
+    },
+    "message": "Success",
+}
+
+CHAT_MESSAGE_SEND_EXAMPLE = {
+    "success": True,
+    "data": {
+        "id": 102,
+        "roomId": EXAMPLE_CHAT_ROOM_ID,
+        "seq": 3,
+        "type": "USER",
+        "senderId": EXAMPLE_USER_ID,
+        "content": "지금 어디세요?",
+        "systemEvent": None,
+        "createdAt": EXAMPLE_CREATED_AT,
+    },
+    "message": "Success",
+}

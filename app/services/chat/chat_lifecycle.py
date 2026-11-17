@@ -13,6 +13,7 @@ from app.core.time import utcnow_naive
 from app.models.chat import ChatMessage, ChatMessageType, ChatRoom, ChatRoomStatus, SystemChatEvent
 from app.models.offer import Offer
 from app.models.proposal import Proposal
+from app.services.chat import chat_events
 
 
 class ChatLifecycle:
@@ -55,6 +56,8 @@ class ChatLifecycle:
         )
         room.last_message_at = now
         db.add(message)
+        db.flush()
+        chat_events.record_message_created(db, room, message)
         return message
 
     @staticmethod
@@ -70,4 +73,6 @@ class ChatLifecycle:
         )
         room.last_message_at = now
         db.add(message)
+        db.flush()
+        chat_events.record_message_created(db, room, message)
         return message

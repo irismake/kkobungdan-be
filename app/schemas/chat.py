@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.chat import ChatMessageType, ChatRole, ChatRoomStatus, ChatRoomStatusReason, SystemChatEvent
 from app.models.offer import OfferStatus
 from app.models.proposal import ProposalStatus
+from app.services.chat.blocking import BlockStatus
+from app.services.chat.content import validate_message_content
 
 
 class ChatRoomDetailResponse(BaseModel):
@@ -53,5 +55,69 @@ class ChatMessageListResponse(BaseModel):
 
     content: list[ChatMessageResponse]
     has_previous: bool = Field(..., serialization_alias="hasPrevious", description="더 이전 채팅이 있는지")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatMessageSendRequest(BaseModel):
+    """채팅 전송. 시스템 채팅은 서버만 만들므로 채팅 유형 필드는 받지 않는다(CHAT-REQ-020)."""
+
+    client_message_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        validation_alias="clientMessageId",
+        description="앱이 채팅마다 만드는 전송 ID. 재시도할 때 같은 값을 보내면 한 번만 저장된다",
+        examples=["9b2f3c1e-7a51-4c6d-9d1e-1f0a2b3c4d5e"],
+    )
+    content: str = Field(..., description="채팅 내용. 공백만 있으면 안 되고 화면 글자 기준 500자 이하", examples=["지금 어디세요?"])
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        return validate_message_content(value)
+
+
+class ChatLastMessageResponse(BaseModel):
+    """채팅 목록에 보여줄 마지막 채팅. 시스템 채팅이면 보는 사람에 맞는 문구다."""
+
+    id: int
+    seq: int
+    type: ChatMessageType
+    sender_id: str | None = Field(None, serialization_alias="senderId")
+    content: str
+    created_at: datetime = Field(..., serialization_alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatRoomListItemResponse(BaseModel):
+    """채팅 목록 한 줄 (CHAT-REQ-014)."""
+
+    id: int
+    proposal_id: int = Field(..., serialization_alias="proposalId")
+    offer_id: int = Field(..., serialization_alias="offerId")
+    proposal_title: str = Field(..., serialization_alias="proposalTitle")
+    my_role: ChatRole = Field(..., serialization_alias="myRole")
+    partner_id: str = Field(..., serialization_alias="partnerId")
+    partner_name: str = Field(..., serialization_alias="partnerName")
+    last_message: ChatLastMessageResponse | None = Field(None, serialization_alias="lastMessage")
+    last_message_at: datetime | None = Field(None, serialization_alias="lastMessageAt")
+    unread_count: int = Field(..., serialization_alias="unreadCount")
+    status: ChatRoomStatus
+    status_reason: ChatRoomStatusReason | None = Field(None, serialization_alias="statusReason")
+    proposal_status: ProposalStatus = Field(..., serialization_alias="proposalStatus")
+    offer_status: OfferStatus = Field(..., serialization_alias="offerStatus")
+    block_status: BlockStatus = Field(..., serialization_alias="blockStatus", description="차단 여부. 차단 구현 전에는 항상 NONE")
+    created_at: datetime = Field(..., serialization_alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ChatRoomListResponse(BaseModel):
+    content: list[ChatRoomListItemResponse]
+    next_cursor: str | None = Field(None, serialization_alias="nextCursor", description="다음 페이지 커서. 마지막 페이지면 null")
 
     model_config = ConfigDict(populate_by_name=True)

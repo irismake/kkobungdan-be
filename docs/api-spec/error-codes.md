@@ -94,6 +94,8 @@
 | 409 | `OFFER_NOT_ACCEPTABLE` | 수락할 수 없는 지원 상태입니다. | |
 | 409 | `OFFER_NOT_CANCELLABLE` | 취소할 수 없는 지원 상태입니다. | |
 | 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD 상태인 전달만 다시 처리할 수 있습니다. | 관리자 웹 전용 |
+| 409 | `CHAT_MESSAGE_ID_CONFLICT` | 이미 다른 내용으로 보낸 채팅입니다. | |
+| 409 | `CHAT_ROOM_NOT_SENDABLE` | 채팅을 보낼 수 없는 채팅방입니다. | |
 | 409 | `MISSION_NOT_RESOLVABLE` | 분쟁 중인 임무만 판정할 수 있습니다. | 관리자 웹 전용 |
 | 409 | `MISSION_NOT_SETTLEABLE` | 수행비를 지급할 수 없는 임무 상태입니다. | 관리자 웹 전용 |
 | 409 | `OFFER_NOT_UPDATABLE` | 변경할 수 없는 지원 상태입니다. | |

@@ -343,12 +343,51 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | partnerLastReadSeq | number | 상대가 마지막으로 읽은 채팅 순번 |
 | createdAt | string | 생성 시각 |
 
+### ChatRoomListResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| content | ChatRoomListItemResponse[] | 채팅방 목록 |
+| nextCursor | string, null | 다음 페이지 커서. 마지막 페이지면 null |
+
+### ChatRoomListItemResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅방 ID |
+| proposalId | number | 요청 ID |
+| offerId | number | 지원 ID |
+| proposalTitle | string | 요청 제목 |
+| myRole | string | `ORDERER`, `RUNNER` |
+| partnerId | string | 상대 사용자 ID |
+| partnerName | string | 상대 이름. 탈퇴했으면 `"탈퇴한 사용자"` |
+| lastMessage | ChatLastMessageResponse, null | 마지막 채팅. 채팅이 없으면 null |
+| lastMessageAt | string, null | 마지막 채팅 시각 |
+| unreadCount | number | 내 안읽음 수 |
+| status | string | 채팅방 상태 |
+| statusReason | string, null | 상태 이유 |
+| proposalStatus | string | 요청 상태 |
+| offerStatus | string | 지원 상태 |
+| blockStatus | string | `NONE`, `BLOCKED_BY_ME`, `BLOCKED_BY_PARTNER`. 차단 구현 전에는 항상 `NONE` |
+| createdAt | string | 채팅방 생성 시각 |
+
+### ChatLastMessageResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅 ID |
+| seq | number | 순번 |
+| type | string | `USER`, `SYSTEM` |
+| senderId | string, null | 보낸 사람. 시스템 채팅은 null |
+| content | string | 내용. 시스템 채팅은 보는 사람에 맞는 문구 |
+| createdAt | string | 전송 시각 |
+
 ### ChatMessageListResponse
 
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | content | ChatMessageResponse[] | 채팅. 저장 순서(`seq` 오름차순) |
-| hasPrevious | boolean | 더 이전 채팅이 있는지 |
+| hasPrevious | boolean | 첫 채팅보다 앞선 채팅이 있는지 |
 
 ### ChatMessageResponse
 
@@ -567,10 +606,15 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 
 | 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
 |------|--------|------|------|-----------|-----------|
+| 채팅 목록 조회 | `GET` | `/v1/chat-room?cursor=&size=` | 필요 | `200 OK` | `ChatRoomListResponse` |
 | 채팅방 상세 조회 | `GET` | `/v1/chat-room/{roomId}` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatRoomDetailResponse` |
-| 채팅 조회 (최근 30개) | `GET` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
+| 채팅 조회 | `GET` | `/v1/chat-room/{roomId}/messages?beforeSeq=&afterSeq=` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
+| 채팅 전송 | `POST` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `201 Created` | `ChatMessageResponse` |
 
-채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다. 나머지 채팅 API(목록, 전송, 읽음, 실시간)는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
+- 채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다.
+- 채팅 목록: 행님·꼬붕 역할과 관계없이 참여한 모든 채팅방. 마지막 채팅이 최신인 순서(채팅이 없으면 생성 시각). 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. 목록 조회는 읽음 처리하지 않는다.
+- 채팅 조회: 기본은 최근 30개, `beforeSeq`는 그보다 앞선 30개, `afterSeq`는 그 뒤의 채팅(최대 100개, 재연결 후 복구). 둘은 함께 쓸 수 없다.
+- 읽음·실시간 API는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
 
 ### Admin Outbox API
 
@@ -818,6 +862,17 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | proposalId | number | 조건부 | `proposalId`, `offerId` 중 정확히 하나만 입력 |
 | offerId | number | 조건부 | `proposalId`, `offerId` 중 정확히 하나만 입력 |
 
+### Chat
+
+#### `POST /v1/chat-room/{roomId}/messages`
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| clientMessageId | string | O | 1~64자. 앱이 채팅마다 만드는 전송 ID. 재시도할 때 같은 값을 보낸다 |
+| content | string | O | 공백·줄바꿈만 있으면 안 되고 화면 글자 기준 500자 이하 |
+
+그 밖의 필드(예: 채팅 유형)는 받지 않는다(`400 VALIDATION_ERROR`). 시스템 채팅은 서버만 만든다.
+
 ### Settlement
 
 #### `PUT /v1/settlement/account`
@@ -914,6 +969,8 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 404 | `PROPOSAL_NOT_FOUND` | Proposal을 찾을 수 없음 |
 | 404 | `OFFER_NOT_FOUND` | Offer를 찾을 수 없음 |
 | 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없음 |
+| 409 | `CHAT_MESSAGE_ID_CONFLICT` | 같은 전송 ID로 내용이나 채팅방이 다른 채팅 |
+| 409 | `CHAT_ROOM_NOT_SENDABLE` | `INACTIVE`·`CLOSED` 채팅방이거나 차단 중 |
 | 404 | `OUTBOX_DELIVERY_NOT_FOUND` | 전달 기록을 찾을 수 없음 (관리자) |
 | 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD가 아닌 전달을 재처리하려 함 (관리자) |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 사용 중인 전화번호 |
