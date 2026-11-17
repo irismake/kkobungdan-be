@@ -20,7 +20,7 @@ from app.core.exceptions import (
 )
 from app.listeners import admin_alert_listener, notification_listener
 from app.schemas.common import ApiResponse
-from app.services.outbox.worker import OutboxWorker, set_wake_callback
+from app.services.outbox.worker import OutboxWorker, register_outbox_jobs, set_wake_callback
 from app.tasks.payment_checker import (
     check_and_cancel_expired_payment_proposals,
     send_pending_payment_reminders,
@@ -148,15 +148,8 @@ async def lifespan(app: FastAPI):
 
 
 def _start_outbox_worker() -> None:
-    """공통 Outbox 주기 작업을 등록하고 커밋 직후 발행을 깨운다 (docs/design-docs/outbox.md)."""
-    outbox_worker = OutboxWorker(SessionLocal)
-    _scheduler.add_job(outbox_worker.run_cycle, "interval", seconds=2, id="outbox_publish", replace_existing=True)
-    _scheduler.add_job(outbox_worker.run_deliveries, "interval", seconds=10, id="outbox_deliveries", replace_existing=True)
-    _scheduler.add_job(outbox_worker.check_publish_delay, "interval", minutes=1, id="outbox_publish_delay", replace_existing=True)
-    _scheduler.add_job(outbox_worker.cleanup, "cron", hour=4, minute=0, id="outbox_cleanup", replace_existing=True)
-    set_wake_callback(
-        lambda: _scheduler.add_job(outbox_worker.run_cycle, id="outbox_publish_now", replace_existing=True)
-    )
+    """공통 Outbox 주기 작업(10초 처리, 매일 04:00 정리)을 등록하고 커밋 직후 깨우기를 연결한다."""
+    register_outbox_jobs(_scheduler, OutboxWorker(SessionLocal))
 
 
 # Create FastAPI app

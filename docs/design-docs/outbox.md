@@ -13,7 +13,7 @@
  도메인 서비스 트랜잭션
    상태 변경 + record_event() ──▶ outbox_events (미발행)        OUTBOX-REQ-001
    COMMIT
-        │ 커밋 직후 깨움 + 2초 주기
+        │ 커밋 직후 깨움 + 10초 처리 작업
         ▼
  relay: 미발행을 id 순으로 집음 (FOR UPDATE SKIP LOCKED)        OUTBOX-REQ-002
    └ EventPublisher.publish(envelope)   지금: InProcessEventPublisher / 나중: KafkaEventPublisher
@@ -26,7 +26,7 @@
                                          ├▶ FAILED ─(다음 시도 시각)─▶ PROCESSING …
                                          └▶ DEAD     (최대 재시도 초과) ─▶ 알림     OUTBOX-REQ-006
  관리자 재처리: DEAD ─(조건부 전이)─▶ PENDING
- 주기 작업: 발행 지연 점검(1분) · 전달 재시도(10초) · 정리(매일)            OUTBOX-REQ-003·007
+ 주기 작업: 처리 작업(10초: 발행 → 전달·재시도 → 지연 점검) · 정리(매일 04:00)   OUTBOX-REQ-003·007
 ```
 
 ## 모듈 구성
@@ -98,19 +98,32 @@
 - UNIQUE (`event_id`, `consumer`): 같은 이벤트를 같은 전달 대상이 두 번 처리하지 않는다. Kafka를 도입해도 같은 메시지가 다시 올 수 있으므로(at-least-once) 이 테이블이 중복 방지(inbox) 역할을 그대로 한다.
 - 인덱스: (`status`, `next_attempt_at`), (`status`, `locked_until`), (`consumer`, `status`, `finished_at`).
 
+## 주기 작업
+
+앱 프로세스의 APScheduler에 두 작업만 등록한다(`app/services/outbox/worker.py` `register_outbox_jobs`). `OUTBOX_WORKER_ENABLED=false`면 등록하지 않는다(테스트).
+
+| 작업 | 언제 | 하는 일 |
+|------|------|---------|
+| `outbox_cycle` | 10초마다, 그리고 이벤트를 기록한 트랜잭션이 커밋되면 바로 한 번(`outbox_cycle_now`) | ① 미발행 이벤트를 모두 발행 ② 처리할 전달(새 전달, 재시도 시각이 된 `FAILED`, 임대가 끝난 `PROCESSING`) 처리 ③ 발행 지연 점검 |
+| `outbox_cleanup` | 매일 04:00 | 끝난 지 7일 지난 이벤트 삭제 |
+
+- 정상 채팅은 커밋 직후 실행으로 바로 전달된다. 10초 주기는 깨우기를 놓쳤거나(서버 재시작 등) 재시도 시각이 된 전달을 처리하는 안전망이다.
+- 처리 작업은 프로세스 안 잠금으로 한 번에 하나만 돈다. 커밋 직후 실행과 10초 주기가 겹치면 뒤에 온 실행은 바로 끝난다.
+- 재시도 횟수·간격(정책 값)과 중복 방지 규칙은 주기와 관계없이 그대로다.
+
 ## 처리 규칙
 
 ### 기록 (OUTBOX-REQ-001)
 
 - `record_event`는 호출한 세션에 `outbox_events` 1행을 추가만 한다. 커밋·플러시를 하지 않는다.
-- 같은 세션에 이벤트가 기록되면 세션 정보에 표시해 두고, SQLAlchemy `after_commit`에서 relay를 깨운다. 롤백되면 표시만 지운다. 깨우기는 빨리 보내기 위한 보조 장치이고, 놓쳐도 2초 주기 작업이 집는다.
+- 같은 세션에 이벤트가 기록되면 세션 정보에 표시해 두고, SQLAlchemy `after_commit`에서 relay를 깨운다. 롤백되면 표시만 지운다. 깨우기는 빨리 보내기 위한 장치이고(정상 채팅은 이 경로로 바로 전달된다), 놓쳐도 10초 처리 작업이 집는다.
 
 ### 발행 (OUTBOX-REQ-002·003)
 
 - relay는 `published_at IS NULL AND (next_publish_at IS NULL OR next_publish_at <= now)`인 이벤트를 `id` 순으로 `FOR UPDATE SKIP LOCKED`로 집어, 발행자에 넘기고 `published_at`을 기록한다. 같은 이벤트를 두 relay가 집지 않는다.
 - 같은 대상(`aggregate_id`)의 앞선 이벤트가 발행 실패로 기다리는 중이면 그 대상의 뒤 이벤트도 발행하지 않는다. 순서가 뒤바뀌지 않게 하기 위해서다.
 - 발행 실패: `publish_attempts` 증가, `next_publish_at` = 5초 → 30초 → 2분 → 10분, 이후 10분. 포기하지 않는다.
-- 발행 지연 점검(1분마다): 가장 오래된 미발행 이벤트가 5분을 넘으면 알림. 같은 지연이 이어지면 30분에 한 번만 다시 알리고, 풀리면 해소 알림 1번. 알림 상태는 프로세스 메모리에 둔다(재시작하면 다시 한 번 알릴 수 있다).
+- 발행 지연 점검(10초 처리 작업의 마지막 단계): 가장 오래된 미발행 이벤트가 5분을 넘으면 알림. 같은 지연이 이어지면 30분에 한 번만 다시 알리고, 풀리면 해소 알림 1번. 알림 상태는 프로세스 메모리에 둔다(재시작하면 다시 한 번 알릴 수 있다).
 - `InProcessEventPublisher.publish`는 받는 전달 대상마다 `event_deliveries` 행을 `PENDING`으로 만든다(이미 있으면 두지 않음). 실제 처리는 아래 전달 처리 단계가 한다. 그래서 "발행 완료"는 "전달할 일이 기록됨"을 뜻하고, 전달 실패는 발행을 되돌리지 않는다.
 
 ### 전달 처리 (OUTBOX-REQ-004·005)
@@ -196,6 +209,7 @@ DEFAULT_RETRY_POLICY = RetryPolicy(5, (5s, 30s, 2m, 10m), None)
 
 ## 리스크
 
-- 주기 작업(발행 2초, 전달 10초, 지연 점검 1분)이 DB를 계속 조회한다. 인덱스로 가볍게 유지하고, 실제 부하를 보고 간격을 조정한다.
+- 10초 처리 작업이 DB를 계속 조회한다(발행 대상·전달 대상·가장 오래된 미발행 이벤트). 인덱스로 가볍게 유지하고, 실제 부하를 보고 간격을 조정한다.
+- 재시도 시각(예: 5초 뒤)이 되어도 다음 처리 작업(최대 10초 뒤)까지 기다린다. 실제 재시도 간격은 정책 값보다 최대 10초 길어질 수 있다.
 - 발행 지연 알림 상태가 메모리에 있어 재시작 직후 같은 지연을 한 번 더 알릴 수 있다.
 - 결과 기록 전 중단 시 한 번 더 처리될 수 있다(at-least-once). 전달 대상의 멱등성이 필수다.

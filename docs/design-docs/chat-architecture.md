@@ -30,7 +30,7 @@
    ├ api/v1/chat (REST 라우터)            ├ realtime/ws_router (WebSocket 엔드포인트)
    ├ services/chat (동기, DB 트랜잭션)     ├ realtime/hub (사용자별 연결, 프로세스 메모리)
    │    └ 같은 트랜잭션에서 outbox_events에 이벤트 기록
-   ├ outbox relay (커밋 직후 + 주기 폴링) ─ EventPublisher(지금: 프로세스 내, 나중: Kafka)
+   ├ outbox 처리 작업 (커밋 직후 바로 + 10초마다) ─ EventPublisher(지금: 프로세스 내, 나중: Kafka)
    │    └ 전달 대상(consumer)별 처리·재시도·중복 방지 (event_deliveries)
    │         ├ ChatRealtimeConsumer → hub ───────┘
    │         └ ChatPushConsumer → FCM (재시도, 10분 지난 푸시는 건너뜀)
