@@ -49,7 +49,8 @@
 - `docs/domains/{domain}/test-scenarios.md`: 도메인별 테스트 시나리오(`{DOMAIN}-TS-*`)
 - `tests/`: 단위 테스트(`test_{module}.py`)와 통합 테스트(`test_{domain}_integration.py`)
 - [`scripts/verify.sh`](./scripts/verify.sh): 테스트·정적 검사 자동 실행
-- [`.github/workflows/test.yml`](./.github/workflows/test.yml): PR·staging 머지 시 자동 검증. Draft PR은 정적 검사와 단위 테스트만, 일반 PR과 staging 머지는 전체 검사. staging 배포는 staging 머지 후 전체 CI가 성공해야만 실행된다 (`tdd-workflow.md` "CI 실행 정책")
+- [`.github/workflows/test.yml`](./.github/workflows/test.yml): PR 자동 검증. Draft PR은 정적 검사와 단위 테스트만, 일반 PR은 전체 검사
+- [`.github/workflows/staging-deploy.yml`](./.github/workflows/staging-deploy.yml): staging 머지 시 `test.yml`로 전체 검사 후 성공하면 배포. 수동 실행의 `skip_ci`는 긴급 복구용 (`tdd-workflow.md` "CI 실행 정책")
 
 ### 규칙
 - 요구사항(`{DOMAIN}-REQ-*`)을 스펙 문서에, 테스트 시나리오(`{DOMAIN}-TS-*`)를 도메인 시나리오 문서에 먼저 적는다. 시나리오마다 연결된 요구사항 ID를 적는다.
@@ -98,7 +99,7 @@
 - 일반 기능과 수정 사항을 `main`에 직접 커밋하지 않는다.
 - 긴급 수정도 가능하면 `fix/*` → `staging` → `main` 흐름을 따른다. 아직 릴리스할 수 없는 변경이 `staging`에 있어 운영만 즉시 수정해야 한다면 `main`에서 hotfix 브랜치를 만들어 반영한 뒤, 같은 수정을 별도 `fix/*` PR로 `staging`에 반영한다.
 - `.github/workflows/staging-deploy.yml`의 커밋 도달성 가드는 예외 상황에서 이미 `main`에 포함된 커밋의 중복 배포를 막는 안전망으로 유지한다. 명시적으로 재배포할 때는 `workflow_dispatch`를 사용한다.
-- 예외적으로 `staging` → `main`을 squash merge했다면 두 브랜치의 커밋 계보가 갈라지므로 `git fetch origin` 후 `staging`에서 `git reset --hard origin/main`, `git push --force-with-lease origin staging` 순서로 동기화한다. 이 push는 CI(`test.yml`)를 트리거하고, CI가 성공하면 Staging Deploy를 부른다. 커밋 도달성 가드가 이미 `main`에 포함된 커밋임을 확인하므로 `check` job만 실행되고 이미지 재빌드와 배포는 건너뛴다.
+- 예외적으로 `staging` → `main`을 squash merge했다면 두 브랜치의 커밋 계보가 갈라지므로 `git fetch origin` 후 `staging`에서 `git reset --hard origin/main`, `git push --force-with-lease origin staging` 순서로 동기화한다. 이 push는 Staging Deploy 워크플로를 트리거한다. CI(`test.yml`)가 먼저 돌고, 성공하면 커밋 도달성 가드가 이미 `main`에 포함된 커밋임을 확인하므로 `check` job만 실행되고 이미지 재빌드와 배포는 건너뛴다.
 
 ## 테스트 실행 규칙
 

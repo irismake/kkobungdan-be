@@ -116,7 +116,7 @@ skip은 pytest 결과의 skip 목록에 남으므로 조건이 풀리면 찾아�
 
 ## CI 실행 정책
 
-[`.github/workflows/test.yml`](../../.github/workflows/test.yml)은 PR마다 실행하되, 상황에 따라 검사 강도를 다르게 한다. 목표는 개발 중에는 빠른 피드백을, 머지 전과 머지 후에는 전체 검증을 보장하는 것이다.
+CI는 [`.github/workflows/test.yml`](../../.github/workflows/test.yml), staging 배포는 [`.github/workflows/staging-deploy.yml`](../../.github/workflows/staging-deploy.yml)로 나눈다. `test.yml`은 PR마다 실행하되 상황에 따라 검사 강도를 다르게 하고, staging 배포는 배포 전에 `test.yml`을 불러 전체 검사를 먼저 돌린다. 목표는 개발 중에는 빠른 피드백을, 머지 전과 배포 전에는 전체 검증을 보장하는 것이다.
 
 | 상황 | 실행하는 검사 |
 |------|---------------|
@@ -125,14 +125,18 @@ skip은 pytest 결과의 skip 목록에 남으므로 조건이 풀리면 찾아�
 | Draft → Ready for review | 일반 PR과 같다 (`ready_for_review` 이벤트) |
 | 코드와 무관한 파일만 변경 (문서, `nginx/` 등) | 정적 검사만 (시나리오 연결 검사 포함) |
 | DB 모델·마이그레이션 변경 (`app/models/`, `alembic/`) | 위 검사 + 빈 DB 마이그레이션 검사 (Draft가 아닐 때) |
-| staging에 머지 (push) | 변경 파일과 관계없이 전부 (정적·단위·전체 테스트·마이그레이션). 모두 성공하면 staging 배포 |
+| staging에 머지 (push) | Staging Deploy가 실행되어 CI를 변경 파일과 관계없이 전부 돌리고(정적·단위·전체 테스트·마이그레이션), 성공하면 배포 |
+| Staging Deploy 수동 실행 (기본) | 위와 같이 CI 후 배포 |
+| Staging Deploy 수동 실행 (`skip_ci` 켬) | CI를 건너뛰고 바로 배포. 긴급 복구용 |
 | 같은 PR에 연속 푸시 | 이전 실행을 취소하고 최신 커밋만 검사 (`concurrency`) |
 
 - 워크플로 자체를 `paths` 필터로 건너뛰지 않는다. 워크플로는 항상 실행하고, `변경 파일 확인` Job이 바뀐 파일을 보고 필요한 Job만 실행한다. 워크플로가 통째로 건너뛰어지면 결과가 PR에 남지 않기 때문이다.
 - "코드에 영향을 주는 파일"은 `app/`, `tests/`, `alembic/`, `alembic.ini`, `pyproject.toml`, `setup.py`, `scripts/verify.sh`, `scripts/check_scenarios.py`, `docker-compose.test.yml`, `.github/workflows/test.yml`이다. 이 중 하나라도 바뀌면 테스트를 돌린다.
 - PR 판정은 마지막 `CI 결과` Job 하나로 본다. 건너뛴 Job은 그 검사가 필요 없는 변경이라 통과로 보고, 실패하거나 취소된 Job이 있으면 실패다. 나중에 필수 검사를 걸 수 있게 되면 이 Job 하나만 필수로 지정한다.
-- staging 배포는 CI 뒤에 붙어 있다. `staging-deploy.yml`은 staging push로 직접 실행되지 않고, staging 머지에서 `CI 결과`가 성공일 때 `Staging 배포` Job이 `workflow_call`로 부른다(`secrets: inherit`). CI가 실패하거나 취소되면 배포 Job은 건너뛴다. 수동 재배포는 지금처럼 `workflow_dispatch`로 한다.
-- 같은 커밋을 두 번 배포하지 않도록, staging push의 CI 실행은 취소하지 않고 차례로 돌린다(배포 도중 취소되면 마이그레이션이 끊긴다). 배포 Job에는 `staging-deploy` 동시 실행 묶음을 걸어 CI 배포와 수동 배포가 겹치지 않게 했다. 이미 `main`에 있는 커밋을 건너뛰는 기존 `check` 가드는 그대로다.
+- `test.yml`은 PR(`pull_request`)과 `workflow_call`로만 실행된다. staging push에는 직접 반응하지 않는다. 그래서 Actions의 Test 목록에는 PR 검사만, Staging Deploy 목록에는 배포 실행만 쌓인다.
+- `staging-deploy.yml`은 staging push와 수동 실행(`workflow_dispatch`)으로 실행된다. 첫 Job `CI`가 `test.yml`을 `workflow_call`로 부르고, 성공했을 때만 기존 `check → build → deploy`가 이어진다. CI가 실패하거나 취소되면 `check`부터 건너뛰어 배포하지 않는다. 배포 명령·환경변수·Secrets는 바꾸지 않았다.
+- 수동 실행에는 `skip_ci` 입력이 있다. 기본값(false)은 CI를 돌린 뒤 배포하고, 켜면 CI를 건너뛰고 바로 배포한다. CI 자체가 고장 났거나 급히 되돌려야 할 때만 쓴다. 이때 `check` 단계가 실행 로그에 "CI 생략" 경고를 남긴다.
+- 배포가 겹치지 않도록 Staging Deploy 전체에 `staging-deploy` 동시 실행 묶음을 걸었다. 진행 중인 실행은 끊지 않고(배포 중 취소되면 마이그레이션이 끊긴다) 다음 실행은 기다린다. 대기 중에 더 새로운 push가 오면 기다리던 실행은 취소되고 가장 새로운 커밋만 배포된다. 같은 커밋은 push 한 번에 한 번만 배포되며, 이미 `main`에 있는 커밋을 건너뛰는 기존 `check` 가드도 그대로다.
 - `scripts/verify.sh`나 `test.yml`이 바뀐 PR도 마이그레이션 검사를 돌린다. staging 배포를 막을 수 있는 검사를 머지 전에 한 번은 돌려 보기 위해서다.
 - 운영 배포(`production-deploy.yml`, main push)는 바꾸지 않았다.
 - `nginx/` 설정 검사와 린터(ruff)는 아직 없다 ([`TD-022`](../exec-plans/tech-debt-tracker.md)). 생기면 정적 검사 Job에 넣는다.
@@ -156,5 +160,8 @@ skip은 pytest 결과의 skip 목록에 남으므로 조건이 풀리면 찾아�
 | 테스트 없는 PR을 CI로 막는다 | 강제력이 있다 | 문구만 바꾸는 PR처럼 예외가 잦아 우회 장치가 필요하다 | 채택하지 않음. PR 본문과 리뷰로 거른다 |
 | Draft PR은 CI를 전부 건너뛴다 | 실행 횟수가 가장 적다 | TDD 중에 실패를 늦게 안다 | 채택하지 않음. Draft에서도 정적 검사와 단위 테스트는 돌린다 |
 | `paths-ignore`로 워크플로를 건너뛴다 | 설정이 간단하다 | 검사 결과가 PR에 남지 않고, 필수 검사를 걸면 대기 상태로 머지를 막는다 | 채택하지 않음. 워크플로는 항상 돌리고 Job 단위로 건너뛴다 |
-| staging 배포를 push로 따로 돌린다 | 기존 구조 그대로다 | CI가 실패해도 배포된다 | 채택하지 않음. 배포를 CI의 마지막 Job으로 `workflow_call` 한다 |
+| staging 배포를 push로 따로 돌린다 (CI와 병렬) | 기존 구조 그대로다 | CI가 실패해도 배포된다 | 채택하지 않음 |
+| CI(`test.yml`)가 staging push에서 돌고 마지막 Job으로 배포를 `workflow_call` 한다 | 한 실행에서 검사와 배포가 이어진다 | 배포 기록이 Test 목록에 섞이고 Staging Deploy 목록에는 남지 않는다 | 2026-11-17 한때 적용했다가 되돌림 |
+| Staging Deploy를 `workflow_run`(Test 완료 후)으로 실행한다 | 배포 기록이 따로 남는다 | `workflow_run`은 기본 브랜치(main)의 워크플로 파일로 실행되어 staging 배포 설정 변경이 main 릴리스 뒤에야 적용된다. `github.sha`·checkout을 모두 바꿔야 한다 | 채택하지 않음 |
+| Staging Deploy가 배포 전에 `test.yml`을 `workflow_call` 한다 | CI와 배포가 워크플로 단위로 나뉘고, 배포 전 검사가 보장된다 | 배포 실행 시간에 CI 시간(약 4분)이 더해진다 | **채택** |
 | 단위·통합을 파일 이름(`*_integration.py`)으로 나눈다 | 규칙이 단순하다 | 단위 파일 안의 DB 테스트 3개가 DB 없는 검사에서 깨졌다 | 채택하지 않음. `db` fixture 의존으로 자동 분류한다 |

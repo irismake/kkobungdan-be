@@ -19,8 +19,8 @@
 | `pyproject.toml` (`scenario` marker, `--strict-markers`) | 테스트에 시나리오 ID를 붙이는 marker |
 | `docs/domains/*/test-scenarios.md` "시나리오 목록" | 기존 테스트 311개의 시나리오 ID 표 |
 | `.github/pull_request_template.md` "테스트" 칸 | PR의 연결 시나리오와 테스트 없는 이유 |
-| `.github/workflows/test.yml` | PR·staging 머지 시 자동 검증. 변경 파일과 Draft 여부로 검사 강도를 나누고, staging 머지에서 성공하면 배포를 부름 |
-| `.github/workflows/staging-deploy.yml` | staging push 트리거 제거, `workflow_call`·`workflow_dispatch`만 남김, 배포 동시 실행 묶음 추가 |
+| `.github/workflows/test.yml` | PR 자동 검증. 변경 파일과 Draft 여부로 검사 강도를 나눔. Staging Deploy가 `workflow_call`로 불러 배포 전 전체 검사에도 씀 |
+| `.github/workflows/staging-deploy.yml` | 배포 전에 `test.yml`을 먼저 실행하고 성공 시에만 배포. 수동 실행의 `skip_ci`(긴급 복구용), 배포 동시 실행 묶음 |
 
 ## 진행 상태
 
@@ -28,7 +28,8 @@
 - [x] TDD 흐름 규칙 확정 (`tdd-workflow.md`, AGENTS.md)
 - [x] 시나리오 ID marker와 연결 검사 추가, 기존 테스트 311개에 시나리오 ID 연결
 - [x] CI 실행 정책 적용: Draft는 정적+단위, 일반 PR·staging 머지는 전체, 모델·마이그레이션 변경은 빈 DB 마이그레이션 검사 추가
-- [x] staging 배포를 CI 성공 뒤로 연결: `staging-deploy.yml`을 `workflow_call`로 바꾸고 `test.yml`의 `Staging 배포` Job이 부름
+- [x] staging 배포를 CI 성공 뒤로 연결 (#6: `test.yml`이 배포를 부름)
+- [ ] CI와 배포 워크플로 분리 (`fix/separate-ci-and-staging-deploy`): Staging Deploy가 배포 전에 `test.yml`을 부르고, 수동 실행에 `skip_ci` 추가. 배포 기록이 Staging Deploy 목록에 남도록 한다
 - [x] 단위·통합 분류를 `db` fixture 의존 기준으로 변경 (`tests/conftest.py`)
 - [x] 정적 검사 도구(ruff)는 다음 작업으로 넘김 ([`TD-022`](../tech-debt-tracker.md))
 - [x] 채팅 요구사항·시나리오·아키텍처·구현은 채팅 작업(`feature/chat`)으로 넘김. 이 브랜치에는 채팅 문서와 테스트 자리 뼈대만 둔다
@@ -38,7 +39,8 @@
 - `scripts/verify.sh unit`이 `*_integration.py`를 제외한 테스트를 실행하고, 채팅 placeholder 테스트가 skip으로 보고된다.
 - PR을 열면 `Test` 워크플로가 실행된다.
 - 워크플로 3개(`test.yml`, `staging-deploy.yml`, `production-deploy.yml`)가 `actionlint`를 통과한다 (로컬, shellcheck 제외).
-- 배포 연결은 실제 실행으로만 확인된다: Draft PR에서 `Staging 배포` Job이 없음, staging 머지에서 CI 실패 시 건너뜀, 성공 시 실행. #6 머지 후 첫 staging push에서 확인한다.
+- #6 머지 후 staging 실행(run 44005490048)에서 CI 전체 성공 뒤 배포까지 성공했다. Draft PR(#8)에서는 정적·단위만 돌고 전체 테스트와 배포는 건너뛰었다.
+- 분리 후 확인할 것: staging 머지 시 Staging Deploy 목록에 실행이 생기고 `CI / ...` Job 뒤에 배포가 이어지는지, 수동 실행 기본값은 CI를 돌리는지, `skip_ci`를 켜면 CI 없이 배포되는지, Test 목록에는 PR 실행만 남는지.
 - `scripts/verify.sh unit`이 MySQL 없이 93개 통과, 2개 건너뜀(채팅 테스트 자리)으로 끝난다 (로컬에서 확인).
 - `scripts/verify.sh static`의 시나리오 연결 검사가 "시나리오 313개 중 313개가 테스트에 연결됨 (경고 0, 오류 0)"을 출력한다. 테스트의 ID를 문서에 없는 값으로 바꾸면 오류로 실패한다 (로컬에서 확인).
 
