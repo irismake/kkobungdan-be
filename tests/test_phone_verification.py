@@ -11,12 +11,14 @@ from app.services.user_auth.phone_verification_service import PhoneVerificationS
 from app.services.user_auth.user_auth_service import UserAuthService
 
 
+@pytest.mark.scenario("AUTH-TS-041")
 def test_generate_verification_code_returns_zero_padded_six_digits(monkeypatch):
     monkeypatch.setattr(phone_verification.secrets, "randbelow", lambda _: 42)
 
     assert phone_verification.generate_verification_code() == "000042"
 
 
+@pytest.mark.scenario("AUTH-TS-042")
 def test_hash_verification_code_is_stable_and_code_specific():
     first_hash = phone_verification.hash_verification_code("123456")
 
@@ -24,6 +26,7 @@ def test_hash_verification_code_is_stable_and_code_specific():
     assert first_hash != phone_verification.hash_verification_code("654321")
 
 
+@pytest.mark.scenario("AUTH-TS-043")
 def test_verification_code_ttl_and_message_share_policy():
     assert phone_verification.VERIFICATION_CODE_TTL == timedelta(
         minutes=phone_verification.VERIFICATION_CODE_TTL_MINUTES
@@ -34,15 +37,18 @@ def test_verification_code_ttl_and_message_share_policy():
     )
 
 
+@pytest.mark.scenario("AUTH-TS-044")
 def test_verification_code_max_attempts_policy():
     assert phone_verification.VERIFICATION_CODE_MAX_ATTEMPTS == 5
 
 
+@pytest.mark.scenario("AUTH-TS-045")
 def test_verification_send_rate_limit_policy():
     assert phone_verification.VERIFICATION_SEND_MAX_COUNT == 3
     assert phone_verification.VERIFICATION_SEND_WINDOW == phone_verification.VERIFICATION_CODE_TTL
 
 
+@pytest.mark.scenario("AUTH-TS-046")
 def test_demo_verification_code_is_allowed_only_for_demo_login():
     assert (
         phone_verification.demo_verification_code(
@@ -53,6 +59,7 @@ def test_demo_verification_code_is_allowed_only_for_demo_login():
     )
 
 
+@pytest.mark.scenario("AUTH-TS-047")
 @pytest.mark.parametrize(
     ("purpose", "phone"),
     [
@@ -67,6 +74,7 @@ def test_demo_verification_code_rejects_other_purpose_or_phone(purpose, phone):
     assert phone_verification.demo_verification_code(purpose, phone) is None
 
 
+@pytest.mark.scenario("AUTH-TS-048")
 @pytest.mark.parametrize("app_env", ["staging", "production"])
 def test_demo_login_send_persists_fixed_code_without_calling_sms_sender(monkeypatch, app_env):
     monkeypatch.setattr(phone_verification.settings, "app_env", app_env)
@@ -91,6 +99,7 @@ def test_demo_login_send_persists_fixed_code_without_calling_sms_sender(monkeypa
     sms_sender.send.assert_not_called()
 
 
+@pytest.mark.scenario("AUTH-TS-049")
 def test_demo_login_phone_rejects_signup_before_sms_service():
     db = MagicMock()
     verification_service = MagicMock()
@@ -113,6 +122,7 @@ def test_demo_login_phone_rejects_signup_before_sms_service():
     verification_service.send.assert_not_called()
 
 
+@pytest.mark.scenario("AUTH-TS-050")
 def test_access_token_expiration_is_converted_to_milliseconds(monkeypatch):
     monkeypatch.setattr(security.settings, "jwt_access_token_expire_minutes", 30)
 

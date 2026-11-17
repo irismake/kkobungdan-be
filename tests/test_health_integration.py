@@ -1,3 +1,7 @@
+import pytest
+
+
+@pytest.mark.scenario("HEALTH-TS-001")
 def test_health_uses_v1_api_response(client):
     response = client.get("/v1/health")
 

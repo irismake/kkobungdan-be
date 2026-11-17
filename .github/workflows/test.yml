@@ -1,0 +1,206 @@
+name: Test
+
+# CI 실행 정책: docs/design-docs/tdd-workflow.md "CI 실행 정책"
+# - Draft PR: 정적 검사 + 단위 테스트
+# - 일반 PR, Draft → Ready for review, staging 머지: 전체 검사 (통합 테스트 포함)
+# - DB 모델·마이그레이션 변경: 위에 더해 빈 DB 마이그레이션 검사
+# - 코드와 무관한 파일만 바뀌면: 정적 검사(시나리오 연결 검사 포함)만
+# 워크플로 자체는 항상 실행하고 Job 단위로 건너뛴다. PR 판정은 마지막 `CI 결과` Job으로 본다.
+# staging 머지(push)에서 `CI 결과`가 성공하면 staging 배포(staging-deploy.yml)를 부른다.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - staging
+      - main
+  push:
+    branches:
+      - staging
+
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.ref }}
+  # PR은 연속 푸시 시 이전 실행을 취소한다. staging push는 배포가 포함되므로 취소하지 않고 차례로 돈다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DB_HOST: 127.0.0.1
+  DB_PORT: 3307
+  DB_USERNAME: orderrun_user
+  DB_PASSWORD: orderrun_pass
+  # tests/conftest.py가 `_test`를 붙여 orderrun_test DB에 접속한다.
+  DB_NAME: orderrun
+
+jobs:
+  changes:
+    name: 변경 파일 확인
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.detect.outputs.code }}
+      db: ${{ steps.detect.outputs.db }}
+      full: ${{ steps.detect.outputs.full }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          # staging 머지(push)는 변경 파일과 관계없이 전체 검사한다.
+          if [ "$EVENT_NAME" = "push" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "db=true" >> "$GITHUB_OUTPUT"
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          echo "변경 파일:"
+          echo "$changed"
+
+          # 테스트에 영향을 주는 파일. 하나라도 바뀌면 단위·통합 테스트 대상이다.
+          code_pattern='^(app/|tests/|alembic/|alembic\.ini$|pyproject\.toml$|setup\.py$|scripts/verify\.sh$|scripts/check_scenarios\.py$|docker-compose\.test\.yml$|\.github/workflows/test\.yml$)'
+          # DB 스키마에 영향을 주는 파일. 바뀌면 빈 DB 마이그레이션 검사를 더한다.
+          # CI 설정이 바뀌어도 돌려서, staging 배포를 막을 검사가 머지 전에 한 번은 돌게 한다.
+          db_pattern='^(app/models/|alembic/|alembic\.ini$|scripts/verify\.sh$|\.github/workflows/test\.yml$)'
+
+          if echo "$changed" | grep -Eq "$code_pattern"; then code=true; else code=false; fi
+          if echo "$changed" | grep -Eq "$db_pattern"; then db=true; else db=false; fi
+          # Draft가 아니면 전체 검사(통합 테스트)까지 한다.
+          if [ "$IS_DRAFT" = "true" ]; then full=false; else full=true; fi
+
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "db=$db" >> "$GITHUB_OUTPUT"
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "code=$code db=$db full=$full"
+
+  static:
+    name: 정적 검사
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # compileall과 시나리오 연결 검사는 표준 라이브러리만 써서 의존성 설치가 필요 없다.
+      - name: Run verify.sh static
+        run: bash scripts/verify.sh static
+
+  unit:
+    name: 단위 테스트
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run verify.sh unit
+        run: bash scripts/verify.sh unit
+
+  integration:
+    name: 전체 테스트 (MySQL)
+    needs: [changes, static, unit]
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      # docker-compose.test.yml 의 mysql-test 와 같은 설정
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+          MYSQL_DATABASE: orderrun_test
+          MYSQL_USER: orderrun_user
+          MYSQL_PASSWORD: orderrun_pass
+          TZ: UTC
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u orderrun_user -porderrun_pass"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Prepare empty migration database
+        if: needs.changes.outputs.db == 'true'
+        run: |
+          mysql -h 127.0.0.1 -P 3307 -uroot -prootpassword -e "
+            CREATE DATABASE orderrun_migration_check CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            GRANT ALL PRIVILEGES ON orderrun_migration_check.* TO 'orderrun_user'@'%';
+            FLUSH PRIVILEGES;"
+
+      - name: Run verify.sh migration
+        if: needs.changes.outputs.db == 'true'
+        run: bash scripts/verify.sh migration
+
+      - name: Run verify.sh integration
+        run: bash scripts/verify.sh integration
+
+  result:
+    name: CI 결과
+    needs: [changes, static, unit, integration]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          echo "Job 결과: $RESULTS"
+          # 건너뛴 Job(skipped)은 그 검사가 필요 없는 변경이라 통과로 본다. 실패·취소는 실패다.
+          for result in $RESULTS; do
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              echo "필요한 검사 중 실패하거나 취소된 Job이 있다."
+              exit 1
+            fi
+          done
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Draft PR이라 통합 테스트는 건너뛰었다. Ready for review로 바꾸면 전체 검사가 실행된다."
+          fi
+          echo "CI 통과"
+
+  deploy-staging:
+    name: Staging 배포
+    needs: result
+    # staging 머지에서 전체 CI가 성공했을 때만 배포한다. 실패·취소면 needs 조건으로 건너뛴다.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging' && needs.result.result == 'success'
+    uses: ./.github/workflows/staging-deploy.yml
+    secrets: inherit

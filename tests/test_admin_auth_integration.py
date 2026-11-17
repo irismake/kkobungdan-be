@@ -26,6 +26,7 @@ ADMIN_PATHS = [
 ]
 
 
+@pytest.mark.scenario("ADMIN-TS-082")
 @pytest.mark.parametrize("method,path", ADMIN_PATHS)
 def test_admin_paths_reject_missing_token(client, method, path):
     response = getattr(client, method)(path)
@@ -34,6 +35,7 @@ def test_admin_paths_reject_missing_token(client, method, path):
     assert response.json()["error"]["code"] == "INVALID_TOKEN"
 
 
+@pytest.mark.scenario("ADMIN-TS-083")
 @pytest.mark.parametrize("method,path", ADMIN_PATHS)
 def test_admin_paths_reject_non_admin_user(client, auth_headers, method, path):
     response = getattr(client, method)(path, headers=auth_headers)
@@ -42,6 +44,7 @@ def test_admin_paths_reject_non_admin_user(client, auth_headers, method, path):
     assert response.json()["error"]["code"] == "FORBIDDEN"
 
 
+@pytest.mark.scenario("ADMIN-TS-084")
 @pytest.mark.parametrize("method,path", ADMIN_PATHS)
 def test_admin_paths_accept_admin_token(client, admin_headers, method, path):
     response = getattr(client, method)(path, headers=admin_headers)
@@ -49,6 +52,7 @@ def test_admin_paths_accept_admin_token(client, admin_headers, method, path):
     assert response.status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-085")
 def test_admin_mutation_rejects_non_admin_user(client, factory, sample_user, auth_headers):
     proposal = factory.proposal(sample_user.id, ProposalStatus.HOLDING)
 
@@ -61,6 +65,7 @@ def test_admin_mutation_rejects_non_admin_user(client, factory, sample_user, aut
     assert response.status_code == 403
 
 
+@pytest.mark.scenario("ADMIN-TS-086")
 def test_login_issues_tokens_for_admin(client, admin_user):
     response = client.post(
         "/v1/admin/auth/login",
@@ -77,6 +82,7 @@ def test_login_issues_tokens_for_admin(client, admin_user):
     assert authorized.status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-087")
 def test_login_rejects_wrong_password(client, admin_user):
     response = client.post(
         "/v1/admin/auth/login",
@@ -87,6 +93,7 @@ def test_login_rejects_wrong_password(client, admin_user):
     assert response.json()["error"]["code"] == "ADMIN_CREDENTIALS_INVALID"
 
 
+@pytest.mark.scenario("ADMIN-TS-088")
 def test_login_rejects_unknown_username_with_same_error(client, admin_user):
     response = client.post(
         "/v1/admin/auth/login",
@@ -102,6 +109,7 @@ def _fail_login(client, times: int) -> None:
         client.post("/v1/admin/auth/login", json={"username": "admin", "password": "wrong-password"})
 
 
+@pytest.mark.scenario("ADMIN-TS-089")
 def test_login_locks_account_after_repeated_failures(client, admin_user):
     _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS)
 
@@ -116,6 +124,7 @@ def test_login_locks_account_after_repeated_failures(client, admin_user):
     assert response.json()["error"]["code"] == "ADMIN_LOGIN_LOCKED"
 
 
+@pytest.mark.scenario("ADMIN-TS-090")
 def test_login_allows_attempts_below_the_limit(client, admin_user):
     _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS - 1)
 
@@ -127,6 +136,7 @@ def test_login_allows_attempts_below_the_limit(client, admin_user):
     assert response.status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-091")
 def test_successful_login_resets_failure_count(client, db, admin_user):
     _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS - 1)
     client.post("/v1/admin/auth/login", json={"username": "admin", "password": "admin-password"})
@@ -136,6 +146,7 @@ def test_successful_login_resets_failure_count(client, db, admin_user):
     assert admin_user.admin_locked_until is None
 
 
+@pytest.mark.scenario("ADMIN-TS-092")
 def test_lock_expires_after_the_lock_duration(client, db, admin_user):
     _fail_login(client, ADMIN_LOGIN_MAX_ATTEMPTS)
 
@@ -150,6 +161,7 @@ def test_lock_expires_after_the_lock_duration(client, db, admin_user):
     assert response.status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-093")
 def test_unknown_username_does_not_lock_the_admin(client, admin_user):
     _fail_login_unknown = [
         client.post("/v1/admin/auth/login", json={"username": "nobody", "password": "x"})
@@ -165,6 +177,7 @@ def test_unknown_username_does_not_lock_the_admin(client, admin_user):
     assert response.status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-094")
 def test_login_rejects_non_admin_account(client, db, sample_user):
     sample_user.admin_username = "notadmin"
     sample_user.password_hash = hash_password("admin-password")
@@ -178,6 +191,7 @@ def test_login_rejects_non_admin_account(client, db, sample_user):
     assert response.status_code == 401
 
 
+@pytest.mark.scenario("ADMIN-TS-095")
 def test_refresh_token_from_admin_login_works(client, admin_user):
     login = client.post(
         "/v1/admin/auth/login",
@@ -192,6 +206,7 @@ def test_refresh_token_from_admin_login_works(client, admin_user):
     assert client.get("/v1/admin/summary", headers={"Authorization": f"Bearer {access_token}"}).status_code == 200
 
 
+@pytest.mark.scenario("ADMIN-TS-096")
 def test_ensure_admin_account_creates_once_and_keeps_password(db, monkeypatch):
     monkeypatch.setattr(settings, "admin_username", "bootstrap-admin")
     monkeypatch.setattr(settings, "admin_initial_password", "first-password")
@@ -211,12 +226,14 @@ def test_ensure_admin_account_creates_once_and_keeps_password(db, monkeypatch):
     assert db.query(User).filter(User.admin_username == "bootstrap-admin").count() == 1
 
 
+@pytest.mark.scenario("ADMIN-TS-097")
 def test_ensure_admin_account_skips_when_unconfigured(db, monkeypatch):
     monkeypatch.setattr(settings, "admin_username", None)
 
     assert AdminAuthService.ensure_admin_account(db) is None
 
 
+@pytest.mark.scenario("ADMIN-TS-098")
 def test_ensure_admin_account_skips_without_initial_password(db, monkeypatch):
     monkeypatch.setattr(settings, "admin_username", "no-password-admin")
     monkeypatch.setattr(settings, "admin_initial_password", None)

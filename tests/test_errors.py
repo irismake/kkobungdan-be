@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -9,6 +11,7 @@ from app.core.errors import ERRORS, AppError, ErrorCode, api_error, error_detail
 from app.core.exceptions import http_exception_handler, unhandled_exception_handler
 
 
+@pytest.mark.scenario("API-TS-024")
 def test_error_catalog_has_required_fields_for_every_error():
     assert set(ERRORS) == set(AppError)
     for spec in ERRORS.values():
@@ -17,6 +20,7 @@ def test_error_catalog_has_required_fields_for_every_error():
         assert spec.message
 
 
+@pytest.mark.scenario("API-TS-025")
 def test_api_error_builds_standard_http_exception_detail():
     exc = api_error(AppError.SMS_SENDER_NOT_CONFIGURED)
 
@@ -28,6 +32,7 @@ def test_api_error_builds_standard_http_exception_detail():
     }
 
 
+@pytest.mark.scenario("API-TS-026")
 def test_api_error_preserves_details_and_headers():
     exc = api_error(
         AppError.INVALID_TOKEN_CREDENTIALS,
@@ -44,6 +49,7 @@ def test_api_error_preserves_details_and_headers():
     }
 
 
+@pytest.mark.scenario("API-TS-027")
 def test_error_detail_uses_validation_catalog_message():
     assert error_detail(AppError.VALIDATION_ERROR, "field: error") == {
         "code": "VALIDATION_ERROR",
@@ -52,6 +58,7 @@ def test_error_detail_uses_validation_catalog_message():
     }
 
 
+@pytest.mark.scenario("API-TS-028")
 def test_every_catalog_message_is_korean():
     for error, spec in ERRORS.items():
         assert any("가" <= char <= "힣" for char in spec.message), f"{error.name} 메시지가 한국어가 아니다"
@@ -82,6 +89,7 @@ def _assert_envelope(payload: dict, code: str) -> None:
     assert payload["timestamp"]
 
 
+@pytest.mark.scenario("API-TS-029")
 def test_unknown_route_returns_envelope():
     client = TestClient(_envelope_app())
 
@@ -91,6 +99,7 @@ def test_unknown_route_returns_envelope():
     _assert_envelope(response.json(), "NOT_FOUND")
 
 
+@pytest.mark.scenario("API-TS-030")
 def test_method_not_allowed_returns_envelope():
     client = TestClient(_envelope_app())
 
@@ -100,6 +109,7 @@ def test_method_not_allowed_returns_envelope():
     _assert_envelope(response.json(), "METHOD_NOT_ALLOWED")
 
 
+@pytest.mark.scenario("API-TS-031")
 def test_unhandled_exception_returns_envelope_without_leaking_details():
     client = TestClient(_envelope_app(), raise_server_exceptions=False)
     original_debug = settings.app_debug
@@ -115,6 +125,7 @@ def test_unhandled_exception_returns_envelope_without_leaking_details():
     assert "internal detail leaked" not in response.text
 
 
+@pytest.mark.scenario("API-TS-032")
 def test_unhandled_exception_includes_details_in_debug_mode():
     client = TestClient(_envelope_app(), raise_server_exceptions=False)
     original_debug = settings.app_debug
@@ -127,6 +138,7 @@ def test_unhandled_exception_includes_details_in_debug_mode():
     assert response.json()["error"]["details"] == "internal detail leaked"
 
 
+@pytest.mark.scenario("API-TS-033")
 def test_error_code_enum_matches_catalog():
     """ErrorCode는 카탈로그가 내보내는 코드 + 방어용 HTTP_ERROR로만 구성된다."""
     catalog_codes = {spec.code for spec in ERRORS.values()}
@@ -134,12 +146,14 @@ def test_error_code_enum_matches_catalog():
     assert catalog_codes | {ErrorCode.HTTP_ERROR} == set(ErrorCode)
 
 
+@pytest.mark.scenario("API-TS-034")
 def test_catalog_codes_are_error_code_members():
     """문자열 리터럴이 섞여 스키마 열거형을 벗어나지 않도록 고정한다."""
     for error, spec in ERRORS.items():
         assert isinstance(spec.code, ErrorCode), f"{error.name}의 code가 ErrorCode가 아니다"
 
 
+@pytest.mark.scenario("API-TS-035")
 def test_fallback_error_stays_inside_error_code_enum():
     from app.core.exceptions import _fallback_error
 
@@ -149,6 +163,7 @@ def test_fallback_error_stays_inside_error_code_enum():
     assert ErrorCode(body["code"]) in ErrorCode
 
 
+@pytest.mark.scenario("API-TS-036")
 def test_no_raw_http_exception_is_raised_in_app_code():
     """HTTP_ERROR는 api_error를 우회해 raw HTTPException을 던질 때만 발생한다.
 
@@ -171,6 +186,7 @@ def test_no_raw_http_exception_is_raised_in_app_code():
     )
 
 
+@pytest.mark.scenario("API-TS-037")
 def test_fallback_error_does_not_leak_upstream_message():
     from app.core.config import settings
     from app.core.exceptions import HTTP_ERROR_MESSAGE, _fallback_error

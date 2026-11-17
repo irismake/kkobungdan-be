@@ -43,8 +43,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = "--strict-markers"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "scenario(id): 테스트가 보장하는 시나리오 ID ({DOMAIN}-TS-NNN). docs/domains/*/test-scenarios.md 표와 1:1로 연결한다",
+    "integration: MySQL이 필요한 테스트. tests/conftest.py가 db fixture 의존으로 자동으로 붙인다",
+]
 
 [tool.coverage.run]
 source = ["app"]

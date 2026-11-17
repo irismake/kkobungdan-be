@@ -244,6 +244,17 @@ assert TEST_ENGINE.dialect.name == "mysql", "Tests must use MySQL"
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """MySQL을 쓰는 테스트(`db` fixture에 직접 또는 `client`·`factory` 등으로 의존)에 `integration`을 붙인다.
+
+    `scripts/verify.sh unit`은 `-m "not integration"`으로 DB 없이 돌릴 수 있는 테스트만 고른다.
+    파일 이름이 아니라 실제 fixture 의존으로 나누므로 단위 파일 안의 DB 테스트도 빠지지 않는다.
+    """
+    for item in items:
+        if "db" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.integration)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def register_event_listeners() -> None:
     """App startup wires notification listeners; mirror it so tests that call

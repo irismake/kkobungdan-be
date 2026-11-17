@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.core.time import utcnow_naive
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import ProposalStatus
@@ -31,6 +33,7 @@ def seed_reasons(db) -> list[ProposalReportReasonQuestion]:
     return reasons
 
 
+@pytest.mark.scenario("PROPOSAL-TS-024")
 def test_list_proposal_report_reasons_returns_active_ordered_questions(client, db, auth_headers):
     reasons = seed_reasons(db)
     db.add(ProposalReportReasonQuestion(question_text="비활성", display_order=6, is_active=False))
@@ -50,6 +53,7 @@ def test_list_proposal_report_reasons_returns_active_ordered_questions(client, d
     ]
 
 
+@pytest.mark.scenario("PROPOSAL-TS-025")
 def test_create_proposal_report_validates_public_target_reporter_and_duplicate(client, db, factory, auth_headers, sample_user):
     reason = seed_reasons(db)[0]
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -86,6 +90,7 @@ def test_create_proposal_report_validates_public_target_reporter_and_duplicate(c
     assert invalid_reason.status_code == 400
 
 
+@pytest.mark.scenario("PROPOSAL-TS-026")
 def test_create_proposal_report_requires_detail_only_for_etc_reason(client, db, factory, sample_user):
     """사유는 필수이고, 기타 사유를 고를 때만 상세 사유가 필수다. 분쟁·탈퇴와 같은 정책이다."""
     reasons = seed_reasons(db)
@@ -128,6 +133,7 @@ def test_create_proposal_report_requires_detail_only_for_etc_reason(client, db, 
     assert data["detailReason"] is None
 
 
+@pytest.mark.scenario("PROPOSAL-TS-027")
 def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offers(client, db, factory, sample_user, admin_headers):
     reason = seed_reasons(db)[0]
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -156,6 +162,7 @@ def test_accept_proposal_report_marks_proposal_reported_and_rejects_waiting_offe
     assert proposal.id not in {item["id"] for item in public.json()["data"]["content"]}
 
 
+@pytest.mark.scenario("PROPOSAL-TS-028")
 def test_admin_can_reject_report_and_cannot_review_report_twice(client, db, factory, sample_user, admin_headers):
     reason = seed_reasons(db)[0]
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
@@ -180,6 +187,7 @@ def test_admin_can_reject_report_and_cannot_review_report_twice(client, db, fact
     assert again.json()["error"]["code"] == "PROPOSAL_REPORT_NOT_REVIEWABLE"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-029")
 def test_admin_report_views_expose_reporter_name(client, db, factory, sample_user, admin_headers):
     """관리자 웹이 신고자를 UUID가 아닌 이름으로 식별할 수 있어야 한다."""
     reason = seed_reasons(db)[0]
@@ -203,6 +211,7 @@ def test_admin_report_views_expose_reporter_name(client, db, factory, sample_use
     assert rejected.json()["data"]["reporterName"] == "탈퇴한 사용자"
 
 
+@pytest.mark.scenario("PROPOSAL-TS-030")
 def test_report_creation_response_omits_reporter_name(client, db, factory, sample_user):
     """앱 응답은 신고자 이름을 채우지 않는다. proposalStatus와 같은 관리자 전용 필드다."""
     reason = seed_reasons(db)[0]

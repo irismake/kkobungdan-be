@@ -1,5 +1,7 @@
 # 동기화 push가 스테이징을 재배포하지 않게 한다
 
+> 2026-11-17 변경: Staging Deploy는 더 이상 `push: staging`으로 직접 실행되지 않는다. staging push는 CI(`test.yml`)를 실행하고, CI가 성공하면 `workflow_call`로 Staging Deploy를 부른다. 아래 `check` 가드는 그대로 동작한다 ([`tdd-workflow.md` CI 실행 정책](../../design-docs/tdd-workflow.md#ci-실행-정책)).
+
 작성일: 2026-08-28 · 상태: 구현·검증 완료, 다음 릴리스 동기화에서 실동작 확인 대기
 
 ## 배경

@@ -22,5 +22,6 @@
 | Settlement Account | [`settlement/README.md`](./settlement/README.md) | [`settlement/test-scenarios.md`](./settlement/test-scenarios.md) |
 | Notification/SMS | [`notification/README.md`](./notification/README.md) | [`notification/test-scenarios.md`](./notification/test-scenarios.md) |
 | Admin/Payment/Settlement | [`admin-payment-settlement/README.md`](./admin-payment-settlement/README.md) | [`admin-payment-settlement/test-scenarios.md`](./admin-payment-settlement/test-scenarios.md) |
+| Chat | [`chat/README.md`](./chat/README.md) | [`chat/test-scenarios.md`](./chat/test-scenarios.md) |
 | API Contract/OpenAPI | [`api-contract/README.md`](./api-contract/README.md) | [`api-contract/test-scenarios.md`](./api-contract/test-scenarios.md) |
 | Health/Config | [`health-config/README.md`](./health-config/README.md) | [`health-config/test-scenarios.md`](./health-config/test-scenarios.md) |

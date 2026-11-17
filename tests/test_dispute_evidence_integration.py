@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timezone
 
 from app.models.dispute_evidence import DisputeEvidence
@@ -35,6 +37,7 @@ def create_runner_dispute(client, db, factory, orderer, runner) -> tuple[int, in
     return proposal.id, offer.id, evidence
 
 
+@pytest.mark.scenario("ADMIN-TS-107")
 def test_get_dispute_evidence_by_proposal_id_allows_participants(client, db, factory):
     orderer = factory.user("01088880001")
     runner = factory.user("01088880002")
@@ -64,6 +67,7 @@ def test_get_dispute_evidence_by_proposal_id_allows_participants(client, db, fac
     assert runner_response.json()["data"]["id"] == evidence.id
 
 
+@pytest.mark.scenario("ADMIN-TS-108")
 def test_get_dispute_evidence_by_offer_id_allows_participants(client, db, factory):
     orderer = factory.user("01088880003")
     runner = factory.user("01088880004")
@@ -84,6 +88,7 @@ def test_get_dispute_evidence_by_offer_id_allows_participants(client, db, factor
     assert runner_response.json()["data"]["id"] == evidence.id
 
 
+@pytest.mark.scenario("ADMIN-TS-109")
 def test_get_dispute_evidence_rejects_non_participant_and_invalid_query(client, db, factory):
     orderer = factory.user("01088880005")
     runner = factory.user("01088880006")
@@ -108,6 +113,7 @@ def test_get_dispute_evidence_rejects_non_participant_and_invalid_query(client, 
     assert duplicate_query.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
+@pytest.mark.scenario("ADMIN-TS-110")
 def test_get_dispute_evidence_returns_not_found(client, db, factory):
     orderer = factory.user("01088880008")
     proposal = factory.proposal(orderer.id, ProposalStatus.MATCHED)

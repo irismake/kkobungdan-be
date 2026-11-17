@@ -38,6 +38,49 @@
 - 코드나 설계로부터 파생된 산출물은 `docs/generated/`에 둔다.
 - 외부 도구, 플랫폼, 참고 자료 메모는 `docs/references/`에 둔다.
 
+## TDD 개발 규칙
+
+채팅과 앞으로 새로 만드는 기능은 문서 → 실패하는 테스트(Red) → 구현(Green) → 정리(Refactor) → 검증 순서로 진행한다. 세부 규칙은 [`docs/design-docs/tdd-workflow.md`](./docs/design-docs/tdd-workflow.md)가 정본이다.
+
+### 문서 위치
+- [`docs/design-docs/tdd-workflow.md`](./docs/design-docs/tdd-workflow.md): TDD 흐름과 문서·테스트 연결 규칙
+- [`docs/references/testing-guidelines.md`](./docs/references/testing-guidelines.md): 테스트 종류, 파일명, 검증 규칙
+- `docs/product-specs/*.md`: 기능별 요구사항(`{DOMAIN}-REQ-*`)
+- `docs/domains/{domain}/test-scenarios.md`: 도메인별 테스트 시나리오(`{DOMAIN}-TS-*`)
+- `tests/`: 단위 테스트(`test_{module}.py`)와 통합 테스트(`test_{domain}_integration.py`)
+- [`scripts/verify.sh`](./scripts/verify.sh): 테스트·정적 검사 자동 실행
+- [`.github/workflows/test.yml`](./.github/workflows/test.yml): PR·staging 머지 시 자동 검증. Draft PR은 정적 검사와 단위 테스트만, 일반 PR과 staging 머지는 전체 검사. staging 배포는 staging 머지 후 전체 CI가 성공해야만 실행된다 (`tdd-workflow.md` "CI 실행 정책")
+
+### 규칙
+- 요구사항(`{DOMAIN}-REQ-*`)을 스펙 문서에, 테스트 시나리오(`{DOMAIN}-TS-*`)를 도메인 시나리오 문서에 먼저 적는다. 시나리오마다 연결된 요구사항 ID를 적는다.
+- 시나리오마다 실패하는 테스트를 먼저 작성하고 실패를 확인한 뒤 구현한다.
+- 시나리오 ID는 `{DOMAIN}-TS-{3자리 번호}`이고, 테스트 함수에 `@pytest.mark.scenario("{ID}")`로 붙인다. 시나리오와 테스트는 1:1이다.
+- 다른 작업이 끝나야 활성화할 테스트는 `@pytest.mark.skip(reason="<조건>")`으로 둔다.
+- 기존 코드를 바꾸는데 그 동작에 테스트가 없으면, 바꿀 동작만 먼저 실패하는 테스트로 쓴다.
+- 브랜치 안에서 Red 커밋(`test:`)과 Green 커밋(`feat:`/`fix:`)을 나눈다.
+- 동작을 바꾸는 PR은 본문에 연결된 시나리오 ID를 적고, 테스트가 없으면 이유를 적는다.
+- 완료 전 `scripts/verify.sh`가 통과해야 한다. `static` 단계가 시나리오 표와 marker의 연결을 검사한다(`scripts/check_scenarios.py`).
+
+### 채팅 (첫 적용 기능)
+- [`docs/product-specs/chat-requirements.md`](./docs/product-specs/chat-requirements.md): 채팅 요구사항
+- [`docs/domains/chat/test-scenarios.md`](./docs/domains/chat/test-scenarios.md): 채팅 테스트 시나리오
+- [`docs/design-docs/chat-architecture.md`](./docs/design-docs/chat-architecture.md): 채팅 서버 구성과 의존성 규칙
+
+## 사용자 표시 용어
+
+문서, 알림·시스템 채팅 문구, 에러 문구, API 설명에 쓰는 한국어 용어는 아래와 같다. 코드 이름은 영어 그대로 둔다. 정본은 [`docs/product-specs/notification-policy.md`의 도메인 용어 매핑](./docs/product-specs/notification-policy.md#도메인-용어-매핑)이다.
+
+| 코드 | 한국어 | 쓰지 않는 표기 |
+|------|--------|----------------|
+| Proposal | 요청 (홈에 공개된 요청은 게시물·게시글) | 제안, 의뢰 |
+| Offer | 지원 | 오퍼, 제안 |
+| Orderer | 행님 | 오더러, 오더, 요청자, 주문자, 고객 |
+| Runner | 꼬붕 | 러너, 지원자, 수행자, 꼬봉 |
+| Mission | 임무 | 미션 |
+| Chat / ChatRoom | 채팅 / 채팅방 | 메시지 |
+
+예외: 브랜드명 `오더런`, GitHub Actions의 "러너", 완료된 실행 계획의 기록.
+
 ## 마이그레이션 규칙
 
 - Alembic revision ID는 현재 저장소처럼 설명형 이름을 사용할 수 있다.
@@ -55,13 +98,13 @@
 - 일반 기능과 수정 사항을 `main`에 직접 커밋하지 않는다.
 - 긴급 수정도 가능하면 `fix/*` → `staging` → `main` 흐름을 따른다. 아직 릴리스할 수 없는 변경이 `staging`에 있어 운영만 즉시 수정해야 한다면 `main`에서 hotfix 브랜치를 만들어 반영한 뒤, 같은 수정을 별도 `fix/*` PR로 `staging`에 반영한다.
 - `.github/workflows/staging-deploy.yml`의 커밋 도달성 가드는 예외 상황에서 이미 `main`에 포함된 커밋의 중복 배포를 막는 안전망으로 유지한다. 명시적으로 재배포할 때는 `workflow_dispatch`를 사용한다.
-- 예외적으로 `staging` → `main`을 squash merge했다면 두 브랜치의 커밋 계보가 갈라지므로 `git fetch origin` 후 `staging`에서 `git reset --hard origin/main`, `git push --force-with-lease origin staging` 순서로 동기화한다. 이 push는 Staging Deploy 워크플로를 트리거하지만, 커밋 도달성 가드가 이미 `main`에 포함된 커밋임을 확인하므로 `check` job만 실행되고 이미지 재빌드와 배포는 건너뛴다.
+- 예외적으로 `staging` → `main`을 squash merge했다면 두 브랜치의 커밋 계보가 갈라지므로 `git fetch origin` 후 `staging`에서 `git reset --hard origin/main`, `git push --force-with-lease origin staging` 순서로 동기화한다. 이 push는 CI(`test.yml`)를 트리거하고, CI가 성공하면 Staging Deploy를 부른다. 커밋 도달성 가드가 이미 `main`에 포함된 커밋임을 확인하므로 `check` job만 실행되고 이미지 재빌드와 배포는 건너뛴다.
 
 ## 테스트 실행 규칙
 
 - 통합 테스트를 실행할 때는 `docker-compose.test.yml`의 `mysql-test` 서비스를 사용한다.
 - 테스트 DB는 `docker compose -f docker-compose.test.yml up -d mysql-test`로 띄우고, `orderrun-mysql-test`가 `healthy`인지 확인한 뒤 `pytest`를 실행한다.
-- 테스트 실행 env는 compose 설정과 맞춘다: `DB_HOST=127.0.0.1`, `DB_PORT=3307`, `DB_USERNAME=orderrun_user`, `DB_PASSWORD=orderrun_pass`, `DB_NAME=orderrun`.
+- 테스트 실행 env는 compose 설정과 맞춘다: `DB_HOST=127.0.0.1`, `DB_PORT=3307`, `DB_USERNAME=orderrun_user`, `DB_PASSWORD=orderrun_pass`, `DB_NAME=orderrun` (`tests/conftest.py`가 `_test`를 붙여 `orderrun_test` DB에 접속한다).
 - 통합 테스트 실패를 로컬 MySQL 인증/스키마 문제로 판단하기 전에 위 테스트 compose 환경으로 재실행한다.
 
 ## 완료 전 확인

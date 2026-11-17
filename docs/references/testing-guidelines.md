@@ -1,5 +1,7 @@
 # 테스트 작성 가이드
 
+> 개발 순서(문서 → 실패하는 테스트 → 구현)는 [`../design-docs/tdd-workflow.md`](../design-docs/tdd-workflow.md)를 따른다.
+
 ## 목적
 
 OrderRun-BE의 테스트는 API 계약, 상태 전이, DB 저장 결과를 신뢰성 있게 검증하는 것을 우선한다.
@@ -26,6 +28,7 @@ OrderRun-BE의 테스트는 API 계약, 상태 전이, DB 저장 결과를 신�
 - DB와 API 서버 없이 좁은 동작을 검증한다.
 - 전화번호 정규화, 시간 변환, 금액 계산, 계좌 masking, provider 요청 payload 구성, error/config 유틸처럼 입출력이 작은 로직에 사용한다.
 - 파일명은 `tests/test_{module}.py` 또는 `tests/test_{service}.py`를 사용한다.
+- `db`·`client`·`factory` fixture를 쓰면 `tests/conftest.py`가 `integration` 표시를 자동으로 붙여 단위 검사(`verify.sh unit`)에서 빠진다. 단위 테스트로 두려면 DB fixture를 쓰지 않는다.
 
 ## 이름 규칙
 
@@ -33,6 +36,7 @@ OrderRun-BE의 테스트는 API 계약, 상태 전이, DB 저장 결과를 신�
 - 예: `test_create_offer_with_valid_proposal_marks_proposal_offered`
 - 조건이나 기대결과가 너무 많아 함수명이 길어지면 테스트를 나눈다.
 - 한 테스트는 하나의 사용자 행위 또는 하나의 정책 묶음을 검증한다.
+- 모든 테스트 함수에 `@pytest.mark.scenario("{DOMAIN}-TS-NNN")`를 붙이고, 같은 ID를 `docs/domains/{domain}/test-scenarios.md` 표에 적는다. 규칙은 [`tdd-workflow.md`](../design-docs/tdd-workflow.md#문서와-테스트-연결)를 따른다.
 
 ## 테스트 데이터
 
