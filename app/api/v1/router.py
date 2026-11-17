@@ -16,6 +16,7 @@ from app.api.v1.settlement.settlement_router import router as settlement_router
 from app.api.v1.terms_agreement.terms_router import router as terms_router
 from app.api.v1.user_auth.auth_router import router as auth_router
 from app.api.v1.user_auth.user_router import router as user_router
+from app.realtime.ws_router import router as chat_ws_router
 
 
 api_router = APIRouter(prefix="/v1")
@@ -28,6 +29,7 @@ api_router.include_router(proposal_report_router)
 api_router.include_router(proposal_router)
 api_router.include_router(offer_router)
 api_router.include_router(chat_router)
+api_router.include_router(chat_ws_router)
 api_router.include_router(settlement_router)
 api_router.include_router(notification_router)
 api_router.include_router(admin_auth_router)

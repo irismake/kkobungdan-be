@@ -621,7 +621,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 - 안읽음 수: 내 읽음 위치 뒤의 상대 일반 채팅 + 나에게 보이는 시스템 채팅(행님 기준 매칭 미선정 안내 제외). 안읽음이 있는 채팅방만 담고, 종료·차단 채팅방도 합계에 포함한다.
 - 전체 읽음: 역할과 관계없이 내 모든 채팅방을 요청 시점의 마지막 채팅까지 읽는다. 그 사이 더 읽은 채팅방은 그대로 두고 상대방 읽음 위치는 바꾸지 않는다.
 - 채팅방 상세의 `partnerLastReadSeq`로 내 채팅의 안읽음 표시(`1`)를 그린다. `version`은 채팅방 상태·읽음 위치가 바뀔 때마다 1 오른다.
-- 실시간 API는 구현하면서 추가한다([`chat-architecture.md`](../design-docs/chat-architecture.md#api-초안)).
+- 실시간: `GET /v1/chat/ws`(WebSocket, 받기 전용). `Authorization: Bearer <access token>`으로 인증한다. 토큰이 없거나 만료·잘못되면 close code `4401`로 거부하고, 연결 중 토큰 만료 시각이 되면 서버가 `4401`로 닫는다. 앱은 토큰을 갱신해 다시 연결하고 놓친 것을 REST(`afterSeq` 조회, 목록, 상세)로 복구한다. 이벤트는 JSON이고 `type`으로 구분한다: `chat.message.created`, `chat.room.updated`, `chat.read.updated`, `chat.unread.updated`, `ping`(30초마다). 형식은 [`chat-architecture.md` 실시간](../design-docs/chat-architecture.md#실시간-chat-req-015017028)을 따른다.
 
 ### Admin Outbox API
 

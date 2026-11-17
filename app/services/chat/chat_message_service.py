@@ -81,7 +81,7 @@ class ChatMessageService:
             created_at=now,
         )
         room.last_message_at = now
-        _mark_read_before(room, role, message.seq)
+        read_moved = _mark_read_before(room, role, message.seq)
         db.add(message)
         try:
             db.flush()
@@ -93,6 +93,8 @@ class ChatMessageService:
                 raise
             return _replay(existing, room_id, request, role)
         chat_events.record_message_created(db, room, message)
+        if read_moved:
+            chat_events.record_read_updated(db, room, role, message.seq - 1, room.version)
         db.commit()
         db.refresh(message)
         return to_message_response(message, role)
@@ -112,15 +114,18 @@ def _replay(existing: ChatMessage, room_id: int, request: ChatMessageSendRequest
     return to_message_response(existing, role)
 
 
-def _mark_read_before(room: ChatRoom, role: ChatRole, seq: int) -> None:
+def _mark_read_before(room: ChatRoom, role: ChatRole, seq: int) -> bool:
     """채팅을 보내면 그 채팅보다 먼저 저장된 채팅까지 읽은 것으로 본다(CHAT-REQ-010). 뒤로만 움직인다."""
     if role == ChatRole.ORDERER:
         if room.orderer_last_read_seq < seq - 1:
             room.orderer_last_read_seq = seq - 1
             room.version += 1
+            return True
     elif room.runner_last_read_seq < seq - 1:
         room.runner_last_read_seq = seq - 1
         room.version += 1
+        return True
+    return False
 
 
 def to_message_response(message: ChatMessage, viewer: ChatRole) -> ChatMessageResponse:

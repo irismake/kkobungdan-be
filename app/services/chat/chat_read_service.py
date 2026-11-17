@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError, api_error
 from app.models.chat import ChatRole, ChatRoom
 from app.schemas.chat import ChatReadAllResponse, ChatReadResponse, ChatUnreadRoomResponse, ChatUnreadSummaryResponse
+from app.services.chat import chat_events
 from app.services.chat.chat_room_service import ChatRoomService
 from app.services.chat.unread import last_read_seq, unread_count
 
@@ -95,9 +96,15 @@ def _rooms_with_unread_position(db: Session, user_id: str) -> list[ChatRoom]:
 
 
 def _advance(db: Session, target: ReadTarget) -> None:
+    """읽음 위치를 올린다. 실제로 움직였을 때만 `version`을 올리고 `chat.read.updated`를 기록한다."""
     column = ChatRoom.orderer_last_read_seq if target.role == ChatRole.ORDERER else ChatRoom.runner_last_read_seq
-    (
+    moved = (
         db.query(ChatRoom)
         .filter(ChatRoom.id == target.room_id, column < target.seq)
         .update({column: target.seq, ChatRoom.version: ChatRoom.version + 1}, synchronize_session=False)
     )
+    if not moved:
+        return
+    room = db.get(ChatRoom, target.room_id)
+    last_read, version = db.query(column, ChatRoom.version).filter(ChatRoom.id == target.room_id).one()
+    chat_events.record_read_updated(db, room, target.role, last_read, version)

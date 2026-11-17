@@ -139,5 +139,9 @@ def _recipients(message: ChatMessage, room: ChatRoom) -> list[ChatRole]:
 
 
 def register_chat_consumers(registry, session_factory: Callable[[], Session], fcm_service) -> None:
-    """앱 시작 때 채팅 전달 대상을 등록한다. `chat.realtime`은 4-7에서 추가한다."""
+    """앱 시작 때 채팅 전달 대상(`chat.realtime`, `chat.push`)을 등록한다."""
+    from app.realtime.hub import chat_hub
+    from app.services.chat.chat_realtime import ChatRealtimeConsumer
+
+    registry.register(ChatRealtimeConsumer(session_factory, chat_hub))
     registry.register(ChatPushConsumer(session_factory, FCMPushSender(fcm_service)))

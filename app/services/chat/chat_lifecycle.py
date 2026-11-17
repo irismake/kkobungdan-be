@@ -5,6 +5,7 @@
 기존 EventBus는 핸들러 예외를 삼키므로 쓰지 않는다.
 
 - 채팅방 행을 잠근 뒤 상태를 바꾸고 시스템 채팅을 저장한다. 순번(`seq`)도 이 잠금 안에서 매긴다.
+- 채팅방 상태나 요청·지원 상태가 바뀌면 `chat.room.updated`를 기록하고 순서 값(`version`)을 올린다(CHAT-REQ-017·028).
 - `CLOSED` 채팅방은 상태도 바꾸지 않고 상태 안내도 남기지 않는다(늦게 온 요청 무시).
   돈 안내(수행비 입금·환불 완료)는 닫힌 채팅방에도 남긴다(CHAT-REQ-022).
 - 같은 사건은 `system_event_key`로 한 번만 저장한다(CHAT-REQ-024). 같은 사건이 다시 들어와도 결과가 같다.
@@ -104,6 +105,8 @@ class ChatLifecycle:
         if all_confirmed:
             ChatLifecycle._change(db, room, RoomChange.ALL_CONFIRMED, SystemChatEvent.ALL_CONFIRMED)
         elif room.status == ChatRoomStatus.ACTIVE:
+            # 채팅방 상태는 그대로지만 지원·요청 상태(임무 완료 확인 여부)가 바뀌었다.
+            chat_events.record_room_updated(db, room)
             ChatLifecycle._add_system_chat(db, room, one_side)
 
     # ------------------------------------------------------------------ 분쟁
@@ -201,7 +204,8 @@ class ChatLifecycle:
         if not unchanged:
             room.status = new_status
             room.status_reason = new_reason
-            room.version += 1
+        # 매칭처럼 채팅방 상태가 그대로여도 요청·지원 상태가 바뀌었으므로 알린다(version도 여기서 오른다).
+        chat_events.record_room_updated(db, room)
         if event is not None:
             ChatLifecycle._add_system_chat(db, room, event, payload=payload)
 

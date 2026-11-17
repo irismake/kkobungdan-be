@@ -64,8 +64,9 @@
 | Service | `app/services/chat/system_chat.py` | 사건별 문구·받는 사람·안읽음·푸시 대상 표 (CHAT-REQ-021) |
 | Outbox (공통) | `app/models/outbox.py`, `app/services/outbox/` | 이벤트 기록·발행·전달 처리·재시도·DEAD·재처리·정리. 채팅을 모르는 공통 모듈 ([`outbox.md`](./outbox.md)) |
 | Service | `app/services/chat/chat_events.py` | 채팅 이벤트 유형과 내용 정의, `record_event` 호출 도우미 |
-| Consumer | `app/services/chat/consumers/realtime_consumer.py` | 채팅 이벤트를 받는 사람을 정해 hub로 보낸다 (WebSocket) |
-| Consumer | `app/services/chat/consumers/push_consumer.py` | 채팅 이벤트를 받는 사람·문구·배지로 바꿔 FCM으로 보낸다 |
+| Consumer | `app/services/chat/chat_realtime.py` | `chat.realtime`: 채팅 이벤트를 받는 사람을 정해 hub로 보낸다 (WebSocket) |
+| Consumer | `app/services/chat/chat_push.py` | `chat.push`: 채팅 이벤트를 받는 사람·문구·배지로 바꿔 FCM으로 보낸다. 시작 때 두 전달 대상을 등록하는 `register_chat_consumers`도 여기 있다 |
+| Service | `app/services/notification/badge.py` | 앱 아이콘 배지(채팅 안읽음 합계 + 알림 미읽음) |
 | Model | `app/models/chat.py` | `ChatRoom`, `ChatMessage`와 상태 enum |
 | Schema | `app/schemas/chat.py` | 요청·응답 DTO (`extra="forbid"`, camelCase alias) |
 
@@ -182,10 +183,14 @@
 
 | type | 받는 사람 | 내용 |
 |------|-----------|------|
-| `chat.message.created` | 두 참여자 | 채팅 ID, 채팅방 ID, `seq`, 유형, 보는 사람 기준 내용, 시각 |
-| `chat.room.updated` | 두 참여자 | 채팅방 상태, `statusReason`, 요청·지원 상태, 완료 확인 여부, `version` |
-| `chat.read.updated` | 상대방 | 읽은 사람의 마지막 읽은 `seq`, `version` |
-| `chat.unread.updated` | 본인 | 채팅방 안읽음 수, 전체 합계 |
+| `chat.message.created` | 두 참여자 | `roomId`, `message`(채팅 조회 응답과 같은 형식: `id`, `seq`, `type`, `senderId`, 보는 사람 기준 `content`, `systemEvent`, `createdAt`) |
+| `chat.room.updated` | 두 참여자 | `roomId`, `status`, `statusReason`, `proposalStatus`, `offerStatus`, `version`. 완료 확인 여부는 `offerStatus`(`RUNNER_COMPLETED`)·`proposalStatus`(`ORDER_COMPLETED`)로 나타난다 |
+| `chat.read.updated` | 상대방 | `roomId`, 읽은 사람의 `lastReadSeq`, `version` |
+| `chat.unread.updated` | 본인 | `roomId`, `unreadCount`, `totalUnreadCount`. 새 채팅을 받은 쪽과 읽은 사람에게 보낸다 |
+| `ping` | 연결된 사용자 | 30초마다. 앱은 무시한다 |
+
+- `version`은 채팅방마다 하나의 순서 값이다. 채팅방 상태·요청·지원 상태가 바뀌거나 읽음 위치가 움직일 때마다 1 오른다. 앱은 채팅방별로 받은 `version`보다 작은 `chat.room.updated`·`chat.read.updated`는 무시한다(CHAT-REQ-028).
+- 이벤트 내용(outbox `payload`)에 참여자 ID를 넣어 둔다. 받을 연결이 하나도 없으면 `chat.realtime`은 DB를 보지 않고 `SKIPPED`로 끝낸다.
 
 - 끊긴 동안 놓친 것은 REST로 복구한다: 채팅방별 `afterSeq` 조회, 채팅방 목록, 상세(읽음 위치·상태).
 - 실시간 이벤트는 서비스가 outbox에 기록하고, `ChatRealtimeConsumer`가 받는 사람을 정해 hub로 보낸다. 동기 코드(relay 스레드)에서 hub로 넘길 때는 hub가 가진 이벤트 루프에 `call_soon_threadsafe`로 넘긴다.
