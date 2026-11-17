@@ -45,6 +45,7 @@ TDD 흐름에서는 시나리오를 먼저 문서에 적고, 시나리오마다 
 | `API` | [`../domains/api-contract/test-scenarios.md`](../domains/api-contract/test-scenarios.md) |
 | `HEALTH` | [`../domains/health-config/test-scenarios.md`](../domains/health-config/test-scenarios.md) |
 | `CHAT` | [`../domains/chat/test-scenarios.md`](../domains/chat/test-scenarios.md) |
+| `OUTBOX` | [`../domains/outbox/test-scenarios.md`](../domains/outbox/test-scenarios.md) |
 
 새 도메인을 만들면 이 표에 접두어를 추가한다.
 
