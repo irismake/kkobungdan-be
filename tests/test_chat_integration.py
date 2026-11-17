@@ -628,3 +628,593 @@ def test_chat_list_pages_across_both_roles_without_gaps_or_duplicates(client, db
     assert set(ids) == expected
     roles = {room["myRole"] for room in first["content"] + second["content"]}
     assert roles == {"ORDERER", "RUNNER"}
+
+
+# ================================================================== 4-4 채팅방 상태와 시스템 채팅
+
+
+class Journey:
+    """요청 하나를 실제 API로 진행시키는 테스트 도우미. 꼬붕 여러 명이 지원할 수 있다."""
+
+    __test__ = False
+
+    def __init__(self, client, db, factory, orderer, admin_headers=None, errand_fee: int = 5000):
+        self.client, self.db, self.factory = client, db, factory
+        self.orderer = orderer
+        self.admin_headers = admin_headers
+        self.proposal = factory.proposal(orderer.id, ProposalStatus.POSTED)
+        self.proposal.errand_fee = errand_fee
+        db.commit()
+        self.runners: list = []
+        self.offer_ids: dict[str, int] = {}
+
+    # ------------------------------------------------------------- 사건
+    def apply(self, phone: str, name: str):
+        runner = runner_with_account(self.factory, phone, name)
+        self.offer_ids[runner.id] = apply(self.client, self.factory, self.proposal, runner)
+        self.runners.append(runner)
+        return runner
+
+    def accept(self, runner) -> None:
+        response = self.client.post(f"/v1/offer/{self.offer_ids[runner.id]}/accept", headers=self.h(self.orderer))
+        assert response.status_code == 201, response.json()
+
+    def cancel_offer(self, runner):
+        return self.client.delete(f"/v1/offer/{self.offer_ids[runner.id]}", headers=self.h(runner))
+
+    def withdraw(self, user) -> None:
+        from app.models.user import UserWithdrawalReasonQuestion
+
+        reason = UserWithdrawalReasonQuestion(question_text="서비스를 잘 쓰지 않아요", display_order=99, requires_detail=False, is_active=True)
+        self.db.add(reason)
+        self.db.commit()
+        response = self.client.delete("/v1/user", json={"reasonQuestionId": reason.id}, headers=self.h(user))
+        assert response.status_code == 200, response.json()
+
+    def runner_complete(self, runner):
+        return self.client.post(f"/v1/offer/{self.offer_ids[runner.id]}/complete-delivery", headers=self.h(runner))
+
+    def orderer_confirm(self):
+        return self.client.post(f"/v1/proposal/{self.proposal.id}/confirm-received", headers=self.h(self.orderer))
+
+    def dispute(self, by: str, runner):
+        from app.models.dispute_survey import DisputeSurveyQuestion, DisputeSurveyTargetType
+
+        target = DisputeSurveyTargetType.ORDER if by == "ORDERER" else DisputeSurveyTargetType.RUNNER
+        question = DisputeSurveyQuestion(target_type=target, question_text="문제가 있었어요", display_order=1, is_active=True, requires_detail=False)
+        self.db.add(question)
+        self.db.commit()
+        body = {"reasonQuestionId": question.id, "detailReason": "약속 장소에 없었어요"}
+        if by == "ORDERER":
+            response = self.client.post(f"/v1/proposal/{self.proposal.id}/dispute", json=body, headers=self.h(self.orderer))
+        else:
+            response = self.client.post(f"/v1/offer/{self.offer_ids[runner.id]}/dispute", json=body, headers=self.h(runner))
+        assert response.status_code == 200, response.json()
+
+    def resolve(self, outcome: str, runner) -> None:
+        response = self.client.post(
+            f"/v1/admin/missions/{self.mission(runner).id}/resolve", json={"resolution": outcome}, headers=self.admin_headers
+        )
+        assert response.status_code == 200, response.json()
+
+    def payout(self, runner):
+        return self.client.post(f"/v1/admin/payout/{self.mission(runner).id}/complete", json={"adminNote": "이체 완료"}, headers=self.admin_headers)
+
+    def cancel_proposal(self):
+        return self.client.post(f"/v1/proposal/{self.proposal.id}/cancel", headers=self.h(self.orderer))
+
+    def admin_cancel(self):
+        return self.client.post(f"/v1/admin/proposal/{self.proposal.id}/cancel", json={"adminNote": "운영 취소"}, headers=self.admin_headers)
+
+    def refund_complete(self) -> None:
+        from app.models.refund import Refund
+
+        refund = self.db.query(Refund).filter(Refund.proposal_id == self.proposal.id).one()
+        response = self.client.post(f"/v1/admin/refund/{refund.id}/complete", json={"adminNote": "환불 완료"}, headers=self.admin_headers)
+        assert response.status_code == 200, response.json()
+
+    def report_and_accept(self) -> None:
+        from app.models.proposal_report import ProposalReport, ProposalReportReasonQuestion, ProposalReportStatus
+
+        reason = ProposalReportReasonQuestion(question_text="광고 또는 스팸이에요", display_order=1, is_active=True, requires_detail=False)
+        self.db.add(reason)
+        self.db.commit()
+        reporter = self.factory.user("01079999999", name="신고자")
+        report = ProposalReport(proposal_id=self.proposal.id, reporter_id=reporter.id, reason_question_id=reason.id, status=ProposalReportStatus.PENDING)
+        self.db.add(report)
+        self.db.commit()
+        response = self.client.post(f"/v1/admin/proposal-reports/{report.id}/accept", headers=self.admin_headers)
+        assert response.status_code == 200, response.json()
+
+    # ------------------------------------------------------------- 조회
+    def h(self, user) -> dict:
+        return self.factory.headers_for(user)
+
+    def mission(self, runner):
+        from app.models.mission import Mission
+
+        self.db.expire_all()
+        return self.db.query(Mission).filter(Mission.offer_id == self.offer_ids[runner.id]).one()
+
+    def room(self, runner):
+        self.db.expire_all()
+        return room_for_offer(self.db, self.offer_ids[runner.id])
+
+    def state(self, runner) -> tuple[str, str | None]:
+        room = self.room(runner)
+        return room.status.value, room.status_reason.value if room.status_reason else None
+
+    def system_chats(self, runner, viewer=None) -> list[tuple[str, str]]:
+        """(사건 코드, 보는 사람에게 보이는 문구) 목록. 기본은 행님 기준."""
+        chats = messages(self.client, self.factory, self.room(runner).id, viewer or self.orderer)
+        return [(m["systemEvent"], m["content"]) for m in chats if m["type"] == "SYSTEM"]
+
+    def events(self, runner) -> list[str]:
+        return [event for event, _ in self.system_chats(runner)]
+
+
+@pytest.fixture
+def journey(client, db, factory, sample_user, admin_headers):
+    return Journey(client, db, factory, sample_user, admin_headers)
+
+
+# ------------------------------------------------------------------ 채팅방 상태 변경 (CHAT-REQ-007·008·009)
+
+
+@pytest.mark.scenario("CHAT-TS-018")
+def test_matching_keeps_the_selected_room_and_closes_the_others(journey):
+    a = journey.apply("01071000001", "꼬붕 A")
+    b = journey.apply("01071000002", "꼬붕 B")
+
+    journey.accept(a)
+
+    assert journey.state(a) == ("ACTIVE", None)
+    assert journey.state(b) == ("CLOSED", "NOT_SELECTED")
+
+
+@pytest.mark.scenario("CHAT-TS-019")
+@pytest.mark.parametrize("how", ["cancel", "withdraw"])
+def test_runner_cancelling_or_withdrawing_closes_the_room(journey, how):
+    runner = journey.apply("01071000003", "꼬붕 하나")
+
+    if how == "cancel":
+        assert journey.cancel_offer(runner).status_code == 204
+    else:
+        journey.withdraw(runner)
+
+    assert journey.state(runner) == ("CLOSED", "OFFER_CANCELLED")
+
+
+@pytest.mark.scenario("CHAT-TS-020")
+def test_orderer_cancelling_before_matching_closes_every_room(journey):
+    a = journey.apply("01071000004", "꼬붕 A")
+    b = journey.apply("01071000005", "꼬붕 B")
+
+    assert journey.cancel_proposal().status_code == 200
+
+    assert journey.state(a) == ("CLOSED", "PROPOSAL_CANCELLED")
+    assert journey.state(b) == ("CLOSED", "PROPOSAL_CANCELLED")
+
+
+@pytest.mark.scenario("CHAT-TS-021")
+@pytest.mark.parametrize("matched", [False, True], ids=["before-match", "after-match"])
+def test_admin_cancel_closes_rooms_that_were_still_open(journey, matched):
+    a = journey.apply("01071000006", "꼬붕 A")
+    b = journey.apply("01071000007", "꼬붕 B")
+    if matched:
+        journey.accept(a)
+
+    assert journey.admin_cancel().status_code == 200
+
+    assert journey.state(a) == ("CLOSED", "ADMIN_CANCELLED")
+    # 매칭 때 이미 닫힌 방은 이유가 바뀌지 않는다
+    assert journey.state(b) == (("CLOSED", "NOT_SELECTED") if matched else ("CLOSED", "ADMIN_CANCELLED"))
+
+
+@pytest.mark.scenario("CHAT-TS-022")
+def test_accepting_a_report_closes_waiting_rooms_without_a_system_chat(journey):
+    runner = journey.apply("01071000008", "꼬붕 하나")
+    before = journey.events(runner)
+
+    journey.report_and_accept()
+
+    assert journey.state(runner) == ("CLOSED", "ADMIN_CANCELLED")
+    assert journey.events(runner) == before
+
+
+@pytest.mark.scenario("CHAT-TS-023")
+@pytest.mark.parametrize(
+    "raised_by,outcome,disputed,resolved",
+    [
+        ("ORDERER", "COMPLETED", "ORDERER_DISPUTED", "DISPUTE_COMPLETED"),
+        ("RUNNER", "FAILED", "RUNNER_DISPUTED", "DISPUTE_FAILED"),
+    ],
+)
+def test_dispute_pauses_the_room_and_resolution_closes_it(journey, raised_by, outcome, disputed, resolved):
+    runner = journey.apply("01071000009", "꼬붕 하나")
+    journey.accept(runner)
+
+    journey.dispute(raised_by, runner)
+    assert journey.state(runner) == ("INACTIVE", disputed)
+
+    journey.resolve(outcome, runner)
+    assert journey.state(runner) == ("CLOSED", resolved)
+
+
+@pytest.mark.scenario("CHAT-TS-025")
+def test_room_closes_only_after_both_sides_confirm(journey):
+    runner = journey.apply("01071000010", "꼬붕 하나")
+    journey.accept(runner)
+
+    assert journey.runner_complete(runner).status_code == 200
+    assert journey.state(runner) == ("ACTIVE", None)
+
+    assert journey.orderer_confirm().status_code == 200
+    assert journey.state(runner) == ("CLOSED", "ALL_CONFIRMED")
+
+
+@pytest.mark.scenario("CHAT-TS-026")
+def test_repeating_a_completion_is_rejected_and_changes_nothing(journey):
+    runner = journey.apply("01071000011", "꼬붕 하나")
+    journey.accept(runner)
+    assert journey.runner_complete(runner).status_code == 200
+    before = (journey.state(runner), journey.events(runner))
+
+    again = journey.runner_complete(runner)
+
+    assert again.status_code >= 400
+    assert (journey.state(runner), journey.events(runner)) == before
+
+
+@pytest.mark.scenario("CHAT-TS-027")
+@pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)")
+def test_completion_works_even_when_one_side_blocked_the_other(journey):
+    """차단이 있어도 임무 완료(확인)는 처리된다."""
+
+
+@pytest.mark.scenario("CHAT-TS-028")
+@pytest.mark.parametrize("closed_by", ["dispute", "cancel"], ids=["inactive", "closed"])
+def test_inactive_or_closed_room_rejects_new_chats(journey, client, factory, db, closed_by):
+    runner = journey.apply("01071000012", "꼬붕 하나")
+    if closed_by == "dispute":
+        journey.accept(runner)
+        journey.dispute("ORDERER", runner)
+    else:
+        journey.cancel_offer(runner)
+    room_id = journey.room(runner).id
+    before = message_count(db, room_id)
+
+    response = send(client, factory, room_id, runner, content="보낼 수 없는 채팅")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CHAT_ROOM_NOT_SENDABLE"
+    assert message_count(db, room_id) == before
+
+
+@pytest.mark.scenario("CHAT-TS-029")
+@pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)")
+def test_blocked_active_room_rejects_chats_from_both_sides(journey):
+    """한쪽이 차단한 ACTIVE 채팅방에서는 양쪽 모두 보낼 수 없다."""
+
+
+@pytest.mark.scenario("CHAT-TS-094")
+def test_sending_against_a_stale_open_room_is_rejected_with_the_new_state(journey, client, factory):
+    runner = journey.apply("01071000013", "꼬붕 하나")
+    room_id = journey.room(runner).id
+    journey.cancel_offer(runner)  # 앱은 아직 ACTIVE로 알고 있다
+
+    response = send(client, factory, room_id, journey.orderer, content="늦게 보낸 채팅")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "CHAT_ROOM_NOT_SENDABLE"
+    detail = client.get(f"/v1/chat-room/{room_id}", headers=factory.headers_for(journey.orderer)).json()["data"]
+    assert (detail["status"], detail["statusReason"]) == ("CLOSED", "OFFER_CANCELLED")
+
+
+@pytest.mark.scenario("CHAT-TS-087")
+def test_admin_cannot_cancel_a_disputed_request_and_room_stays_paused(journey):
+    runner = journey.apply("01071000014", "꼬붕 하나")
+    journey.accept(runner)
+    journey.dispute("RUNNER", runner)
+    before = journey.events(runner)
+
+    response = journey.admin_cancel()
+
+    assert response.status_code >= 400
+    assert journey.state(runner) == ("INACTIVE", "RUNNER_DISPUTED")
+    assert journey.events(runner) == before
+
+
+# ------------------------------------------------------------------ 시스템 채팅 (CHAT-REQ-020·021·024)
+
+ORDERER_TEXT = {
+    "OFFER_CREATED": "지원으로 채팅이 시작됐어요.",
+    "MATCHED": "매칭이 완료되어 임무가 시작됐어요.",
+    "NOT_SELECTED": "다른 꼬붕과 매칭되어 채팅이 종료됐어요.",
+    "OFFER_CANCELLED": "꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요.",
+    "RUNNER_COMPLETED": "꼬붕이 임무를 완료했어요. 행님도 임무 완료를 확인해 주세요.",
+    "ORDERER_CONFIRMED": "꼬붕의 임무 완료를 기다리고 있어요.",
+    "ALL_CONFIRMED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
+    "DISPUTE_RAISED": "분쟁 중인 임무예요. 분쟁이 해결될 때까지 잠시만 기다려 주세요.",
+    "DISPUTE_COMPLETED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
+    "DISPUTE_FAILED": "종료된 임무예요. 더 이상 진행할 수 없어요.",
+    "PROPOSAL_CANCELLED": "요청이 취소되어 채팅이 종료됐어요.",
+    "ADMIN_CANCELLED_AFTER_MATCH": "종료된 임무예요. 더 이상 진행할 수 없어요.",
+    "PAYOUT_COMPLETED": "꼬붕에게 수행비 5,000원이 입금됐어요.",
+    "REFUND_COMPLETED": "행님에게 환불이 완료됐어요.",
+}
+RUNNER_TEXT = {
+    **ORDERER_TEXT,
+    "NOT_SELECTED": "이번에는 매칭되지 않았어요. 채팅이 자동으로 종료돼요.",
+    "OFFER_CANCELLED": "지원을 취소했어요. 채팅이 자동으로 종료돼요.",
+    "RUNNER_COMPLETED": "행님의 임무 완료 확인을 기다리고 있어요.",
+    "ORDERER_CONFIRMED": "행님이 임무 완료를 확인했어요. 꼬붕도 임무를 완료해 주세요.",
+}
+
+
+def _cause(journey: Journey, case: str):
+    """사건을 일으키고, 확인할 꼬붕과 그 채팅방에 새로 생겨야 하는 시스템 채팅을 돌려준다."""
+    a = journey.apply("01072000001", "꼬붕 A")
+    if case == "OFFER_CREATED":
+        return a, "OFFER_CREATED"
+    if case == "NOT_SELECTED":
+        b = journey.apply("01072000002", "꼬붕 B")
+        journey.accept(a)
+        return b, "NOT_SELECTED"
+    if case == "OFFER_CANCELLED":
+        journey.cancel_offer(a)
+        return a, "OFFER_CANCELLED"
+    if case == "OFFER_CANCELLED_BY_WITHDRAWAL":
+        journey.withdraw(a)
+        return a, "OFFER_CANCELLED"
+    if case == "PROPOSAL_CANCELLED":
+        journey.cancel_proposal()
+        return a, "PROPOSAL_CANCELLED"
+    if case == "PROPOSAL_CANCELLED_BY_ADMIN":
+        journey.admin_cancel()
+        return a, "PROPOSAL_CANCELLED"
+    journey.accept(a)
+    if case == "MATCHED":
+        return a, "MATCHED"
+    if case == "RUNNER_COMPLETED":
+        journey.runner_complete(a)
+        return a, "RUNNER_COMPLETED"
+    if case == "ORDERER_CONFIRMED":
+        journey.orderer_confirm()
+        return a, "ORDERER_CONFIRMED"
+    if case == "ALL_CONFIRMED":
+        journey.runner_complete(a)
+        journey.orderer_confirm()
+        return a, "ALL_CONFIRMED"
+    if case == "DISPUTE_RAISED":
+        journey.dispute("ORDERER", a)
+        return a, "DISPUTE_RAISED"
+    if case == "DISPUTE_COMPLETED":
+        journey.dispute("ORDERER", a)
+        journey.resolve("COMPLETED", a)
+        return a, "DISPUTE_COMPLETED"
+    if case == "DISPUTE_FAILED":
+        journey.dispute("RUNNER", a)
+        journey.resolve("FAILED", a)
+        return a, "DISPUTE_FAILED"
+    if case == "ADMIN_CANCELLED_AFTER_MATCH":
+        journey.admin_cancel()
+        return a, "ADMIN_CANCELLED_AFTER_MATCH"
+    if case == "PAYOUT_COMPLETED":
+        journey.runner_complete(a)
+        journey.orderer_confirm()
+        journey.payout(a)
+        return a, "PAYOUT_COMPLETED"
+    if case == "REFUND_COMPLETED":
+        journey.dispute("RUNNER", a)
+        journey.resolve("FAILED", a)
+        journey.refund_complete()
+        return a, "REFUND_COMPLETED"
+    raise AssertionError(case)
+
+
+@pytest.mark.scenario("CHAT-TS-089")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "OFFER_CREATED",
+        "MATCHED",
+        "NOT_SELECTED",
+        "OFFER_CANCELLED",
+        "OFFER_CANCELLED_BY_WITHDRAWAL",
+        "RUNNER_COMPLETED",
+        "ORDERER_CONFIRMED",
+        "ALL_CONFIRMED",
+        "DISPUTE_RAISED",
+        "DISPUTE_COMPLETED",
+        "DISPUTE_FAILED",
+        "PROPOSAL_CANCELLED",
+        "PROPOSAL_CANCELLED_BY_ADMIN",
+        "ADMIN_CANCELLED_AFTER_MATCH",
+        "PAYOUT_COMPLETED",
+        "REFUND_COMPLETED",
+    ],
+)
+def test_each_event_stores_one_system_chat_with_each_viewers_wording(journey, case):
+    runner, event = _cause(journey, case)
+
+    orderer_view = journey.system_chats(runner)
+    runner_view = journey.system_chats(runner, viewer=runner if case != "OFFER_CANCELLED_BY_WITHDRAWAL" else None)
+
+    assert [e for e, _ in orderer_view].count(event) == 1
+    assert orderer_view[-1] == (event, ORDERER_TEXT[event])
+    if case != "OFFER_CANCELLED_BY_WITHDRAWAL":  # 탈퇴한 꼬붕은 더 조회하지 않는다
+        assert runner_view[-1] == (event, RUNNER_TEXT[event])
+
+
+@pytest.mark.scenario("CHAT-TS-064")
+@pytest.mark.parametrize(
+    "matched,text",
+    [
+        (False, "요청이 취소되어 채팅이 종료됐어요."),
+        (True, "종료된 임무예요. 더 이상 진행할 수 없어요."),
+    ],
+    ids=["before-match", "after-match"],
+)
+def test_admin_cancel_wording_depends_on_whether_a_mission_exists(journey, matched, text):
+    runner = journey.apply("01071000015", "꼬붕 하나")
+    if matched:
+        journey.accept(runner)
+
+    journey.admin_cancel()
+
+    assert journey.system_chats(runner)[-1][1] == text
+    assert journey.system_chats(runner, viewer=runner)[-1][1] == text
+
+
+@pytest.mark.scenario("CHAT-TS-066")
+def test_payout_notice_shows_the_formatted_amount_to_both(client, db, factory, sample_user, admin_headers):
+    journey = Journey(client, db, factory, sample_user, admin_headers, errand_fee=15000)
+    runner = journey.apply("01071000016", "꼬붕 하나")
+    journey.accept(runner)
+    journey.runner_complete(runner)
+    journey.orderer_confirm()
+
+    assert journey.payout(runner).status_code == 200
+
+    expected = "꼬붕에게 수행비 15,000원이 입금됐어요."
+    assert journey.system_chats(runner)[-1] == ("PAYOUT_COMPLETED", expected)
+    assert journey.system_chats(runner, viewer=runner)[-1] == ("PAYOUT_COMPLETED", expected)
+
+
+@pytest.mark.scenario("CHAT-TS-065")
+def test_refund_notice_only_goes_to_a_matched_room(client, db, factory, sample_user, admin_headers):
+    after_match = Journey(client, db, factory, sample_user, admin_headers)
+    matched_runner = after_match.apply("01071000017", "꼬붕 하나")
+    after_match.accept(matched_runner)
+    after_match.dispute("RUNNER", matched_runner)
+    after_match.resolve("FAILED", matched_runner)
+
+    before_match = Journey(client, db, factory, sample_user, admin_headers)
+    waiting_runner = before_match.apply("01071000018", "꼬붕 둘")
+    assert before_match.cancel_proposal().status_code == 200
+
+    after_match.refund_complete()
+    before_match.refund_complete()
+
+    assert after_match.events(matched_runner)[-1] == "REFUND_COMPLETED"
+    assert "REFUND_COMPLETED" not in before_match.events(waiting_runner)
+
+
+@pytest.mark.scenario("CHAT-TS-090")
+def test_refund_notice_appears_only_once_the_refund_is_completed(journey):
+    runner = journey.apply("01071000019", "꼬붕 하나")
+    journey.accept(runner)
+    journey.dispute("RUNNER", runner)
+    journey.resolve("FAILED", runner)  # 환불이 PENDING으로 생긴다
+
+    assert "REFUND_COMPLETED" not in journey.events(runner)
+
+    journey.refund_complete()
+
+    assert journey.events(runner).count("REFUND_COMPLETED") == 1
+
+
+@pytest.mark.scenario("CHAT-TS-059")
+def test_the_same_payout_handled_twice_leaves_one_notice(journey, db):
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+
+    runner = journey.apply("01071000020", "꼬붕 하나")
+    journey.accept(runner)
+    journey.runner_complete(runner)
+    journey.orderer_confirm()
+    assert journey.payout(runner).status_code == 200
+
+    # 같은 사건이 한 번 더 전달된 경우 (예: 재처리)
+    ChatLifecycle.on_payout_completed(db, journey.mission(runner))
+    db.commit()
+
+    assert journey.events(runner).count("PAYOUT_COMPLETED") == 1
+
+
+@pytest.mark.scenario("CHAT-TS-060")
+@pytest.mark.parametrize(
+    "case",
+    [
+        "payout-in-closed-room",
+        "refund-in-closed-room",
+        pytest.param("blocked-room", marks=pytest.mark.skip(reason="사용자 차단 구현 후 활성화 (user-block.md)")),
+    ],
+)
+def test_money_notices_are_stored_even_in_closed_rooms(journey, case):
+    runner = journey.apply("01071000021", "꼬붕 하나")
+    journey.accept(runner)
+    if case == "payout-in-closed-room":
+        journey.runner_complete(runner)
+        journey.orderer_confirm()
+        assert journey.state(runner)[0] == "CLOSED"
+        journey.payout(runner)
+        assert journey.events(runner)[-1] == "PAYOUT_COMPLETED"
+    else:
+        journey.dispute("RUNNER", runner)
+        journey.resolve("FAILED", runner)
+        assert journey.state(runner)[0] == "CLOSED"
+        journey.refund_complete()
+        assert journey.events(runner)[-1] == "REFUND_COMPLETED"
+
+
+@pytest.mark.scenario("CHAT-TS-093")
+def test_system_chats_are_stored_in_the_order_events_were_confirmed(journey):
+    runner = journey.apply("01071000022", "꼬붕 하나")
+    journey.accept(runner)
+
+    journey.runner_complete(runner)
+    journey.orderer_confirm()
+    journey.payout(runner)
+
+    assert journey.events(runner) == ["OFFER_CREATED", "MATCHED", "RUNNER_COMPLETED", "ALL_CONFIRMED", "PAYOUT_COMPLETED"]
+
+
+@pytest.mark.scenario("CHAT-TS-058")
+def test_failed_event_processing_leaves_no_system_chat(journey, db, monkeypatch):
+    from app.models.offer import OfferStatus
+    from app.services.chat import chat_events
+
+    runner = journey.apply("01071000023", "꼬붕 하나")
+    before = journey.events(runner)
+    original = chat_events.record_message_created
+
+    def record_then_fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("매칭 처리 중 실패")
+
+    monkeypatch.setattr(chat_events, "record_message_created", record_then_fail)
+    with pytest.raises(RuntimeError, match="매칭 처리 중 실패"):
+        journey.accept(runner)
+    monkeypatch.undo()
+
+    db.rollback()
+    assert db.get(Offer, journey.offer_ids[runner.id]).status == OfferStatus.WAITING
+    assert journey.state(runner) == ("ACTIVE", None)
+    assert journey.events(runner) == before
+
+
+@pytest.mark.scenario("CHAT-TS-101")
+def test_failed_cancel_rolls_back_offer_room_chat_and_outbox_event(journey, db, monkeypatch):
+    from app.models.offer import OfferStatus
+    from app.services.chat import chat_events
+
+    runner = journey.apply("01071000024", "꼬붕 하나")
+    events_before = len(outbox_events_for(db, "chat.message.created"))
+    chats_before = journey.events(runner)
+    original = chat_events.record_message_created
+
+    def record_then_fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("취소 처리 중 실패")
+
+    monkeypatch.setattr(chat_events, "record_message_created", record_then_fail)
+    with pytest.raises(RuntimeError, match="취소 처리 중 실패"):
+        journey.cancel_offer(runner)
+    monkeypatch.undo()
+
+    db.rollback()
+    assert db.get(Offer, journey.offer_ids[runner.id]).status == OfferStatus.WAITING
+    assert journey.state(runner) == ("ACTIVE", None)
+    assert journey.events(runner) == chats_before
+    assert len(outbox_events_for(db, "chat.message.created")) == events_before
