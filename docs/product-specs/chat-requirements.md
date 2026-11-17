@@ -322,13 +322,14 @@
   - 앱이 켜져 있을 때 푸시를 어떻게 보여줄지는 앱이 정한다. 해당 채팅방을 보고 있으면 표시하지 않고, 앱의 다른 화면에 있으면 앱 안에 배너로 보여준다. 앱이 꺼져 있거나 백그라운드면 시스템 푸시로 보여준다.
   - 자신이 보낸 채팅은 푸시하지 않는다.
   - 같은 사건으로 기존 알림([`notification-policy.md`](./notification-policy.md))을 받는 사용자에게는 그 사건의 시스템 채팅을 푸시하지 않는다. 이 시스템 채팅도 채팅방에 저장되고 안읽음 수에 포함된다 (CHAT-REQ-011). 시스템 채팅별 푸시 대상은 CHAT-REQ-021 표를 따른다.
-  - 푸시의 제목은 상대방 이름, 내용은 채팅 내용으로 한다. 탈퇴한 상대는 `"탈퇴한 사용자"`로 보여준다.
+  - 푸시의 제목은 상대방 이름, 내용은 채팅 내용으로 한다. 탈퇴한 상대는 `"탈퇴한 사용자"`로 보여준다. 시스템 채팅의 푸시도 제목은 그 채팅방의 상대방 이름이고, 내용은 받는 사람에게 보이는 시스템 채팅 문구다.
   - 같은 채팅방의 푸시는 하나로 묶는다. 새 채팅이 오면 이전 푸시를 대체하고 가장 최근 채팅 내용을 보여준다.
   - 앱 아이콘 배지 숫자는 채팅 전체 안읽음 합계(CHAT-REQ-011)와 알림 미읽음 수를 더한 값으로 한다. 채팅 푸시와 기존 알림 푸시 모두 이 값을 배지로 보낸다.
   - 푸시를 누르면 해당 채팅방으로 이동한다.
   - 채팅 푸시는 기존 알림 목록(`notifications`)에 저장하지 않는다. 채팅 기록은 채팅으로만 남기며, 알림 미읽음 수와 채팅 안읽음 수는 따로 센다.
   - 수신자의 알림 설정(`alarm_enabled`)이 꺼져 있으면 푸시를 보내지 않는다. 채팅 저장과 안읽음 수는 알림 설정과 관계없다.
   - 푸시 발송에 실패해도 채팅 저장에는 영향을 주지 않는다.
+  - 채팅 푸시는 재시도하지 않는다. 기존 알림의 재시도는 `notifications` 레코드를 기준으로 하는데 채팅 푸시는 그 목록에 저장하지 않기 때문이다. 놓친 푸시의 채팅은 채팅방에 저장되어 있고, 같은 채팅방의 다음 푸시가 이전 푸시를 대체한다.
 
 ### 6. 시스템 채팅
 
@@ -469,7 +470,7 @@
   - 같은 채팅이 실시간 전달과 재연결 복구로 겹쳐 와도 앱은 채팅 ID로 한 번만 보여준다 (CHAT-REQ-015, CHAT-REQ-016).
   - 채팅방 상태, 요청·지원 상태, 읽음 위치, 차단 상태 이벤트(CHAT-REQ-017)에는 순서를 판단할 수 있는 값을 담는다. 앱은 이미 반영한 것보다 오래된 이벤트가 늦게 도착하면 무시한다.
   - 상대방의 읽음 위치가 앞으로 돌아간 값으로 도착해도 앱은 이미 지운 안읽음 표시(`1`)를 다시 보여주지 않는다.
-  - 같은 채팅이나 같은 시스템 채팅에 대한 푸시는 재시도가 있어도 한 번만 보낸다.
+  - 같은 채팅이나 같은 시스템 채팅에 대한 푸시는 한 번만 보낸다. 채팅 푸시는 재시도하지 않는다 (CHAT-REQ-018).
 
 ## 비기능 요구사항
 
@@ -542,8 +543,8 @@
 | CHAT-TS-035 | CHAT-REQ-011 | Given 읽음 위치 이후 내 채팅 1, 상대 채팅 2, 시스템 채팅 1, 행님용 미선정 안내 1 / When 안읽음 수 계산 / Then 3 (행님 기준 미선정 안내 제외) | unit | `service` |
 | CHAT-TS-036 | CHAT-REQ-011, CHAT-REQ-006 | Given 게시된 요청 / When 꼬붕이 첫 인사와 함께 지원 / Then 행님의 그 채팅방 안읽음 수는 2(채팅 시작 안내, 첫 인사), 꼬붕은 1(채팅 시작 안내) | integration | `api` |
 | CHAT-TS-037 | CHAT-REQ-011 | Given 안읽은 채팅이 있는 `ACTIVE`·`CLOSED`·차단 채팅방 / When 안읽음 수 조회 / Then 채팅방별 수와 그 합계가 오고 `CLOSED`·차단 방도 합계에 포함된다 **(차단 후: 차단 경우)** | integration | `api` |
-| CHAT-TS-038 | CHAT-REQ-012 | Given 행님·꼬붕 역할이 섞인 채팅방 3개(`CLOSED` 포함) / When 전체 읽음 / Then 모두 요청 시점까지 읽음 처리되고 상대방의 읽음 위치는 바뀌지 않는다 | integration | `api` |
-| CHAT-TS-039 | CHAT-REQ-012 | Given 한 채팅방의 읽음 위치가 이미 최신 / When 전체 읽음 기준 시점이 그보다 앞서 처리 / Then 그 채팅방의 읽음 위치는 유지된다 | unit | `service` |
+| CHAT-TS-038 | CHAT-REQ-012 | Given 행님·꼬붕 역할이 섞인 채팅방 3개(`CLOSED`, 차단 채팅방 포함) / When 전체 읽음 / Then 모두 요청 시점까지 읽음 처리되고 상대방의 읽음 위치는 바뀌지 않는다 **(차단 후: 차단 경우)** | integration | `api` |
+| CHAT-TS-039 | CHAT-REQ-012 | Given 전체 읽음 요청 시점의 마지막 채팅이 채팅 10인데, 사용자가 그 사이 채팅방에 들어가 채팅 11까지 읽음 / When 전체 읽음이 처리 / Then 그 채팅방의 읽음 위치는 채팅 11로 유지된다 | unit | `service` |
 | CHAT-TS-040 | CHAT-REQ-013 | Given 내가 보낸 채팅 3개 / When 상대가 2번째까지 읽은 뒤 채팅방 조회 / Then 응답에 상대의 마지막 읽은 채팅(2번째)이 담긴다 | integration | `api` |
 | CHAT-TS-041 | CHAT-REQ-015 | Given 채팅방 A·B에 참여하고 실시간 연결된 사용자 / When 두 방에 각각 상대가 채팅 / Then 하나의 연결로 두 채팅을 모두 받는다 | integration | `realtime` |
 | CHAT-TS-042 | CHAT-REQ-015 | Given 참여자가 아닌 사용자의 실시간 연결 / When 채팅방에 새 채팅 / Then 그 사용자는 받지 않는다 | integration | `realtime` |
@@ -559,13 +560,13 @@
 | CHAT-TS-052 | CHAT-REQ-018 | Given 채팅방 / When 내가 채팅을 보내거나, 받는 사람의 `alarm_enabled`가 꺼져 있음 / Then 나에게는 푸시가 없고, 알림이 꺼진 사람은 푸시 없이 안읽음 수만 늘어난다 | integration | `api` |
 | CHAT-TS-053 | CHAT-REQ-018 | Given 같은 채팅방 / When 상대가 채팅을 연속 2개 전송 / Then 두 푸시가 같은 채팅방 묶음 키를 쓰고, 탭하면 그 채팅방으로 이동하는 값이 담긴다 | integration | `api` |
 | CHAT-TS-054 | CHAT-REQ-018 | Given 채팅방 / When 채팅 푸시 발송 / Then `notifications`에 레코드가 생기지 않는다 | integration | `api` |
-| CHAT-TS-055 | CHAT-REQ-018 | Given 채팅 안읽음 3, 알림 미읽음 2인 사용자 / When 기존 도메인 알림 푸시 발송 / Then 배지가 5다 | integration | `api` |
+| CHAT-TS-055 | CHAT-REQ-018 | Given 채팅 안읽음 3, 알림 미읽음 2인 사용자 / When 기존 도메인 알림 푸시 발송 / Then 배지가 5다 | integration | `tests/test_notification_integration.py` |
 | CHAT-TS-056 | CHAT-REQ-019 | Given 채팅방 / When 같은 전송 ID로 같은 채팅을 두 번 전송 / Then 채팅은 1개, 두 응답이 같은 채팅이고 푸시와 실시간 전달은 1번이다 | integration | `api` |
 | CHAT-TS-057 | CHAT-REQ-019 | Given 전송 ID X로 저장된 채팅 / When 같은 ID로 내용이나 채팅방이 다른 요청 / Then 거부된다 | integration | `api` |
 | CHAT-TS-058 | CHAT-REQ-020 | Given 시스템 채팅을 만드는 사건 / When 사건 처리가 중간에 실패해 롤백 / Then 시스템 채팅도 남지 않는다 | integration | `api` |
 | CHAT-TS-059 | CHAT-REQ-020 | Given 입금 완료 사건 / When 같은 사건이 두 번 처리 / Then 시스템 채팅은 1개다 | integration | `api` |
 | CHAT-TS-060 | CHAT-REQ-020 | Given `CLOSED` 채팅방, 차단된 채팅방 / When 입금·환불 완료 / Then 시스템 채팅이 저장된다 **(차단 후: 차단 경우)** | integration | `api` |
-| CHAT-TS-061 | CHAT-REQ-020 | Given 채팅 전송 API / When 사용자가 채팅 유형(시스템 채팅) 필드를 담아 전송 / Then `422`로 거부되고 채팅이 저장되지 않는다 | integration | `api` |
+| CHAT-TS-061 | CHAT-REQ-020 | Given 채팅 전송 API / When 사용자가 채팅 유형(시스템 채팅) 필드를 담아 전송 / Then `400 VALIDATION_ERROR`로 거부되고 채팅이 저장되지 않는다 | integration | `api` |
 | CHAT-TS-062 | CHAT-REQ-021 | Given [사건별 시스템 채팅](#chat-req-021--사건별-시스템-채팅) 표의 각 사건과 받는 사람 / When 문구를 고름 / Then 표의 문구가 나온다 | unit | `service` |
 | CHAT-TS-063 | CHAT-REQ-021, CHAT-REQ-018 | Given 표의 각 사건과 받는 사람 / When 안읽음 포함 여부와 푸시 대상을 고름 / Then 표의 "기존 알림"·"안읽음·푸시" 칸과 같다 | unit | `service` |
 | CHAT-TS-064 | CHAT-REQ-021 | Given 매칭 전 요청과 매칭 후 요청 / When 관리자가 각각 취소 / Then 매칭 전은 "요청이 취소되어 채팅이 종료됐어요.", 매칭 후는 "종료된 임무예요. 더 이상 진행할 수 없어요." | integration | `api` |
@@ -583,8 +584,27 @@
 | CHAT-TS-076 | CHAT-REQ-027 | Given 채팅 10개 / When 같은 사용자가 채팅 5와 채팅 9로 동시에 읽음 요청 **(동시)** / Then 읽음 위치는 채팅 9다 | integration | `api` |
 | CHAT-TS-077 | CHAT-REQ-027 | Given 읽음 요청이 채팅 9를 가리킴 / When 그 사이 채팅 10이 저장된 뒤 읽음이 처리 / Then 채팅 10은 안읽음으로 남는다 | integration | `api` |
 | CHAT-TS-078 | CHAT-REQ-028 | Given 실시간 연결 / When 같은 채팅방의 상태·읽음 이벤트가 여러 번 발생 / Then 각 이벤트에 순서 값이 있고 발생 순서대로 커진다 | integration | `realtime` |
-| CHAT-TS-079 | CHAT-REQ-028 | Given 발송이 한 번 실패한 채팅 푸시 / When 재시도 / Then 같은 채팅에 대한 푸시는 성공 기준 1번만 나간다 | integration | `api` |
+| CHAT-TS-079 | CHAT-REQ-018, CHAT-REQ-028 | Given FCM 발송이 실패하는 가짜 발송기 / When 상대가 채팅 전송 / Then 채팅은 저장되고 전송 응답은 성공이며, 푸시는 재시도 없이 1번만 시도된다 | integration | `api` |
 | CHAT-TS-080 | CHAT-REQ-003, CHAT-REQ-006 | Given 빈 문자열, 공백만, 줄바꿈만, 공백과 줄바꿈이 섞인 내용 / When 채팅·첫 인사 내용을 검증 / Then 모두 거부되고, 앞뒤에 공백이 있어도 글자가 하나라도 있으면 통과한다 | unit | `service` |
+| CHAT-TS-081 | CHAT-REQ-002, CHAT-REQ-003 | Given 채팅방 / When 참여자가 아닌 사용자가 채팅 전송 / Then `403 FORBIDDEN`이고 채팅이 저장되지 않는다 | integration | `api` |
+| CHAT-TS-082 | CHAT-REQ-014 | Given 마지막 채팅이 시스템 채팅(매칭 미선정)인 채팅방 / When 꼬붕과 행님이 각각 채팅 목록 조회 / Then 마지막 채팅에 각자에게 보이는 시스템 채팅 문구가 나온다 | integration | `api` |
+| CHAT-TS-083 | CHAT-REQ-014 | Given 행님으로 참여한 채팅방과 꼬붕으로 참여한 채팅방이 섞여 한 페이지보다 많음 / When 채팅 목록을 처음 조회한 뒤 이전 목록을 추가 조회 / Then 두 역할의 채팅방이 모두 나오고 빠지거나 겹치는 채팅방이 없다 | integration | `api` |
+| CHAT-TS-084 | CHAT-REQ-015, CHAT-REQ-022 | Given 실시간 연결된 두 참여자 / When 지원 취소로 시스템 채팅이 저장 / Then 양쪽이 각자에게 보이는 문구의 시스템 채팅을 실시간으로 받는다 | integration | `realtime` |
+| CHAT-TS-085 | CHAT-REQ-016 | Given `CLOSED`·`INACTIVE` 채팅방에서 앱이 채팅 5까지 받은 뒤 시스템 채팅이 저장 / When 채팅 5 이후를 조회 / Then 놓친 채팅이 저장 순서대로 온다 | integration | `api` |
+| CHAT-TS-086 | CHAT-REQ-017 | Given 실시간 연결된 두 참여자의 진행 중 임무 / When 꼬붕이 임무 완료 / Then 양쪽이 지원 상태와 임무 완료 확인 여부 변경 이벤트를 받는다 | integration | `realtime` |
+| CHAT-TS-087 | CHAT-REQ-007 | Given 분쟁 중인 요청 / When 관리자가 요청 취소 / Then 취소가 거부되고 채팅방은 `INACTIVE`를 유지하며 시스템 채팅이 생기지 않는다 | integration | `api` |
+| CHAT-TS-088 | CHAT-REQ-006, CHAT-REQ-023 | Given 게시된 요청 / When 지원 등록 중 첫 인사 저장이 실패 / Then 지원, 채팅방, 지원 등록 안내가 하나도 남지 않는다 | integration | `api` |
+| CHAT-TS-089 | CHAT-REQ-021 | Given [사건별 시스템 채팅](#chat-req-021--사건별-시스템-채팅) 표의 각 사건 / When 실제 API로 그 사건을 일으킴 / Then 표의 채팅방에 시스템 채팅이 1개 저장되고, 행님·꼬붕이 각자 조회하면 표의 문구가 나온다 | integration | `api` |
+| CHAT-TS-090 | CHAT-REQ-021 | Given 매칭 후 환불 대상이 된 요청 / When 환불이 `PENDING`으로 생성된 뒤 `COMPLETED`가 됨 / Then `PENDING`일 때는 환불 안내가 없고 `COMPLETED`가 된 뒤 1개 생긴다 | integration | `api` |
+| CHAT-TS-091 | CHAT-REQ-018, CHAT-REQ-021 | Given 대기 중인 지원 / When 꼬붕이 지원을 취소 / Then 행님에게 제목=꼬붕 이름, 내용="꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요."인 푸시가 가고, 꼬붕에게는 꼬붕용 문구의 푸시가 간다 | integration | `api` |
+| CHAT-TS-092 | CHAT-REQ-018, CHAT-REQ-021 | Given 진행 중인 임무 / When 꼬붕이 임무 완료 / Then 행님은 기존 알림 푸시만 받고 시스템 채팅 푸시는 받지 않으며, 행님의 안읽음 수는 1 늘어난다 | integration | `api` |
+| CHAT-TS-093 | CHAT-REQ-024 | Given 진행 중인 임무 / When 꼬붕 임무 완료, 행님 임무 완료 확인, 수행비 입금 완료가 차례로 일어남 / Then 시스템 채팅이 한쪽 임무 완료, 양측 임무 완료, 입금 완료 순서로 저장된다 | integration | `api` |
+| CHAT-TS-094 | CHAT-REQ-025 | Given `ACTIVE` 채팅방이 지원 취소로 `CLOSED`가 됨 / When 앱이 이전 상태를 기준으로 채팅 전송 / Then 전송 불가 에러 코드로 거부되고, 채팅방을 조회하면 `CLOSED`·`OFFER_CANCELLED`가 나온다 | integration | `api` |
+| CHAT-TS-095 | CHAT-REQ-026 | Given 대기 중인 지원 / When 매칭과 행님의 요청 취소, 매칭과 관리자 취소가 각각 동시에 일어남 **(동시)** / Then 각 경우 둘 중 하나만 확정되고 채팅방 상태와 시스템 채팅은 확정된 쪽만 따른다 | integration | `api` |
+| CHAT-TS-096 | CHAT-REQ-026 | Given 진행 중인 임무 / When 임무 완료와 분쟁 접수가 동시에 일어남 **(동시)** / Then 먼저 확정된 쪽만 반영되고, 뒤의 동작은 바뀐 상태에서 허용될 때만 처리된다 | integration | `api` |
+| CHAT-TS-097 | CHAT-REQ-027, CHAT-REQ-012 | Given 채팅 10개가 있는 채팅방 / When 전체 읽음 처리 중에 채팅 11이 저장됨 **(동시)** / Then 채팅 11은 안읽음으로 남는다 | integration | `api` |
+| CHAT-TS-098 | CHAT-REQ-019 | Given 채팅방 / When 행님과 꼬붕이 우연히 같은 전송 ID로 각각 전송 / Then 두 채팅이 모두 저장된다 (중복 판단은 사용자별) | integration | `api` |
+| CHAT-TS-099 | CHAT-REQ-023 | Given 배포용 채팅방 생성 작업이 실행 중 / When 새 지원이 등록됨 **(동시)** / Then 새 지원의 채팅방은 1개이고 지원 등록 안내와 첫 인사가 있다 | integration | `api` |
 
 ## 완료 조건
 
