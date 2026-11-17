@@ -1,9 +1,10 @@
 name: Staging Deploy
 
+# staging push로 직접 실행하지 않는다. staging 머지 후 CI(.github/workflows/test.yml)가
+# 전체 검사를 통과하면 `workflow_call`로 이 워크플로를 부른다. 수동 재배포는 workflow_dispatch로 한다.
+# CI에서 불릴 때 github.event_name은 호출한 이벤트(push)이고 github.sha는 머지된 커밋이다.
 on:
-  push:
-    branches:
-      - staging
+  workflow_call:
   workflow_dispatch:
 
 env:
@@ -93,6 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment: staging
+    # CI에서 부른 배포와 수동 배포가 동시에 EC2에 올라가지 않게 한다. 진행 중인 배포는 끊지 않는다.
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: false
     # 마이그레이션이 락에 걸려도 러너가 몇 시간씩 매달리지 않게 한다.
     timeout-minutes: 20
 
