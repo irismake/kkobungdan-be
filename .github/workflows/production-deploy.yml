@@ -91,6 +91,7 @@ jobs:
           scp -i ~/.ssh/production.pem \
             scripts/deploy.sh \
             scripts/install-logrotate.sh \
+            scripts/refresh-nginx.sh \
             scripts/staging-smoke-test.sh \
             "${{ secrets.PROD_EC2_USERNAME }}@${{ secrets.PROD_EC2_HOST }}:~/orderrun/"
 
@@ -176,9 +177,11 @@ jobs:
             # 백업본에도 모든 Secret이 들어 있다. 쓰는 곳이 없으므로 남기지 않는다.
             rm -f .env.ec2.bak
 
-            chmod +x deploy.sh install-logrotate.sh staging-smoke-test.sh
+            chmod +x deploy.sh install-logrotate.sh refresh-nginx.sh staging-smoke-test.sh
 
             COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh
+            # nginx 설정(템플릿 등)이 바뀌었을 때만 검사 후 다시 만든다. 꺼져 있으면 띄운다.
+            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 ./refresh-nginx.sh
           EOF
 
       - name: Verify production deployment
