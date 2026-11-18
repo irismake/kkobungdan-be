@@ -51,7 +51,7 @@ fi
 
 # 새 설정을 먼저 검사한다. 같은 템플릿·인증서·네트워크로 검사하고 포트는 열지 않는다.
 # 실패하면 돌던 nginx를 그대로 두고 배포를 실패시킨다.
-if ! "${compose[@]}" run --rm --no-deps -T "$service" nginx -t; then
+if ! "${compose[@]}" run --rm --no-deps -T "$service" nginx -t < /dev/null; then
   echo "새 nginx 설정 검사(nginx -t)에 실패했다. 돌던 nginx는 그대로 두었다." >&2
   exit 1
 fi

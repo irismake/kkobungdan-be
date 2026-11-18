@@ -96,7 +96,7 @@ prune_docker_storage
 echo "Running database migrations..."
 migration_status=0
 timeout --signal=TERM --kill-after=30s "$migration_timeout" \
-  "${compose_cmd[@]}" run --rm -T --no-deps "$app_service" alembic upgrade head || migration_status=$?
+  "${compose_cmd[@]}" run --rm -T --no-deps "$app_service" alembic upgrade head < /dev/null || migration_status=$?
 
 if (( migration_status != 0 )); then
   if (( migration_status == 124 || migration_status == 137 )); then
