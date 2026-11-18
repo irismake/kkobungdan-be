@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-import json
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import inspect
 
 from app.models.dispute_survey import DisputeSurveyQuestion, DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
-from app.models.notification import Notification, NotificationStatus, NotificationType
+from app.models.notification import Notification
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
 from app.models.refund import Refund, RefundReason, RefundStatus
@@ -47,28 +46,8 @@ def dispute_question(
     )
 
 
-def notification_for(db, user_id: str, notification_type: NotificationType, related_entity_id: int) -> Notification:
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.notification_type == notification_type,
-            Notification.related_entity_id == related_entity_id,
-        )
-        .one()
-    )
 
 
-def notification_count(db, user_id: str, notification_type: NotificationType, related_entity_id: int) -> int:
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.notification_type == notification_type,
-            Notification.related_entity_id == related_entity_id,
-        )
-        .count()
-    )
 
 
 @pytest.mark.scenario("PROPOSAL-TS-001")
@@ -493,23 +472,20 @@ def test_confirm_received_marks_proposal_completed_without_finishing_offer(clien
 
 
 @pytest.mark.scenario("PROPOSAL-TS-015")
-def test_confirm_received_creates_meeting_confirmed_notification_for_runner(client, db, factory, auth_headers, sample_user):
+def test_confirm_received_creates_meeting_confirmed_system_chat_for_runner(client, db, factory, auth_headers, sample_user):
     runner = factory.user("01055550031")
     runner.alarm_enabled = True
     proposal, offer = factory.execution(sample_user, runner, ProposalStatus.MATCHED, OfferStatus.ACCEPTED)
     db.commit()
 
+    attach_chat(db, offer, proposal)
+
     response = client.post(f"/v1/proposal/{proposal.id}/confirm-received", headers=auth_headers)
 
     assert response.status_code == 200
-    notification = notification_for(db, runner.id, NotificationType.MEETING_CONFIRMED, offer.id)
-    assert notification.title == "행님이 임무 완료를 확인했어요! 🤝"
-    assert notification.body == "행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!"
-    assert notification.status == NotificationStatus.PENDING
-    assert notification.related_entity_type == "offer"
-    assert json.loads(notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
-    assert notification_count(db, sample_user.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
-    assert notification_count(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
+    notice = system_notice(db, offer.id, "ORDERER_CONFIRMED", "RUNNER")
+    assert notice.system_title == "행님이 임무 완료를 확인했어요! 🤝"
+    assert notice.content == "행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!"
 
 
 @pytest.mark.scenario("PROPOSAL-TS-016")
@@ -546,7 +522,7 @@ def test_confirm_received_after_runner_completion_marks_both_all_completed(clien
 
 
 @pytest.mark.scenario("PROPOSAL-TS-017")
-def test_confirm_received_after_runner_completion_creates_execution_completed_notifications(
+def test_confirm_received_after_runner_completion_creates_execution_completed_system_chats(
     client,
     db,
     factory,
@@ -561,19 +537,15 @@ def test_confirm_received_after_runner_completion_creates_execution_completed_no
     offer.runner_confirmed_at = proposal.runner_confirmed_at
     db.commit()
 
+    attach_chat(db, offer, proposal)
+
     response = client.post(f"/v1/proposal/{proposal.id}/confirm-received", headers=auth_headers)
 
     assert response.status_code == 200
-    orderer_completed_notification = notification_for(db, sample_user.id, NotificationType.EXECUTION_COMPLETED, offer.id)
-    runner_completed_notification = notification_for(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id)
-    assert notification_count(db, runner.id, NotificationType.MEETING_CONFIRMED, offer.id) == 0
-    assert orderer_completed_notification.status == NotificationStatus.PENDING
-    assert runner_completed_notification.status == NotificationStatus.PENDING
-    for completed_notification in (orderer_completed_notification, runner_completed_notification):
-        assert completed_notification.title == "임무 수행 완료! 수고하셨어요 🎊"
-        assert completed_notification.body == "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!"
-    assert json.loads(orderer_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
-    assert json.loads(runner_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
+    for role in ("ORDERER", "RUNNER"):
+        notice = system_notice(db, offer.id, "ALL_CONFIRMED", role)
+        assert notice.system_title == "임무 수행 완료! 수고하셨어요 🎊"
+        assert notice.content == "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!"
 
 
 @pytest.mark.scenario("PROPOSAL-TS-018")
@@ -587,6 +559,8 @@ def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db,
     question = dispute_question(DisputeSurveyTargetType.ORDER)
     db.add(question)
     db.commit()
+
+    attach_chat(db, offer, proposal)
 
     response = client.post(
         f"/v1/proposal/{proposal.id}/dispute",
@@ -617,17 +591,8 @@ def test_raise_proposal_dispute_updates_both_statuses_and_timestamps(client, db,
     )
     assert evidence.survey_question_id == question.id
     assert evidence.reason == "물품 상태 불량"
-    notification = (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == runner.id,
-            Notification.notification_type == NotificationType.DISPUTE_RAISED,
-            Notification.related_entity_id == offer.id,
-        )
-        .one()
-    )
-    assert notification.related_entity_type == "offer"
-    assert "행님이 분쟁을 접수" in notification.body
+    notice = system_notice(db, offer.id, "DISPUTE_RAISED", "RUNNER")
+    assert notice.content == "행님이 분쟁을 접수했어요. 앱에서 내용을 확인해주세요."
 
 
 @pytest.mark.scenario("PROPOSAL-TS-019")
@@ -788,3 +753,18 @@ def test_proposal_model_contract(db):
     }
     foreign_keys = inspect(db.bind).get_foreign_keys("proposals")
     assert foreign_keys == []
+
+
+def attach_chat(db, offer, proposal):
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+    ChatLifecycle.on_offer_created(db, offer, proposal, "테스트 첫 인사")
+    db.commit()
+
+
+def system_notice(db, offer_id, event, role):
+    from app.models.chat import ChatRoom, ChatMessage, ChatRole
+    from app.services.chat.chat_message_service import to_message_response
+    room = db.query(ChatRoom).filter(ChatRoom.offer_id == offer_id).one()
+    message = db.query(ChatMessage).filter(ChatMessage.room_id == room.id, ChatMessage.system_event == event).one()
+    assert db.query(Notification).count() == 0
+    return to_message_response(message, ChatRole(role))

@@ -16,7 +16,7 @@
 - 행님 분쟁 접수는 active `ORDER` 설문 질문 ID와 사유를 DisputeEvidence에 기록하고, `MATCHED` 또는 `ORDER_COMPLETED`에서 Proposal과 수락된 Offer를 `DISPUTED`로 전이하고 timestamp를 기록한다. 사유 선택은 필수이고, `requiresDetail`이 `true`인 사유(기타)를 고를 때만 상세 사유가 필수다.
 - 행님 분쟁 접수는 누락, 비활성, 대상 불일치 설문 질문 ID를 거절한다.
 - 행님 분쟁 접수는 `ALL_COMPLETED`에서 거절되며 상태와 timestamp를 유지한다.
-- 행님 분쟁 접수는 알림이 켜진 꼬붕에게 분쟁 알림을 생성한다.
+- 행님 분쟁 접수는 꼬붕에게 분쟁 시스템 채팅을 생성하고 알림 설정에 따라 푸시한다.
 - 게시글 신고는 다른 사용자의 공개 모집 상태 Proposal에 한해 생성하며, 사용자당 게시글별 한 건만 허용한다. 사유 항목은 필수이고, `requiresDetail`이 `true`인 사유(기타)를 고를 때만 상세 사유가 필수다.
 - 관리자 신고 승인은 Proposal을 `REPORTED`로 전환하고 대기 Offer를 거절하며 공개 목록에서 제외한다. 반려는 Proposal 상태를 바꾸지 않고 신고 이력을 유지한다.
 - ORM 모델 계약은 문서화된 필드와 enum 정책이 구현에 남아 있는지 확인한다.
@@ -41,9 +41,9 @@
 | PROPOSAL-TS-012 | 요청 수정은 작성자 권한과 상태 규칙을 따른다 | `test_proposal_integration.py::test_update_proposal_author_and_status_rules` |
 | PROPOSAL-TS-013 | 요청 취소는 작성자·상태 규칙을 따르고 대기 지원을 `REJECTED`로 정리한다 | `test_proposal_integration.py::test_cancel_proposal_author_status_rules_and_rejects_waiting_offers` |
 | PROPOSAL-TS-014 | 행님의 임무 완료 확인은 요청을 `ORDER_COMPLETED`로 바꾸고 지원은 끝내지 않는다 | `test_proposal_integration.py::test_confirm_received_marks_proposal_completed_without_finishing_offer` |
-| PROPOSAL-TS-015 | 행님이 임무 완료를 확인하면 꼬붕에게 임무 완료 확인 알림이 생긴다 | `test_proposal_integration.py::test_confirm_received_creates_meeting_confirmed_notification_for_runner` |
+| PROPOSAL-TS-015 | 행님이 임무 완료를 확인하면 꼬붕에게 임무 완료 확인 시스템 채팅이 생긴다 | `test_proposal_integration.py::test_confirm_received_creates_meeting_confirmed_system_chat_for_runner` |
 | PROPOSAL-TS-016 | 꼬붕 완료 뒤 행님이 확인하면 요청과 지원이 모두 `ALL_COMPLETED`가 된다 | `test_proposal_integration.py::test_confirm_received_after_runner_completion_marks_both_all_completed` |
-| PROPOSAL-TS-017 | 양측 임무 완료 시 행님·꼬붕에게 임무 수행 완료 알림이 생긴다 | `test_proposal_integration.py::test_confirm_received_after_runner_completion_creates_execution_completed_notifications` |
+| PROPOSAL-TS-017 | 양측 임무 완료 시 행님·꼬붕에게 임무 수행 완료 시스템 채팅이 생긴다 | `test_proposal_integration.py::test_confirm_received_after_runner_completion_creates_execution_completed_system_chats` |
 | PROPOSAL-TS-018 | 행님 분쟁 접수는 요청과 지원을 `DISPUTED`로 바꾸고 시각을 기록한다 | `test_proposal_integration.py::test_raise_proposal_dispute_updates_both_statuses_and_timestamps` |
 | PROPOSAL-TS-019 | 행님 분쟁 접수는 누락·비활성·대상 불일치 설문 질문을 거부한다 | `test_proposal_integration.py::test_raise_proposal_dispute_rejects_invalid_survey_question` |
 | PROPOSAL-TS-020 | 행님 분쟁 사유는 필수이고 기타 사유일 때만 상세 사유가 필수다 | `test_proposal_integration.py::test_raise_proposal_dispute_requires_detail_only_for_etc_reason` |

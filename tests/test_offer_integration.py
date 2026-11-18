@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-import json
 from datetime import datetime, timedelta, timezone
 
 from app.models.dispute_survey import DisputeSurveyQuestion, DisputeSurveyTargetType
 from app.models.dispute_evidence import DisputeEvidence
-from app.models.notification import Notification, NotificationStatus, NotificationType
+from app.models.notification import Notification, NotificationStatus
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
 
@@ -34,28 +33,8 @@ def dispute_question(
     )
 
 
-def notification_for(db, user_id: str, notification_type: NotificationType, related_entity_id: int) -> Notification:
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.notification_type == notification_type,
-            Notification.related_entity_id == related_entity_id,
-        )
-        .one()
-    )
 
 
-def notification_count(db, user_id: str, notification_type: NotificationType, related_entity_id: int) -> int:
-    return (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == user_id,
-            Notification.notification_type == notification_type,
-            Notification.related_entity_id == related_entity_id,
-        )
-        .count()
-    )
 
 
 @pytest.mark.scenario("OFFER-TS-001")
@@ -126,7 +105,7 @@ def test_create_offer_requires_runner_settlement_account(client, db, factory, sa
 
 
 @pytest.mark.scenario("OFFER-TS-003")
-def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, factory, sample_user):
+def test_create_offer_creates_system_chats_for_alarm_enabled_users(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770031", name="Runner Notify")
     factory.settlement_account(runner)
@@ -134,6 +113,7 @@ def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, 
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
     db.commit()
 
+
     response = client.post(
         "/v1/offer",
         json=offer_payload(proposal.id),
@@ -142,22 +122,18 @@ def test_create_offer_creates_notifications_for_alarm_enabled_users(client, db, 
 
     assert response.status_code == 201
     offer_id = response.json()["data"]["id"]
-    orderer_notification = notification_for(db, sample_user.id, NotificationType.OFFER_NEW, offer_id)
-    runner_notification = notification_for(db, runner.id, NotificationType.OFFER_SUBMITTED, offer_id)
-    assert orderer_notification.status == NotificationStatus.PENDING
-    assert orderer_notification.related_entity_type == "offer"
-    assert json.loads(orderer_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
-    assert runner_notification.status == NotificationStatus.PENDING
-    assert runner_notification.related_entity_type == "offer"
-    assert json.loads(runner_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
+    for role, title in (("ORDERER", "누군가 지원했어요! 👀"), ("RUNNER", "지원 완료! ✅")):
+        notice = system_notice(db, offer_id, "OFFER_CREATED", role)
+        assert notice.system_title == title
 
 
 @pytest.mark.scenario("OFFER-TS-004")
-def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, db, factory, sample_user):
+def test_create_offer_stores_system_chats_when_alarm_disabled(client, db, factory, sample_user):
     runner = factory.user("01077770032")
     factory.settlement_account(runner)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)
 
+
     response = client.post(
         "/v1/offer",
         json=offer_payload(proposal.id),
@@ -166,18 +142,16 @@ def test_create_offer_stores_skipped_notifications_when_alarm_disabled(client, d
 
     assert response.status_code == 201
     offer_id = response.json()["data"]["id"]
-    orderer_notification = notification_for(db, sample_user.id, NotificationType.OFFER_NEW, offer_id)
-    runner_notification = notification_for(db, runner.id, NotificationType.OFFER_SUBMITTED, offer_id)
-    assert orderer_notification.status == NotificationStatus.SKIPPED
-    assert runner_notification.status == NotificationStatus.SKIPPED
-    assert orderer_notification.read_at is None
-    assert runner_notification.read_at is None
-    assert json.loads(orderer_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
-    assert json.loads(runner_notification.data) == {"offer_id": offer_id, "proposal_id": proposal.id}
+    for role in ("ORDERER", "RUNNER"):
+        assert system_notice(db, offer_id, "OFFER_CREATED", role).content
+    from tests.test_chat_integration import FakePushSender, run_chat_push
+    sender = FakePushSender()
+    run_chat_push(sender)
+    assert sender.sent == []
 
 
 @pytest.mark.scenario("OFFER-TS-005")
-def test_create_offer_queues_only_notifications_created_by_current_event(
+def test_create_offer_does_not_queue_legacy_notifications(
     client,
     db,
     factory,
@@ -217,7 +191,9 @@ def test_create_offer_queues_only_notifications_created_by_current_event(
         .filter(Notification.related_entity_type == "offer", Notification.related_entity_id == offer_id)
         .all()
     }
-    assert set(queued_ids) == current_ids
+    assert queued_ids == []
+    assert current_ids == set()
+    assert db.query(Notification).count() == 1
     assert stale.id not in queued_ids
 
 
@@ -494,7 +470,7 @@ def test_accept_offer_updates_states_and_timestamps(client, db, factory, sample_
 
 
 @pytest.mark.scenario("OFFER-TS-015")
-def test_accept_offer_creates_selected_and_rejected_runner_notifications(client, db, factory, sample_user):
+def test_accept_offer_creates_selected_and_rejected_runner_system_chats(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner1 = factory.user("01077770033")
     runner2 = factory.user("01077770034")
@@ -506,35 +482,22 @@ def test_accept_offer_creates_selected_and_rejected_runner_notifications(client,
     db.add_all([selected, other])
     db.commit()
 
+    attach_chat(db, selected, proposal)
+    attach_chat(db, other, proposal)
+
     response = client.post(
         f"/v1/offer/{selected.id}/accept",
         headers=factory.headers_for(sample_user),
     )
 
     assert response.status_code == 201
-    selected_notification = notification_for(db, runner1.id, NotificationType.OFFER_ACCEPTED, selected.id)
-    rejected_notification = notification_for(db, runner2.id, NotificationType.OFFER_REJECTED, selected.id)
-    assert selected_notification.status == NotificationStatus.PENDING
-    assert json.loads(selected_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
-    assert rejected_notification.status == NotificationStatus.PENDING
-    assert json.loads(rejected_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
-
-    orderer_notification = notification_for(
-        db, sample_user.id, NotificationType.PROPOSAL_MATCHED, selected.id
-    )
-    assert orderer_notification.title == "임무가 시작됐어요! 🏃"
-    assert orderer_notification.status == NotificationStatus.PENDING
-    assert json.loads(orderer_notification.data) == {"offer_id": selected.id, "proposal_id": proposal.id}
-    assert (
-        db.query(Notification)
-        .filter(Notification.user_id == sample_user.id, Notification.related_entity_id == selected.id)
-        .count()
-        == 1
-    )
+    assert system_notice(db, selected.id, "MATCHED", "ORDERER").system_title == "임무가 시작됐어요! 🏃"
+    assert system_notice(db, selected.id, "MATCHED", "RUNNER").system_title == "선택받으셨어요! 🙌"
+    assert system_notice(db, other.id, "NOT_SELECTED", "RUNNER").system_title == "이번엔 아쉽게 됐어요 😢"
 
 
 @pytest.mark.scenario("OFFER-TS-016")
-def test_accept_offer_stores_skipped_runner_notifications_when_alarm_disabled(client, db, factory, sample_user):
+def test_accept_offer_stores_runner_system_chats_when_alarm_disabled(client, db, factory, sample_user):
     runner1 = factory.user("01077770038")
     runner2 = factory.user("01077770039")
     proposal = factory.proposal(sample_user.id, ProposalStatus.OFFERED)
@@ -543,16 +506,21 @@ def test_accept_offer_stores_skipped_runner_notifications_when_alarm_disabled(cl
     db.add_all([selected, other])
     db.commit()
 
+    attach_chat(db, selected, proposal)
+    attach_chat(db, other, proposal)
+
     response = client.post(
         f"/v1/offer/{selected.id}/accept",
         headers=factory.headers_for(sample_user),
     )
 
     assert response.status_code == 201
-    selected_notification = notification_for(db, runner1.id, NotificationType.OFFER_ACCEPTED, selected.id)
-    rejected_notification = notification_for(db, runner2.id, NotificationType.OFFER_REJECTED, selected.id)
-    assert selected_notification.status == NotificationStatus.SKIPPED
-    assert rejected_notification.status == NotificationStatus.SKIPPED
+    assert system_notice(db, selected.id, "MATCHED", "RUNNER").content == "행님이 회원님을 선택했어요."
+    assert system_notice(db, other.id, "NOT_SELECTED", "RUNNER").system_title == "이번엔 아쉽게 됐어요 😢"
+    from tests.test_chat_integration import FakePushSender, run_chat_push
+    sender = FakePushSender()
+    run_chat_push(sender)
+    assert sender.sent == []
 
 
 @pytest.mark.scenario("OFFER-TS-017")
@@ -675,7 +643,7 @@ def test_complete_delivery_marks_offer_completed_without_finishing_proposal(clie
 
 
 @pytest.mark.scenario("OFFER-TS-021")
-def test_complete_delivery_creates_meeting_confirmed_notification_for_orderer(client, db, factory, sample_user):
+def test_complete_delivery_creates_meeting_confirmed_system_chat_for_orderer(client, db, factory, sample_user):
     sample_user.alarm_enabled = True
     runner = factory.user("01077770035")
     proposal = factory.proposal(sample_user.id, ProposalStatus.MATCHED)
@@ -684,20 +652,17 @@ def test_complete_delivery_creates_meeting_confirmed_notification_for_orderer(cl
     db.add(offer)
     db.commit()
 
+    attach_chat(db, offer, proposal)
+
     response = client.post(
         f"/v1/offer/{offer.id}/complete-delivery",
         headers=factory.headers_for(runner),
     )
 
     assert response.status_code == 200
-    notification = notification_for(db, sample_user.id, NotificationType.MEETING_CONFIRMED, offer.id)
-    assert notification.title == "꼬붕이 임무를 완료했어요! 🤝"
-    assert notification.body == "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요."
-    assert notification.status == NotificationStatus.PENDING
-    assert notification.related_entity_type == "offer"
-    assert json.loads(notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
-    assert notification_count(db, sample_user.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
-    assert notification_count(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id) == 0
+    notice = system_notice(db, offer.id, "RUNNER_COMPLETED", "ORDERER")
+    assert notice.system_title == "꼬붕이 임무를 완료했어요! 🤝"
+    assert notice.content == "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요."
 
 
 @pytest.mark.scenario("OFFER-TS-022")
@@ -743,7 +708,7 @@ def test_complete_delivery_after_orderer_completion_marks_both_all_completed(cli
 
 
 @pytest.mark.scenario("OFFER-TS-023")
-def test_complete_delivery_after_orderer_completion_creates_execution_completed_notifications(
+def test_complete_delivery_after_orderer_completion_creates_execution_completed_system_chats(
     client,
     db,
     factory,
@@ -760,19 +725,18 @@ def test_complete_delivery_after_orderer_completion_creates_execution_completed_
     db.add(offer)
     db.commit()
 
+    attach_chat(db, offer, proposal)
+
     response = client.post(
         f"/v1/offer/{offer.id}/complete-delivery",
         headers=factory.headers_for(runner),
     )
 
     assert response.status_code == 200
-    orderer_completed_notification = notification_for(db, sample_user.id, NotificationType.EXECUTION_COMPLETED, offer.id)
-    runner_completed_notification = notification_for(db, runner.id, NotificationType.EXECUTION_COMPLETED, offer.id)
-    assert notification_count(db, sample_user.id, NotificationType.MEETING_CONFIRMED, offer.id) == 0
-    assert orderer_completed_notification.status == NotificationStatus.PENDING
-    assert runner_completed_notification.status == NotificationStatus.PENDING
-    assert json.loads(orderer_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
-    assert json.loads(runner_completed_notification.data) == {"offer_id": offer.id, "proposal_id": proposal.id}
+    for role in ("ORDERER", "RUNNER"):
+        notice = system_notice(db, offer.id, "ALL_CONFIRMED", role)
+        assert notice.system_title == "임무 수행 완료! 수고하셨어요 🎊"
+        assert notice.content == "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!"
 
 
 @pytest.mark.scenario("OFFER-TS-024")
@@ -816,6 +780,8 @@ def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, fa
     db.add(question)
     db.commit()
 
+    attach_chat(db, offer, proposal)
+
     response = client.post(
         f"/v1/offer/{offer.id}/dispute",
         json={"reasonQuestionId": question.id, "detailReason": "배송 중 파손"},
@@ -850,17 +816,8 @@ def test_raise_offer_dispute_updates_both_statuses_and_timestamps(client, db, fa
     )
     assert evidence.survey_question_id == question.id
     assert evidence.reason == "배송 중 파손"
-    notification = (
-        db.query(Notification)
-        .filter(
-            Notification.user_id == sample_user.id,
-            Notification.notification_type == NotificationType.DISPUTE_RAISED,
-            Notification.related_entity_id == offer.id,
-        )
-        .one()
-    )
-    assert notification.related_entity_type == "offer"
-    assert "꼬붕이 분쟁을 접수" in notification.body
+    notice = system_notice(db, offer.id, "DISPUTE_RAISED", "ORDERER")
+    assert notice.content == "꼬붕이 분쟁을 접수했어요. 앱에서 내용을 확인해주세요."
 
 
 @pytest.mark.scenario("OFFER-TS-026")
@@ -1015,3 +972,18 @@ def test_offer_validation_and_domain_errors(client, db, factory, sample_user):
     assert duplicate.json()["error"]["code"] == "DUPLICATE_OFFER"
     assert self_offer.status_code == 400
     assert self_offer.json()["error"]["code"] == "SELF_OFFER_NOT_ALLOWED"
+
+
+def attach_chat(db, offer, proposal):
+    from app.services.chat.chat_lifecycle import ChatLifecycle
+    ChatLifecycle.on_offer_created(db, offer, proposal, "테스트 첫 인사")
+    db.commit()
+
+
+def system_notice(db, offer_id, event, role):
+    from app.models.chat import ChatRoom, ChatMessage, ChatRole
+    from app.services.chat.chat_message_service import to_message_response
+    room = db.query(ChatRoom).filter(ChatRoom.offer_id == offer_id).one()
+    message = db.query(ChatMessage).filter(ChatMessage.room_id == room.id, ChatMessage.system_event == event).one()
+    assert db.query(Notification).count() == 0
+    return to_message_response(message, ChatRole(role))

@@ -244,10 +244,12 @@ def update_proposal(
 )
 def cancel_proposal(
     proposal_id: int,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ApiResponse[ProposalResponse]:
     proposal = ProposalService.cancel(db, proposal_id=proposal_id, orderer_id=current_user.id)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(success=True, data=proposal, message="요청이 취소되었습니다.")
 
 

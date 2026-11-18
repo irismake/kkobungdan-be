@@ -77,13 +77,13 @@ def test_room_state_rules_follow_the_status_reason_table() -> None:
 # ------------------------------------------------------------------ 사건별 시스템 채팅 (CHAT-REQ-021)
 
 ORDERER_SEES = {
-    "OFFER_CREATED": "지원으로 채팅이 시작됐어요.",
-    "MATCHED": "매칭이 완료되어 임무가 시작됐어요.",
+    "OFFER_CREATED": "회원님의 요청에 새로운 꼬붕이 생겼어요. 확인해보세요!",
+    "MATCHED": "꼬붕을 선택하셨어요! 임무를 바로 시작해보세요.",
     "NOT_SELECTED": "다른 꼬붕과 매칭되어 채팅이 종료됐어요.",
     "OFFER_CANCELLED": "꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요.",
-    "RUNNER_COMPLETED": "꼬붕이 임무를 완료했어요. 행님도 임무 완료를 확인해 주세요.",
+    "RUNNER_COMPLETED": "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요.",
     "ORDERER_CONFIRMED": "꼬붕의 임무 완료를 기다리고 있어요.",
-    "ALL_CONFIRMED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
+    "ALL_CONFIRMED": "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!",
     "DISPUTE_RAISED": "분쟁 중인 임무예요. 분쟁이 해결될 때까지 잠시만 기다려 주세요.",
     "DISPUTE_COMPLETED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
     "DISPUTE_FAILED": "종료된 임무예요. 더 이상 진행할 수 없어요.",
@@ -94,10 +94,14 @@ ORDERER_SEES = {
 }
 RUNNER_SEES = {
     **ORDERER_SEES,
-    "NOT_SELECTED": "이번에는 매칭되지 않았어요. 채팅이 자동으로 종료돼요.",
+    "NOT_SELECTED": "이번엔 선택받지 못했지만 다음 기회가 분명 있을 거예요. 다시 도전해보세요!",
     "OFFER_CANCELLED": "지원을 취소했어요. 채팅이 자동으로 종료돼요.",
     "RUNNER_COMPLETED": "행님의 임무 완료 확인을 기다리고 있어요.",
-    "ORDERER_CONFIRMED": "행님이 임무 완료를 확인했어요. 꼬붕도 임무를 완료해 주세요.",
+    "ORDERER_CONFIRMED": "행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!",
+    "OFFER_CREATED": "지원이 정상적으로 접수됐어요. 행님의 선택을 기다려주세요.",
+    "MATCHED": "행님이 회원님을 선택했어요.",
+    "ALL_CONFIRMED": "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!",
+    "PAYOUT_COMPLETED": "15,000원이 회원님 계좌로 입금됐어요. 오늘도 멋진 활동 감사해요!",
 }
 
 
@@ -113,22 +117,22 @@ def test_every_system_chat_has_the_wording_from_the_table() -> None:
         assert render_system_chat(event, payload, ChatRole.RUNNER) == RUNNER_SEES[event.value], event
 
 
-# (안읽음 포함, 푸시) — CHAT-REQ-021 표의 "기존 알림"·"안읽음·푸시" 칸. 기존 알림을 받는 사람은 푸시하지 않는다.
+# (안읽음 포함, 푸시) — CHAT-REQ-021 표의 "기존 알림"·"안읽음·푸시" 칸. 지원 이후 기존 알림 수신자도 시스템 푸시 대상이다.
 DELIVERY_TABLE = {
-    ("OFFER_CREATED", "ORDERER"): (True, False),
-    ("OFFER_CREATED", "RUNNER"): (True, False),
-    ("MATCHED", "ORDERER"): (True, False),
-    ("MATCHED", "RUNNER"): (True, False),
+    ("OFFER_CREATED", "ORDERER"): (True, True),
+    ("OFFER_CREATED", "RUNNER"): (True, True),
+    ("MATCHED", "ORDERER"): (True, True),
+    ("MATCHED", "RUNNER"): (True, True),
     ("NOT_SELECTED", "ORDERER"): (False, False),
-    ("NOT_SELECTED", "RUNNER"): (True, False),
+    ("NOT_SELECTED", "RUNNER"): (True, True),
     ("OFFER_CANCELLED", "ORDERER"): (True, True),
     ("OFFER_CANCELLED", "RUNNER"): (True, True),
-    ("RUNNER_COMPLETED", "ORDERER"): (True, False),
+    ("RUNNER_COMPLETED", "ORDERER"): (True, True),
     ("RUNNER_COMPLETED", "RUNNER"): (True, True),
     ("ORDERER_CONFIRMED", "ORDERER"): (True, True),
-    ("ORDERER_CONFIRMED", "RUNNER"): (True, False),
-    ("ALL_CONFIRMED", "ORDERER"): (True, False),
-    ("ALL_CONFIRMED", "RUNNER"): (True, False),
+    ("ORDERER_CONFIRMED", "RUNNER"): (True, True),
+    ("ALL_CONFIRMED", "ORDERER"): (True, True),
+    ("ALL_CONFIRMED", "RUNNER"): (True, True),
     ("DISPUTE_COMPLETED", "ORDERER"): (True, True),
     ("DISPUTE_COMPLETED", "RUNNER"): (True, True),
     ("DISPUTE_FAILED", "ORDERER"): (True, True),
@@ -138,7 +142,7 @@ DELIVERY_TABLE = {
     ("ADMIN_CANCELLED_AFTER_MATCH", "ORDERER"): (True, True),
     ("ADMIN_CANCELLED_AFTER_MATCH", "RUNNER"): (True, True),
     ("PAYOUT_COMPLETED", "ORDERER"): (True, True),
-    ("PAYOUT_COMPLETED", "RUNNER"): (True, False),
+    ("PAYOUT_COMPLETED", "RUNNER"): (True, True),
     ("REFUND_COMPLETED", "ORDERER"): (True, True),
     ("REFUND_COMPLETED", "RUNNER"): (True, True),
 }
@@ -152,13 +156,13 @@ def test_unread_and_push_targets_follow_the_table() -> None:
     for (event, role), expected in DELIVERY_TABLE.items():
         assert system_chat_delivery(SystemChatEvent(event), ChatRole(role), {}) == expected, (event, role)
 
-    # 분쟁 접수: 접수한 쪽은 안읽음·푸시 포함, 접수당한 쪽(기존 알림 받음)은 안읽음만.
+    # 분쟁 접수: 접수한 쪽은 안읽음·푸시 포함, 접수당한 쪽도 안읽음·푸시 포함.
     by_orderer = {"raisedBy": "ORDERER"}
     assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.ORDERER, by_orderer) == (True, True)
-    assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.RUNNER, by_orderer) == (True, False)
+    assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.RUNNER, by_orderer) == (True, True)
     by_runner = {"raisedBy": "RUNNER"}
     assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.RUNNER, by_runner) == (True, True)
-    assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.ORDERER, by_runner) == (True, False)
+    assert system_chat_delivery(SystemChatEvent.DISPUTE_RAISED, ChatRole.ORDERER, by_runner) == (True, True)
 
 
 # ------------------------------------------------------------------ 채팅 푸시 재시도 (CHAT-REQ-018, 029)

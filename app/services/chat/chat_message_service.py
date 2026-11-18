@@ -12,7 +12,7 @@ from app.schemas.chat import ChatMessageListResponse, ChatMessageResponse, ChatM
 from app.services.chat import chat_events
 from app.services.chat.blocking import BlockStatus, block_status
 from app.services.chat.chat_room_service import ChatRoomService
-from app.services.chat.system_chat import render_system_chat
+from app.services.chat.system_chat import render_system_chat, render_system_title
 
 PAGE_SIZE = 30
 AFTER_PAGE_SIZE = 100
@@ -138,8 +138,10 @@ def _mark_read_before(room: ChatRoom, role: ChatRole, seq: int) -> bool:
 def to_message_response(message: ChatMessage, viewer: ChatRole) -> ChatMessageResponse:
     if message.type == ChatMessageType.SYSTEM:
         content = render_system_chat(message.system_event, message.system_payload, viewer)
+        title = render_system_title(message.system_event, message.system_payload, viewer)
     else:
         content = message.content
+        title = None
     return ChatMessageResponse(
         id=message.id,
         room_id=message.room_id,
@@ -148,5 +150,6 @@ def to_message_response(message: ChatMessage, viewer: ChatRole) -> ChatMessageRe
         sender_id=message.sender_id,
         content=content,
         system_event=message.system_event,
+        system_title=title,
         created_at=message.created_at,
     )

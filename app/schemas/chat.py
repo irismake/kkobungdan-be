@@ -45,6 +45,7 @@ class ChatMessageResponse(BaseModel):
     type: ChatMessageType
     sender_id: str | None = Field(None, serialization_alias="senderId", description="보낸 사람. 시스템 채팅은 null")
     content: str
+    system_title: str | None = Field(None, serialization_alias="systemTitle", description="수신자별 시스템 안내 제목. 별도 제목이 없거나 일반 채팅이면 null")
     system_event: SystemChatEvent | None = Field(None, serialization_alias="systemEvent")
     created_at: datetime = Field(..., serialization_alias="createdAt")
 

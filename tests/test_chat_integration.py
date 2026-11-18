@@ -12,7 +12,7 @@ from app.models.offer import Offer
 from app.models.proposal import Proposal, ProposalStatus
 
 GREETING = "안녕하세요! 근처에 있어서 바로 갈 수 있어요."
-OFFER_CREATED_TEXT = "지원으로 채팅이 시작됐어요."
+OFFER_CREATED_TEXT = "회원님의 요청에 새로운 꼬붕이 생겼어요. 확인해보세요!"
 
 
 def offer_payload(proposal_id: int, **overrides) -> dict:
@@ -166,7 +166,7 @@ def test_applying_stores_start_notice_then_greeting(client, db, factory, sample_
         assert [(m["seq"], m["type"]) for m in chats] == [(1, "SYSTEM"), (2, "USER")]
         assert chats[0]["systemEvent"] == "OFFER_CREATED"
         assert chats[0]["senderId"] is None
-        assert chats[0]["content"] == OFFER_CREATED_TEXT
+        assert chats[0]["content"] == (OFFER_CREATED_TEXT if viewer.id == sample_user.id else "지원이 정상적으로 접수됐어요. 행님의 선택을 기다려주세요.")
         assert chats[1]["senderId"] == runner.id
         assert chats[1]["content"] == GREETING
 
@@ -598,7 +598,7 @@ def test_list_shows_the_last_system_chat_in_each_viewers_wording(client, db, fac
     runner_item = chat_list(client, factory, runner)["content"][0]
     orderer_item = chat_list(client, factory, sample_user)["content"][0]
 
-    assert runner_item["lastMessage"]["content"] == "이번에는 매칭되지 않았어요. 채팅이 자동으로 종료돼요."
+    assert runner_item["lastMessage"]["content"] == "이번엔 선택받지 못했지만 다음 기회가 분명 있을 거예요. 다시 도전해보세요!"
     assert orderer_item["lastMessage"]["content"] == "다른 꼬붕과 매칭되어 채팅이 종료됐어요."
 
 
@@ -928,13 +928,13 @@ def test_admin_cannot_cancel_a_disputed_request_and_room_stays_paused(journey):
 # ------------------------------------------------------------------ 시스템 채팅 (CHAT-REQ-020·021·024)
 
 ORDERER_TEXT = {
-    "OFFER_CREATED": "지원으로 채팅이 시작됐어요.",
-    "MATCHED": "매칭이 완료되어 임무가 시작됐어요.",
+    "OFFER_CREATED": "회원님의 요청에 새로운 꼬붕이 생겼어요. 확인해보세요!",
+    "MATCHED": "꼬붕을 선택하셨어요! 임무를 바로 시작해보세요.",
     "NOT_SELECTED": "다른 꼬붕과 매칭되어 채팅이 종료됐어요.",
     "OFFER_CANCELLED": "꼬붕이 지원을 취소했어요. 채팅이 자동으로 종료돼요.",
-    "RUNNER_COMPLETED": "꼬붕이 임무를 완료했어요. 행님도 임무 완료를 확인해 주세요.",
+    "RUNNER_COMPLETED": "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요.",
     "ORDERER_CONFIRMED": "꼬붕의 임무 완료를 기다리고 있어요.",
-    "ALL_CONFIRMED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
+    "ALL_CONFIRMED": "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!",
     "DISPUTE_RAISED": "분쟁 중인 임무예요. 분쟁이 해결될 때까지 잠시만 기다려 주세요.",
     "DISPUTE_COMPLETED": "임무가 완료됐어요. 정산이 곧 시작돼요.",
     "DISPUTE_FAILED": "종료된 임무예요. 더 이상 진행할 수 없어요.",
@@ -945,10 +945,15 @@ ORDERER_TEXT = {
 }
 RUNNER_TEXT = {
     **ORDERER_TEXT,
-    "NOT_SELECTED": "이번에는 매칭되지 않았어요. 채팅이 자동으로 종료돼요.",
+    "NOT_SELECTED": "이번엔 선택받지 못했지만 다음 기회가 분명 있을 거예요. 다시 도전해보세요!",
     "OFFER_CANCELLED": "지원을 취소했어요. 채팅이 자동으로 종료돼요.",
     "RUNNER_COMPLETED": "행님의 임무 완료 확인을 기다리고 있어요.",
-    "ORDERER_CONFIRMED": "행님이 임무 완료를 확인했어요. 꼬붕도 임무를 완료해 주세요.",
+    "ORDERER_CONFIRMED": "행님이 임무 완료를 확인했어요. 회원님도 앱에서 임무 완료를 눌러주시면 정산이 바로 진행돼요!",
+    "OFFER_CREATED": "지원이 정상적으로 접수됐어요. 행님의 선택을 기다려주세요.",
+    "MATCHED": "행님이 회원님을 선택했어요.",
+    "ALL_CONFIRMED": "양측 모두 임무 완료를 확인했어요. 성공적으로 임무 수행이 완료됐습니다!",
+    "PAYOUT_COMPLETED": "5,000원이 회원님 계좌로 입금됐어요. 오늘도 멋진 활동 감사해요!",
+    "DISPUTE_RAISED": "행님이 분쟁을 접수했어요. 앱에서 내용을 확인해주세요.",
 }
 
 
@@ -1079,13 +1084,14 @@ def test_payout_notice_shows_the_formatted_amount_to_both(client, db, factory, s
 
     expected = "꼬붕에게 수행비 15,000원이 입금됐어요."
     assert journey.system_chats(runner)[-1] == ("PAYOUT_COMPLETED", expected)
-    assert journey.system_chats(runner, viewer=runner)[-1] == ("PAYOUT_COMPLETED", expected)
+    assert journey.system_chats(runner, viewer=runner)[-1] == ("PAYOUT_COMPLETED", "15,000원이 회원님 계좌로 입금됐어요. 오늘도 멋진 활동 감사해요!")
 
 
 @pytest.mark.scenario("CHAT-TS-065")
-def test_refund_notice_only_goes_to_a_matched_room(client, db, factory, sample_user, admin_headers):
+def test_refund_notice_uses_matched_room_or_all_pre_match_rooms(client, db, factory, sample_user, admin_headers):
     after_match = Journey(client, db, factory, sample_user, admin_headers)
     matched_runner = after_match.apply("01071000017", "꼬붕 하나")
+    unselected_runner = after_match.apply("01071000019", "미선정 꼬붕")
     after_match.accept(matched_runner)
     after_match.dispute("RUNNER", matched_runner)
     after_match.resolve("FAILED", matched_runner)
@@ -1098,7 +1104,8 @@ def test_refund_notice_only_goes_to_a_matched_room(client, db, factory, sample_u
     before_match.refund_complete()
 
     assert after_match.events(matched_runner)[-1] == "REFUND_COMPLETED"
-    assert "REFUND_COMPLETED" not in before_match.events(waiting_runner)
+    assert "REFUND_COMPLETED" not in after_match.events(unselected_runner)
+    assert before_match.events(waiting_runner)[-1] == "REFUND_COMPLETED"
 
 
 @pytest.mark.scenario("CHAT-TS-090")
@@ -1671,7 +1678,7 @@ def test_offer_cancel_notice_is_pushed_to_both_in_their_own_wording(journey, db)
 
 
 @pytest.mark.scenario("CHAT-TS-092")
-def test_runner_completion_is_not_chat_pushed_to_the_orderer_who_gets_the_notification(journey, db, client, factory):
+def test_runner_completion_uses_system_push_with_legacy_copy_for_orderer(journey, db, client, factory):
     runner = journey.apply("01074000008", "꼬붕 하나")
     journey.accept(runner)
     enable_push(db, journey.orderer, runner)
@@ -1683,7 +1690,7 @@ def test_runner_completion_is_not_chat_pushed_to_the_orderer_who_gets_the_notifi
     assert journey.runner_complete(runner).status_code == 200
     run_chat_push(sender)
 
-    assert sender.to(journey.orderer) == []  # 행님은 기존 알림 푸시만 받는다
+    assert [(p["title"], p["body"]) for p in sender.to(journey.orderer)] == [("꼬붕이 임무를 완료했어요! 🤝", "꼬붕이 임무를 완료했어요. 회원님도 확인해주시면 수행비가 꼬붕에게 전달돼요.")]
     assert [p["body"] for p in sender.to(runner)] == ["행님의 임무 완료 확인을 기다리고 있어요."]
     assert unread_summary(client, factory, journey.orderer)[room_id] == before + 1
 
@@ -2433,7 +2440,7 @@ def test_admin_can_read_rooms_and_chats_but_not_send_or_change_read_positions(cl
     content = chats.json()["data"]["content"]
     assert [m["seq"] for m in content] == [1, 2, 3, 4]
     system = content[0]
-    assert (system["systemEvent"], system["content"], system["runnerContent"]) == ("OFFER_CREATED", OFFER_CREATED_TEXT, OFFER_CREATED_TEXT)
+    assert (system["systemEvent"], system["content"], system["runnerContent"]) == ("OFFER_CREATED", OFFER_CREATED_TEXT, "지원이 정상적으로 접수됐어요. 행님의 선택을 기다려주세요.")
     assert (content[1]["senderRole"], content[1]["content"]) == ("RUNNER", GREETING)
     assert sent.status_code == 403
     assert sent.json()["error"]["code"] == "FORBIDDEN"
