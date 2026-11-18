@@ -16,6 +16,7 @@ from app.schemas.common import PageResponse
 from app.schemas.mission import MissionResponse
 from app.services.admin.admin_user_display import WITHDRAWN_USER_NAME, admin_user_names
 from app.services.chat.chat_lifecycle import ChatLifecycle
+from app.services.locking import lock_mission, lock_mission_of_offer, lock_offer, lock_proposal
 from app.services.refund.refund_service import RefundService
 
 
@@ -39,8 +40,23 @@ class MissionService:
         return mission
 
     @staticmethod
+    def _lock_mission(db: Session, mission_id: int) -> tuple[Mission, Proposal | None]:
+        """요청 → 임무 순서로 잠그고 최신 값으로 읽는다. 판정·지급처럼 임무 상태를 바꾸기 전에 쓴다."""
+        proposal_id = db.query(Mission.proposal_id).filter(Mission.id == mission_id).scalar()
+        if proposal_id is None:
+            raise api_error(AppError.MISSION_NOT_FOUND)
+        proposal = lock_proposal(db, proposal_id)
+        offer_id = db.query(Mission.offer_id).filter(Mission.id == mission_id).scalar()
+        lock_offer(db, offer_id)
+        mission = lock_mission(db, mission_id)
+        if mission is None:
+            raise api_error(AppError.MISSION_NOT_FOUND)
+        return mission, proposal
+
+    @staticmethod
     def _find_by_offer(db: Session, offer_id: int) -> Mission | None:
-        return db.query(Mission).filter(Mission.offer_id == offer_id).first()
+        # 요청·지원을 잠근 뒤 부르므로 임무도 잠가 최신 값으로 읽는다 (app/services/locking.py).
+        return lock_mission_of_offer(db, offer_id)
 
     @staticmethod
     def create_for_accepted_offer(db: Session, offer: Offer, proposal: Proposal) -> Mission:
@@ -125,7 +141,7 @@ class MissionService:
 
         판정과 함께 요청·지원을 완료 또는 환불/취소 상태로 종결한다.
         """
-        mission = MissionService._get_mission(db, mission_id)
+        mission, _ = MissionService._lock_mission(db, mission_id)
         if not mission.can_resolve():
             raise api_error(AppError.MISSION_NOT_RESOLVABLE, f"status: {mission.status}")
 
@@ -182,7 +198,7 @@ class MissionService:
         memo: str | None = None,
     ) -> MissionResponse:
         """꼬붕에게 수행비를 입금한 사실을 기록한다. 금액은 요청의 수행비 전액이다."""
-        mission = MissionService._get_mission(db, mission_id)
+        mission, _ = MissionService._lock_mission(db, mission_id)
         if not mission.can_record_settlement():
             raise api_error(AppError.MISSION_NOT_SETTLEABLE, f"status: {mission.status}")
 

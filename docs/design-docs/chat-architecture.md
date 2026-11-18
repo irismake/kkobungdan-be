@@ -166,7 +166,9 @@
 - `ChatLifecycle`은 호출한 서비스의 트랜잭션 안에서 채팅방 행을 잠그고 상태·`statusReason`·`version`을 바꾸고 시스템 채팅을 저장한다. 상태 전이는 `ACTIVE → INACTIVE → CLOSED`, `ACTIVE → CLOSED`만 허용하고, `CLOSED`에서는 바꾸지 않는다(늦게 온 요청 무시).
 - 시스템 채팅은 `system_event_key`(기본 `{사건}:offer:{offerId}`, 수행비 입금 `PAYOUT_COMPLETED:mission:{missionId}`, 환불 완료 `REFUND_COMPLETED:refund:{refundId}`)로 사건당 한 번만 저장한다. 수행비 입금·환불 완료 안내는 `CLOSED` 채팅방에도 저장한다.
 - 채팅 기능 이전에 만들어진 지원처럼 채팅방이 없으면 `ChatLifecycle`은 아무것도 하지 않는다(백필은 4-9).
-- 서로 겹치는 동작(매칭과 지원 취소, 매칭과 요청 취소 등)이 하나로만 확정되도록, 해당 서비스들이 상태를 바꾸기 전에 요청(`proposals`) 행을 `SELECT … FOR UPDATE`로 잠그게 바꾼다. 지금은 잠금이 없다([`chat-requirements.md` 기존 기능 영향](../product-specs/chat-requirements.md#기존-기능-영향)).
+- 서로 겹치는 동작(매칭과 지원 취소, 매칭과 요청 취소, 양측 완료 확인 등)이 하나로만 확정되도록, 상태를 바꾸는 서비스는 검사하기 전에 `app/services/locking.py`로 요청(`proposals`) 행부터 `SELECT … FOR UPDATE`로 잠근다. 대상: 지원 등록·매칭·지원 취소·꼬붕 완료·분쟁 접수(`OfferService`), 요청 취소·행님 완료 확인·분쟁 접수(`ProposalService`), 관리자 취소·분쟁 판정·환불 완료·수행비 입금(`AdminCommandService`), 분쟁 판정·수행비 입금(`MissionService`), 신고 승인, 탈퇴 시 자동 취소.
+- 잠금 순서는 요청 → 지원 → 임무 → 채팅방으로 고정해 교착을 막는다.
+- MySQL 기본 격리 수준(REPEATABLE READ)에서는 로그인 사용자 확인 같은 첫 일반 조회 때 읽기 기준 시점이 정해져, 잠금을 기다린 뒤에도 일반 조회는 옛 값을 본다. 그래서 판단에 쓰는 요청·지원·임무 행은 잠그는 조회(`FOR UPDATE` + `populate_existing`)로 최신 값을 읽는다.
 
 ### 읽음과 안읽음 (CHAT-REQ-010~013·027)
 

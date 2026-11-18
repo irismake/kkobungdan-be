@@ -25,6 +25,7 @@ from app.schemas.user import (
     UserWithdrawalResponse,
 )
 from app.services.chat.chat_lifecycle import ChatLifecycle
+from app.services.locking import lock_offer_with_proposal
 
 
 # 탈퇴는 환불·지급 계좌와 전화번호를 하드 삭제한다. 그래서 차단 기준은 "거래가 진행 중이냐"가
@@ -215,6 +216,10 @@ class UserWithdrawalService:
             )
             .all()
         )
-        for offer in waiting_offers:
+        for waiting in waiting_offers:
+            # 자동 취소와 매칭이 겹치지 않게 요청 → 지원 순서로 잠그고, 아직 대기 중일 때만 취소한다.
+            offer, _ = lock_offer_with_proposal(db, waiting.id)
+            if offer is None or offer.status not in WITHDRAWAL_AUTO_CANCEL_OFFER_STATUSES:
+                continue
             offer.cancel()
             ChatLifecycle.on_offer_cancelled(db, offer)

@@ -18,6 +18,7 @@ from app.schemas.admin import (
 )
 from app.services.admin.admin_query_service import AdminQueryService
 from app.services.chat.chat_lifecycle import ChatLifecycle
+from app.services.locking import lock_mission, lock_mission_of_offer, lock_offer, lock_proposal
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
 
@@ -51,13 +52,15 @@ class AdminCommandService:
         admin_note: str | None,
     ) -> AdminProposalDetailResponse:
         """요청을 취소하고 연결된 지원과 미션을 함께 종결한다."""
-        proposal = db.query(Proposal).filter(Proposal.id == proposal_id).first()
+        proposal = lock_proposal(db, proposal_id)
         if proposal is None:
             raise api_error(AppError.PROPOSAL_NOT_FOUND, f"id: {proposal_id}")
         if proposal.status not in CANCELLABLE_PROPOSAL_STATUSES:
             raise api_error(AppError.PROPOSAL_NOT_CANCELLABLE, f"status: {proposal.status.value}")
 
-        mission = db.query(Mission).filter(Mission.proposal_id == proposal.id).first()
+        mission = (
+            db.query(Mission).filter(Mission.proposal_id == proposal.id).populate_existing().with_for_update().first()
+        )
         if mission is not None and mission.status not in {
             MissionStatus.STARTED,
             MissionStatus.DISPUTED,
@@ -73,6 +76,9 @@ class AdminCommandService:
         offers = (
             db.query(Offer)
             .filter(Offer.proposal_id == proposal.id, Offer.status.in_(CANCELLABLE_OFFER_STATUSES))
+            .order_by(Offer.id)
+            .populate_existing()
+            .with_for_update()
             .all()
         )
         for offer in offers:
@@ -129,14 +135,14 @@ class AdminCommandService:
         """분쟁을 판정하고 요청·지원·미션을 함께 종결한다."""
         evidence = AdminCommandService._get_pending_evidence(db, dispute_id)
 
-        proposal = db.query(Proposal).filter(Proposal.id == evidence.proposal_id).first()
-        offer = db.query(Offer).filter(Offer.id == evidence.offer_id).first()
+        proposal = lock_proposal(db, evidence.proposal_id)
+        offer = lock_offer(db, evidence.offer_id)
         if proposal is None:
             raise api_error(AppError.PROPOSAL_NOT_FOUND, f"id: {evidence.proposal_id}")
         if offer is None:
             raise api_error(AppError.OFFER_NOT_FOUND, f"id: {evidence.offer_id}")
 
-        mission = db.query(Mission).filter(Mission.offer_id == offer.id).first()
+        mission = lock_mission_of_offer(db, offer.id)
         if mission is None:
             raise api_error(AppError.MISSION_NOT_FOUND, f"offerId: {offer.id}")
         if not mission.can_resolve():
@@ -191,10 +197,12 @@ class AdminCommandService:
     ) -> AdminRefundDetailResponse:
         """환불 완료를 기록하고 요청을 REFUNDED로 종결한다."""
         refund = AdminCommandService._get_refund(db, refund_id)
+        # 같은 환불을 동시에 완료하지 않게 요청 → 환불 순서로 잠그고 다시 읽는다.
+        proposal = lock_proposal(db, refund.proposal_id)
+        refund = db.query(Refund).filter(Refund.id == refund_id).populate_existing().with_for_update().one()
         if refund.status != RefundStatus.PENDING:
             raise api_error(AppError.REFUND_NOT_PROCESSABLE, f"status: {refund.status}")
 
-        proposal = db.query(Proposal).filter(Proposal.id == refund.proposal_id).first()
         if proposal is None:
             raise api_error(AppError.PROPOSAL_NOT_FOUND, f"id: {refund.proposal_id}")
         if proposal.status != ProposalStatus.REFUND_PENDING:
@@ -244,6 +252,9 @@ class AdminCommandService:
     ) -> AdminPayoutDetailResponse:
         """수행비 지급 완료를 기록한다. 요청·지원 상태는 바꾸지 않는다."""
         mission = AdminCommandService._get_mission(db, payout_id)
+        # 같은 지급을 동시에 기록하지 않게 요청 → 임무 순서로 잠그고 다시 읽는다.
+        lock_proposal(db, mission.proposal_id)
+        mission = lock_mission(db, payout_id)
         if not mission.can_record_settlement():
             raise api_error(AppError.MISSION_NOT_SETTLEABLE, f"status: {mission.status}")
 

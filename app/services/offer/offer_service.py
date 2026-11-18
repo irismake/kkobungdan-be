@@ -21,6 +21,7 @@ from app.schemas.common import PageResponse
 from app.schemas.offer import OfferAcceptResponse, OfferCreate, OfferDetailResponse, OfferResponse, OfferSummaryResponse
 from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
+from app.services.locking import lock_offer_with_proposal, lock_proposal
 from app.services.mission.mission_service import MissionService
 
 
@@ -70,6 +71,23 @@ class OfferService:
     @staticmethod
     def _ensure_proposal_exists(db: Session, proposal_id: int) -> None:
         OfferService._get_proposal(db, proposal_id)
+
+    @staticmethod
+    def _lock_proposal(db: Session, proposal_id: int) -> Proposal:
+        proposal = lock_proposal(db, proposal_id)
+        if proposal is None:
+            raise api_error(AppError.PROPOSAL_NOT_FOUND)
+        return proposal
+
+    @staticmethod
+    def _lock_offer(db: Session, offer_id: int) -> tuple[Offer, Proposal]:
+        """요청 → 지원 순서로 잠그고 최신 값으로 읽는다 (app/services/locking.py)."""
+        offer, proposal = lock_offer_with_proposal(db, offer_id)
+        if offer is None:
+            raise api_error(AppError.OFFER_NOT_FOUND)
+        if proposal is None:
+            raise api_error(AppError.PROPOSAL_NOT_FOUND)
+        return offer, proposal
 
     @staticmethod
     def _get_offer(db: Session, offer_id: int) -> Offer:
@@ -140,7 +158,8 @@ class OfferService:
 
     @staticmethod
     def create(db: Session, request: OfferCreate, runner_id: str) -> OfferResponse:
-        proposal = OfferService._get_proposal(db, request.proposal_id)
+        # 지원 등록과 매칭·요청 취소가 겹치지 않게 요청을 잠근다 (CHAT-REQ-026).
+        proposal = OfferService._lock_proposal(db, request.proposal_id)
 
         if proposal.orderer_id == runner_id:
             raise api_error(AppError.SELF_OFFER_NOT_ALLOWED)
@@ -237,7 +256,7 @@ class OfferService:
 
     @staticmethod
     def cancel(db: Session, offer_id: int, runner_id: str) -> None:
-        offer = OfferService._get_offer(db, offer_id)
+        offer, _ = OfferService._lock_offer(db, offer_id)
         if offer.runner_id != runner_id:
             raise api_error(AppError.FORBIDDEN)
         if offer.status != OfferStatus.WAITING:
@@ -249,8 +268,7 @@ class OfferService:
 
     @staticmethod
     def accept(db: Session, offer_id: int, orderer_id: str) -> OfferAcceptResponse:
-        offer = OfferService._get_offer(db, offer_id)
-        proposal = OfferService._get_proposal(db, offer.proposal_id)
+        offer, proposal = OfferService._lock_offer(db, offer_id)
 
         if proposal.orderer_id != orderer_id:
             raise api_error(AppError.FORBIDDEN)
@@ -331,11 +349,10 @@ class OfferService:
         offer_id: int,
         runner_id: str,
     ) -> OfferResponse:
-        offer = OfferService._get_offer(db, offer_id)
+        offer, proposal = OfferService._lock_offer(db, offer_id)
         if offer.runner_id != runner_id:
             raise api_error(AppError.FORBIDDEN)
 
-        proposal = OfferService._get_proposal(db, offer.proposal_id)
         if not offer.can_confirm_runner_completion() or proposal.status not in {
             ProposalStatus.MATCHED,
             ProposalStatus.ORDER_COMPLETED,
@@ -372,11 +389,10 @@ class OfferService:
         reason_question_id: int,
         detail_reason: str | None = None,
     ) -> OfferResponse:
-        offer = OfferService._get_offer(db, offer_id)
+        offer, proposal = OfferService._lock_offer(db, offer_id)
         if offer.runner_id != runner_id:
             raise api_error(AppError.FORBIDDEN)
 
-        proposal = OfferService._get_proposal(db, offer.proposal_id)
         if not offer.can_raise_dispute() or not proposal.can_raise_dispute():
             raise api_error(AppError.OFFER_NOT_UPDATABLE, f"status: {offer.status.value}")
 

@@ -29,6 +29,7 @@ from app.schemas.common import PageResponse
 from app.schemas.proposal import ProposalDetailResponse, ProposalOwnOfferResponse, ProposalOwnResponse, ProposalRequest
 from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.dispute.dispute_survey_service import DisputeSurveyService
+from app.services.locking import lock_proposal
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
 
@@ -100,6 +101,14 @@ class ProposalService:
         return proposal
 
     @staticmethod
+    def _lock_proposal(db: Session, proposal_id: int) -> Proposal:
+        """상태를 바꾸기 전에 요청을 잠그고 최신 값으로 읽는다 (app/services/locking.py)."""
+        proposal = lock_proposal(db, proposal_id)
+        if proposal is None:
+            raise api_error(AppError.PROPOSAL_NOT_FOUND, f"id: {proposal_id}")
+        return proposal
+
+    @staticmethod
     def _ensure_owner(proposal: Proposal, user_id: str) -> None:
         if proposal.orderer_id != user_id:
             raise api_error(AppError.FORBIDDEN)
@@ -113,6 +122,8 @@ class ProposalService:
                 Offer.status.in_(EXECUTION_OFFER_STATUSES),
             )
             .order_by(Offer.accepted_at.desc(), Offer.id.desc())
+            .populate_existing()
+            .with_for_update()
             .first()
         )
         if offer is None:
@@ -317,7 +328,7 @@ class ProposalService:
 
     @staticmethod
     def cancel(db: Session, proposal_id: int, orderer_id: str) -> Proposal:
-        proposal = ProposalService._get_proposal(db, proposal_id)
+        proposal = ProposalService._lock_proposal(db, proposal_id)
         ProposalService._ensure_owner(proposal, orderer_id)
         if proposal.status not in CANCELLABLE_STATUSES:
             raise api_error(AppError.PROPOSAL_NOT_CANCELLABLE, f"status: {proposal.status.value}")
@@ -362,7 +373,7 @@ class ProposalService:
 
     @staticmethod
     def confirm_received(db: Session, proposal_id: int, orderer_id: str) -> ProposalDetailResponse:
-        proposal = ProposalService._get_proposal(db, proposal_id)
+        proposal = ProposalService._lock_proposal(db, proposal_id)
         ProposalService._ensure_owner(proposal, orderer_id)
         offer = ProposalService._get_execution_offer(db, proposal.id)
 
@@ -396,7 +407,7 @@ class ProposalService:
         reason_question_id: int,
         detail_reason: str | None = None,
     ) -> ProposalDetailResponse:
-        proposal = ProposalService._get_proposal(db, proposal_id)
+        proposal = ProposalService._lock_proposal(db, proposal_id)
         ProposalService._ensure_owner(proposal, orderer_id)
         offer = ProposalService._get_execution_offer(db, proposal.id)
 

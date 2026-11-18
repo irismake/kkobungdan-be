@@ -41,7 +41,8 @@
 - [x] 4-5 읽음과 안읽음 (2026-11-17): `POST /v1/chat-room/{id}/read`(조건부 UPDATE로 뒤로만, 바뀔 때만 `version` 증가, 없는 순번 `CHAT_READ_SEQ_INVALID`), `GET /v1/chat-room/unread-count`(채팅방별·합계, 닫힌 방 포함), `POST /v1/chat-room/read-all`(요청 시점 위치까지, 더 읽은 방 유지), 상세 응답에 `version`. `chat.read.updated` 기록은 실시간과 함께 4-7에서
 - [x] 4-6 채팅 푸시 (2026-11-17): `chat.push` 전달 대상(`ChatPushConsumer`, 5초·30초·1분·2분·4분 5회, 유효 10분), 받는 사람은 일반 채팅의 상대·시스템 채팅 표의 푸시 대상(알림 꺼짐·토큰 없음·탈퇴 제외, 없으면 `SKIPPED`), 묶음 키 `chat-room-{id}`, 배지 = 채팅 안읽음 합계 + 알림 미읽음(`notification/badge.py`, 기존 알림 푸시도 같은 값), 앱 시작 때 등록. Outbox 처리 작업이 같은 대상의 연속 이벤트를 다음 주기로 미루지 않도록 전달 처리를 반복하게 변경(OUTBOX-TS-023)
 - [x] 4-7 실시간 (2026-11-17): `GET /v1/chat/ws`(Bearer 인증, 만료·없는 토큰 4401 거부, 연결 중 만료 시 4401 종료, 30초 ping), `app/realtime/hub.py`(사용자별 연결, 다른 스레드에서 전송), `chat.realtime` 전달 대상(재시도 없음, 연결 없음·전송 오류 `SKIPPED`), `chat.room.updated`(`ChatLifecycle`)·`chat.read.updated`(읽음·전체 읽음·전송) 기록과 `version`, nginx `/v1/chat/ws` location(3600s)
-- [ ] 4-8 ~ 4-9
+- [x] 4-8 중복·동시성 (2026-11-17): `app/services/locking.py`(요청 → 지원 → 임무 순서 잠금, 잠근 행은 최신 값으로 다시 읽음)를 상태를 바꾸는 서비스 진입부에 적용. 동시 요청 테스트 도우미(요청마다 새 세션, 검사 직후 두 요청을 만나게 함). TS-099(채팅방 생성 작업 중 새 지원)는 생성 작업과 함께 4-9로 옮김
+- [ ] 4-9
 
 채팅 시나리오 105개(CHAT-TS-102~104, 107~109는 OUTBOX로 옮겨 비움)와 Outbox 시나리오 21개는 위 표에서 한 묶음에만 배정했다.
 
