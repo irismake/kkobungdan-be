@@ -2404,3 +2404,155 @@ def test_chat_saved_while_read_all_runs_stays_unread(parallel, db, factory, samp
     assert fresh_room(db, offer_id).orderer_last_read_seq == 10
     unread = parallel.call("GET", "/v1/chat-room/unread-count", sample_user).json()["data"]
     assert unread["totalUnreadCount"] == 1
+
+
+# ================================================================== 4-9 관리자 조회·기존 지원 채팅방 생성
+
+
+@pytest.mark.scenario("CHAT-TS-007")
+def test_admin_can_read_rooms_and_chats_but_not_send_or_change_read_positions(client, db, factory, sample_user, admin_headers):
+    runner = runner_with_account(factory, "01078000001", "꼬붕 하나")
+    room = setup_room(db, factory, sample_user, runner, title="관리자 조회 요청")
+    add_user_chats(db, room, sample_user.id, 2)  # 3, 4
+    assert read(client, factory, room.id, runner, 3).status_code == 200
+    before = (room_detail(client, factory, room.id, sample_user)["myLastReadSeq"], room_detail(client, factory, room.id, runner)["myLastReadSeq"])
+
+    rooms = client.get("/v1/admin/chat-room", params={"proposalId": room.proposal_id}, headers=admin_headers)
+    chats = client.get(f"/v1/admin/chat-room/{room.id}/messages", headers=admin_headers)
+    sent = client.post(
+        f"/v1/chat-room/{room.id}/messages", json={"clientMessageId": "admin-1", "content": "관리자 채팅"}, headers=admin_headers
+    )
+
+    assert rooms.status_code == 200, rooms.json()
+    [item] = rooms.json()["data"]
+    assert (item["id"], item["offerId"], item["ordererName"], item["runnerName"], item["status"]) == (
+        room.id, room.offer_id, sample_user.name, "꼬붕 하나", "ACTIVE"
+    )
+    assert (item["ordererLastReadSeq"], item["runnerLastReadSeq"]) == (0, 3)
+    assert chats.status_code == 200, chats.json()
+    content = chats.json()["data"]["content"]
+    assert [m["seq"] for m in content] == [1, 2, 3, 4]
+    system = content[0]
+    assert (system["systemEvent"], system["content"], system["runnerContent"]) == ("OFFER_CREATED", OFFER_CREATED_TEXT, OFFER_CREATED_TEXT)
+    assert (content[1]["senderRole"], content[1]["content"]) == ("RUNNER", GREETING)
+    assert sent.status_code == 403
+    assert sent.json()["error"]["code"] == "FORBIDDEN"
+    after = (room_detail(client, factory, room.id, sample_user)["myLastReadSeq"], room_detail(client, factory, room.id, runner)["myLastReadSeq"])
+    assert after == before
+    assert message_count(db, room.id) == 4
+    # 관리자가 아닌 사용자는 관리자 API를 쓸 수 없다
+    assert client.get("/v1/admin/chat-room", params={"proposalId": room.proposal_id}, headers=factory.headers_for(sample_user)).status_code == 403
+
+
+def backfill_chat_rooms(connection) -> None:
+    """배포 때 실행하는 데이터 마이그레이션(0037)의 채팅방 생성 함수를 그대로 부른다."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0037_backfill_chat_rooms.py"
+    spec = importlib.util.spec_from_file_location("backfill_chat_rooms_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.backfill_chat_rooms(connection)
+
+
+@pytest.mark.scenario("CHAT-TS-069")
+def test_backfill_creates_one_room_per_existing_offer_matching_its_status(db, factory, sample_user):
+    from app.models.chat import ChatMessage, ChatRoom
+    from app.models.mission import MissionResolution, MissionStatus
+    from tests.conftest import TEST_ENGINE
+
+    def runner(phone):
+        return factory.user(phone, name=f"꼬붕 {phone[-2:]}")
+
+    waiting_p = factory.proposal(sample_user.id, ProposalStatus.OFFERED, title="대기")
+    waiting = factory.offer(waiting_p.id, runner("01078000010").id)
+
+    matched_p = factory.proposal(sample_user.id, ProposalStatus.MATCHED, title="매칭")
+    accepted = factory.offer(matched_p.id, runner("01078000011").id, OfferStatus.ACCEPTED)
+    factory.mission(matched_p, accepted)
+    not_selected = factory.offer(matched_p.id, runner("01078000012").id, OfferStatus.REJECTED)
+
+    disputed_p = factory.proposal(sample_user.id, ProposalStatus.DISPUTED, title="분쟁")
+    disputed = factory.offer(disputed_p.id, runner("01078000013").id, OfferStatus.DISPUTED)
+    factory.mission(disputed_p, disputed, MissionStatus.DISPUTED)
+    factory.dispute_evidence(disputed_p, disputed, actor_id=sample_user.id)  # 행님이 접수
+
+    done_p = factory.proposal(sample_user.id, ProposalStatus.ALL_COMPLETED, title="완료")
+    done = factory.offer(done_p.id, runner("01078000014").id, OfferStatus.ALL_COMPLETED)
+    factory.mission(done_p, done, MissionStatus.COMPLETED)
+
+    failed_p = factory.proposal(sample_user.id, ProposalStatus.REFUND_PENDING, title="분쟁 실패")
+    failed = factory.offer(failed_p.id, runner("01078000015").id, OfferStatus.CANCELLED)
+    factory.mission(failed_p, failed, MissionStatus.FAILED, resolution=MissionResolution.FAILED.value)
+
+    cancelled_p = factory.proposal(sample_user.id, ProposalStatus.OFFERED, title="지원 취소")
+    cancelled = factory.offer(cancelled_p.id, runner("01078000016").id, OfferStatus.CANCELLED)
+
+    withdrawn_p = factory.proposal(sample_user.id, ProposalStatus.CANCELLED, title="요청 취소")
+    rejected_by_cancel = factory.offer(withdrawn_p.id, runner("01078000017").id, OfferStatus.REJECTED)
+
+    already = setup_room(db, factory, sample_user, runner_with_account(factory, "01078000018", "꼬붕 기존"), title="이미 있음")
+    messages_before = db.query(ChatMessage).count()
+
+    for _ in range(2):  # 두 번 실행해도 결과가 같다
+        with TEST_ENGINE.begin() as connection:
+            backfill_chat_rooms(connection)
+
+    db.rollback()
+    expected = {
+        waiting.id: ("ACTIVE", None),
+        accepted.id: ("ACTIVE", None),
+        not_selected.id: ("CLOSED", "NOT_SELECTED"),
+        disputed.id: ("INACTIVE", "ORDERER_DISPUTED"),
+        done.id: ("CLOSED", "ALL_CONFIRMED"),
+        failed.id: ("CLOSED", "DISPUTE_FAILED"),
+        cancelled.id: ("CLOSED", "OFFER_CANCELLED"),
+        rejected_by_cancel.id: ("CLOSED", "PROPOSAL_CANCELLED"),
+        already.offer_id: ("ACTIVE", None),
+    }
+    rooms = db.query(ChatRoom).all()
+    assert sorted(r.offer_id for r in rooms) == sorted(expected)  # 지원마다 1개
+    for room in rooms:
+        state = (room.status.value, room.status_reason.value if room.status_reason else None)
+        assert state == expected[room.offer_id], room.offer_id
+        assert room.last_seq == (2 if room.offer_id == already.offer_id else 0)
+    assert db.query(ChatMessage).count() == messages_before  # 시스템 채팅은 생기지 않는다
+
+
+@pytest.mark.scenario("CHAT-TS-099")
+def test_new_offer_during_backfill_gets_exactly_one_room_with_its_chats(parallel, db, factory, sample_user):
+    import time
+
+    from app.models.chat import ChatMessage, ChatRoom
+    from tests.conftest import TEST_ENGINE
+
+    legacy_p = factory.proposal(sample_user.id, ProposalStatus.OFFERED, title="기존")
+    legacy = factory.offer(legacy_p.id, factory.user("01078000020", name="기존 꼬붕").id)
+    proposal = open_proposal(factory, sample_user)
+    runner = runner_with_account(factory, "01078000021", "새 꼬붕")
+    headers = factory.headers_for(runner)
+    result = {}
+
+    with TEST_ENGINE.connect() as connection:
+        transaction = connection.begin()
+        backfill_chat_rooms(connection)  # 생성 작업이 커밋하기 전에
+        worker = threading.Thread(
+            target=lambda: result.setdefault(
+                "apply", parallel.call("POST", "/v1/offer", json={"proposalId": proposal.id, "greeting": GREETING}, headers=headers)
+            )
+        )
+        worker.start()  # 새 지원이 들어온다
+        time.sleep(0.5)
+        transaction.commit()
+    worker.join(timeout=30)
+
+    assert result["apply"].status_code == 201, result["apply"].json()
+    new_offer_id = result["apply"].json()["data"]["id"]
+    with TEST_ENGINE.begin() as connection:
+        backfill_chat_rooms(connection)  # 생성 작업을 한 번 더 돌려도 새 지원 채팅방은 그대로
+    db.rollback()
+    [new_room] = db.query(ChatRoom).filter(ChatRoom.offer_id == new_offer_id).all()
+    kinds = [(m.type.value, m.system_event.value if m.system_event else None) for m in db.query(ChatMessage).filter(ChatMessage.room_id == new_room.id).order_by(ChatMessage.seq)]
+    assert kinds == [("SYSTEM", "OFFER_CREATED"), ("USER", None)]
+    assert db.query(ChatRoom).filter(ChatRoom.offer_id == legacy.id).count() == 1
