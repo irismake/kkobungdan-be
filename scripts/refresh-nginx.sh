@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # nginx 설정이 바뀌었으면 검사한 뒤 다시 만들고, 꺼져 있으면 띄운다.
-# (docs/exec-plans/active/2026-11-18-nginx-recreate-on-config-change.md)
+# (docs/exec-plans/completed/2026-11-18-nginx-recreate-on-config-change.md)
 #
 # nginx 이미지는 템플릿을 컨테이너가 시작할 때만 설정 파일로 바꾸므로, 템플릿이 바뀌어도
 # 돌던 nginx에는 반영되지 않는다. staging·production 배포가 같은 nginx를 쓰므로 둘 다 이 스크립트를 부른다.
