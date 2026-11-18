@@ -68,6 +68,7 @@
 |---|---|---|---|
 | 400 | `INVALID_DATE_TIME_FORMAT` | deadline 형식이 올바르지 않습니다. | |
 | 400 | `INVALID_STATUS` | 입금 확인 대기 상태가 아닙니다. | |
+| 400 | `CHAT_READ_SEQ_INVALID` | 채팅방에 없는 채팅입니다. | |
 | 400 | `PHONE_VERIFICATION_CODE_MISMATCH` | 인증번호가 일치하지 않습니다. | |
 | 400 | `PHONE_VERIFICATION_EXPIRED` | 인증번호가 만료되었습니다. 다시 요청해주세요. | |
 | 400 | `PROPOSAL_DEADLINE_INVALID` | 마감 시각은 현재 시각보다 이후여야 합니다. | |
@@ -77,8 +78,10 @@
 | 401 | `INVALID_TOKEN` | 유효하지 않은 토큰입니다.<br>인증 정보를 확인할 수 없습니다.<br>토큰 종류가 올바르지 않습니다.<br>인증 정보가 없습니다.<br>인증 정보가 올바르지 않습니다. | 내부 사유 5종이 같은 코드로 나간다 |
 | 403 | `FORBIDDEN` | 권한이 없습니다. | |
 | 403 | `PROPOSAL_SELF_REPORT_NOT_ALLOWED` | 본인의 요청은 신고할 수 없습니다. | |
+| 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없습니다. | |
+| 404 | `OUTBOX_DELIVERY_NOT_FOUND` | 전달 기록을 찾을 수 없습니다. | 관리자 웹 전용 |
 | 404 | `DISPUTE_EVIDENCE_NOT_FOUND` | 분쟁 증빙을 찾을 수 없습니다. | |
-| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없습니다. | 관리자 웹 전용 |
+| 404 | `MISSION_NOT_FOUND` | 임무를 찾을 수 없습니다. | 관리자 웹 전용 |
 | 404 | `NOTIFICATION_NOT_FOUND` | 알림을 찾을 수 없습니다. | |
 | 404 | `NOT_FOUND` | 요청하신 경로를 찾을 수 없습니다. | |
 | 404 | `OFFER_NOT_FOUND` | 지원 내역을 찾을 수 없습니다. | |
@@ -91,8 +94,11 @@
 | 409 | `DUPLICATE_PROPOSAL_REPORT` | 이미 해당 요청을 신고했습니다. | |
 | 409 | `OFFER_NOT_ACCEPTABLE` | 수락할 수 없는 지원 상태입니다. | |
 | 409 | `OFFER_NOT_CANCELLABLE` | 취소할 수 없는 지원 상태입니다. | |
-| 409 | `MISSION_NOT_RESOLVABLE` | 분쟁 중인 미션만 판정할 수 있습니다. | 관리자 웹 전용 |
-| 409 | `MISSION_NOT_SETTLEABLE` | 수행비를 지급할 수 없는 미션 상태입니다. | 관리자 웹 전용 |
+| 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD 상태인 전달만 다시 처리할 수 있습니다. | 관리자 웹 전용 |
+| 409 | `CHAT_MESSAGE_ID_CONFLICT` | 이미 다른 내용으로 보낸 채팅입니다. | |
+| 409 | `CHAT_ROOM_NOT_SENDABLE` | 채팅을 보낼 수 없는 채팅방입니다. | |
+| 409 | `MISSION_NOT_RESOLVABLE` | 분쟁 중인 임무만 판정할 수 있습니다. | 관리자 웹 전용 |
+| 409 | `MISSION_NOT_SETTLEABLE` | 수행비를 지급할 수 없는 임무 상태입니다. | 관리자 웹 전용 |
 | 409 | `OFFER_NOT_UPDATABLE` | 변경할 수 없는 지원 상태입니다. | |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 가입된 휴대폰 번호입니다. | |
 | 409 | `PROPOSAL_NOT_CANCELLABLE` | 취소할 수 없는 요청 상태입니다. | |

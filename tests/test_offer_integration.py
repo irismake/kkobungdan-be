@@ -13,7 +13,7 @@ from app.models.proposal import Proposal, ProposalStatus
 
 
 def offer_payload(proposal_id: int, **overrides) -> dict:
-    payload = {"proposalId": proposal_id}
+    payload = {"proposalId": proposal_id, "greeting": "안녕하세요! 지원합니다."}
     payload.update(overrides)
     return payload
 
@@ -59,7 +59,7 @@ def notification_count(db, user_id: str, notification_type: NotificationType, re
 
 
 @pytest.mark.scenario("OFFER-TS-001")
-def test_create_offer_with_proposal_id_only_and_marks_proposal_offered(client, db, factory, sample_user):
+def test_create_offer_with_greeting_marks_proposal_offered(client, db, factory, sample_user):
     runner = factory.user("01077770001", name="Runner One")
     factory.settlement_account(runner)
     proposal = factory.proposal(sample_user.id, ProposalStatus.POSTED)

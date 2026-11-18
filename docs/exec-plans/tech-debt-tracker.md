@@ -6,8 +6,11 @@
 
 ## 현재 항목
 
+관리자 게시글 신고 승인 안내는 TD-027로 추적하며, 현재 알림·시스템 채팅 통합 범위에서는 보류한다.
+
 | ID | 영역 | 부채 내용 | 영향 | 다음 단계 |
 | --- | --- | --- | --- | --- |
+| TD-027 | 알림·채팅 | 관리자 게시글 신고 승인 시 요청과 대기 지원 상태 및 채팅방은 변경되지만 사용자에게 시스템 채팅 안내를 남기지 않는다([`chat-requirements.md` CHAT-REQ-021](../product-specs/chat-requirements.md#chat-req-021--사건별-시스템-채팅)). 2026-11-17 사용자 결정으로 안내 구현은 보류한다. 환불 경로 부재(TD-025)와는 별도 항목이다. | 사용자가 신고 승인으로 요청·지원·채팅이 종료된 이유를 알기 어렵다 | 지원 전에는 기존 알림, 지원 이후에는 시스템 채팅을 사용하는 기준으로 수신자·문구·푸시·클릭 이동 화면을 정의하고, 요구사항·시나리오 작성 후 구현한다 |
 | TD-001 | 인증 | 현재 부트스트랩 방향에서 최종 인증 흐름이 아직 placeholder 수준이다. | 권한 버그와 약한 연동 계약 위험 | 인증 전략 설계 문서와 실행 계획 작성 |
 | TD-002 | 결제 | 결제 생명주기는 문서화되었지만 코드에는 구현되지 않았다. | 핵심 루프에서 상태 불일치 위험 | 구현 전 API와 스키마 가정 확정 |
 | TD-003 | 테스트 | 도메인 상태 전이에 대한 회귀 검증이 부족하다. | 리팩터링 안전성이 낮아짐 | 서비스 및 API 수준 전이 테스트 추가 |
@@ -25,6 +28,10 @@
 | TD-017 | 인프라 | 배포 마이그레이션이 앱 계정으로 돈다. 그래서 앱 계정이 DDL(CREATE/ALTER/DROP) 권한을 가진다. | 앱이 뚫리면 스키마까지 바꿀 수 있다 | 마이그레이션 전용 계정을 두고 앱 계정은 DML만 남기는 안을 설계한다(`deploy.sh`, compose env 변경 필요) |
 | TD-018 | 운영 | RDS 이전 뒤 남은 정리: Docker Hub의 옛 `hwangdaesun/orderrun` 저장소(개인 계정이라 계정 소유자가 삭제). 월간 복원 테스트도 아직 수동이다. | 필요 없는 이미지가 남는다. 복원 테스트를 잊을 수 있다 | 계정 소유자가 옛 저장소를 지운다. 복원 테스트를 timer로 자동화할지 결정한다 |
 | TD-019 | 인프라 | 비용 때문에 t3.micro(메모리 909MiB)에서 앱 2개·MySQL·nginx를 같이 돌린다. MySQL을 경량 설정(buffer pool 64M, `performance_schema` OFF, 상한 512MiB)으로 줄여 여유는 약 300MiB이고, 안 쓰는 메모리는 swap(2GB)으로 넘긴다. | 사용자·트래픽이 늘거나 배포가 겹치면 swap이 잦아져 응답이 느려지거나 OOM이 날 수 있다 | `free`, `vmstat`의 si/so, `/proc/pressure/memory`를 주기적으로 본다. 부족하면 인스턴스 중지 → t3.small로 변경 → 시작(3~5분 중단)으로 되돌린다 |
+| TD-020 | 채팅 | 행님·꼬붕 연락 수단인 카카오톡 오픈채팅방을 앱 내 채팅([`chat-requirements.md`](../product-specs/chat-requirements.md))으로 대체하기로 했다. 앱 채팅 배포 전에 제거하면 연락 수단이 없어지므로 배포 후 제거한다. 대상: 관리자 입금 확인 요청의 `openChatUrl`(`AdminConfirmPaymentRequest`), Proposal·Offer·Mission·관리자 응답의 `openChatUrl`, `proposals.open_chat_url`·`offers.open_chat_url` 컬럼(TD-009), API 스펙 문서 | 오픈채팅과 앱 채팅이 함께 남아 연락 수단 정본이 둘이 된다 | 앱 채팅 배포와 앱 전환을 확인한 뒤, 요청·응답 필드와 컬럼을 제거하는 별도 브랜치·마이그레이션을 작성한다 |
+| TD-021 | 요청 | 요청의 마감 시각(`proposals.deadline`)은 생성·수정 때 미래인지만 검사한다(`app/models/proposal.py` `_validate_deadline`). 마감이 지나도 요청·지원을 정리하는 스케줄러가 없어, 마감 후에도 지원 등록·수락(매칭)이 가능하고 홈 목록에도 계속 노출된다. 앱 내 채팅도 이 동작을 따르므로 매칭되지 않은 채팅방이 `WAITING`으로 계속 열려 있다([`chat-requirements.md`](../product-specs/chat-requirements.md)). `error-copy-policy.md`의 `PROPOSAL_NOT_OPEN` 설명("이미 마감됐거나")도 실제 동작과 다르다. | 마감이 지난 요청에 지원·매칭·채팅이 이어져 사용자 기대와 어긋난다 | 마감 후 정책(지원 차단, 대기 지원 자동 정리, 목록 제외, 채팅방 종료)을 제품 스펙으로 정한 뒤 별도 계획으로 구현한다 |
 | TD-022 | 품질 | 정적 검사가 `compileall`과 시나리오 연결 검사(`scripts/check_scenarios.py`)뿐이다. ruff 같은 린터가 없어 미사용 import, 정의되지 않은 이름 같은 오류를 테스트 실행 전에 잡지 못한다. | 코드 오류가 리뷰나 런타임까지 늦게 드러난다 | ruff를 dev 의존성에 넣고 오류성 규칙(E, F)부터 켠다. 기존 코드 경고를 함께 정리한 뒤 `verify.sh static`에 추가하고 CLAUDE.md의 "린트 미설정" 문구를 고친다 |
 | TD-023 | 문서 | 기존 도메인 `test-scenarios.md`의 "보장 범위" 문장 일부가 테스트와 다르다. 예: Proposal 문서는 공개 목록이 마감이 빠른 순이라고 적지만 테스트(`PROPOSAL-TS-002`)는 최신 생성 순을 보장한다. | 문서만 보고 동작을 잘못 이해할 수 있다 | 시나리오 목록 표를 기준으로 각 도메인의 보장 범위 문장을 다시 쓰거나 지운다 |
 | TD-024 | 품질 | 비공개 저장소 요금제라 PR 필수 검사(branch protection)를 걸 수 없다. PR의 `CI 결과`가 실패해도 머지 버튼이 눌린다. staging 배포는 배포 전 CI 성공에 묶였지만(`staging-deploy.yml`이 `test.yml`을 먼저 실행), 실패한 코드가 staging 브랜치에 들어가는 것 자체는 막지 못한다. | 깨진 커밋이 staging에 남아 다음 머지까지 배포가 막힐 수 있다 | 머지 전에 `CI 결과`를 직접 확인한다. 요금제를 올리면 `CI 결과` Job을 필수 검사로 지정한다 |
+| TD-025 | 환불 | 신고된 게시글은 환불해야 하지만 환불 경로가 없다. 신고 승인(`POSTED/OFFERED -> REPORTED`, `proposal_report_service.py`)은 입금이 확인된 요청에서만 일어나는데 Refund를 만들지 않는다. `RefundReason`에 신고 원인이 없고, 관리자 요청 취소(`admin_command_service.py` `CANCELLABLE_PROPOSAL_STATUSES`)도 `REPORTED`를 대상으로 하지 않아 관리자가 수동으로 환불을 시작할 방법도 없다. 탈퇴 차단 기준(`WITHDRAWAL_TERMINAL_PROPOSAL_STATUSES`)은 `REPORTED`를 종결로 보므로 행님이 환불 계좌를 지우고 탈퇴할 수도 있다. | 입금한 행님이 환불받지 못하고, 환불 이력도 남지 않는다 | 신고 승인 시 Refund를 만들지(원인 추가, CHECK 제약 마이그레이션 포함) 관리자 처리 흐름을 따로 둘지 정한 뒤 `domain.md`·`refund-lifecycle.md`와 함께 별도 계획으로 고친다 |
+| TD-026 | 채팅 | 채팅 실시간 전달 hub가 프로세스 메모리에 있다([`chat-architecture.md`](../design-docs/chat-architecture.md)). 환경당 uvicorn 프로세스가 1개라 지금은 동작하지만, `--workers`를 늘리거나 서버를 2대 이상으로 늘리면 다른 프로세스에 연결된 사용자에게 채팅이 실시간으로 가지 않는다. | 확장 시 실시간 수신 누락 (재연결 복구와 푸시로만 받게 됨) | 프로세스를 늘리기 전에 Kafka(예정)의 인스턴스별 consumer group으로 `chat.realtime`을 받게 바꾼다. Kafka 전에 늘려야 하면 hub를 Redis Pub/Sub 구현으로 바꾼다 |

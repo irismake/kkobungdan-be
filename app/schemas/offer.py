@@ -4,18 +4,29 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.offer import OfferStatus
 from app.models.proposal import ProposalStatus
+from app.services.chat.content import validate_message_content
 
 
 class OfferCreate(BaseModel):
     """Request body for creating an offer."""
 
     proposal_id: int = Field(..., gt=0, validation_alias="proposalId")
+    greeting: str = Field(
+        ...,
+        description="꼬붕의 첫 인사. 지원과 함께 채팅방에 꼬붕의 일반 채팅으로 저장된다. 공백만 있으면 안 되고 화면 글자 기준 500자 이하",
+        examples=["안녕하세요! 근처에 있어서 바로 갈 수 있어요."],
+    )
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @field_validator("greeting")
+    @classmethod
+    def validate_greeting(cls, value: str) -> str:
+        return validate_message_content(value)
 
 
 class OfferResponse(BaseModel):

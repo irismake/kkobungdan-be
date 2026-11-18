@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.database import SessionLocal
-from app.core.firebase import get_notification_worker, init_fcm
+from app.core.firebase import get_fcm_service, get_notification_worker, init_fcm
 from app.api.v1.router import api_router
 from app.core.exceptions import (
     http_exception_handler,
@@ -20,6 +20,9 @@ from app.core.exceptions import (
 )
 from app.listeners import admin_alert_listener, notification_listener
 from app.schemas.common import ApiResponse
+from app.services.chat.chat_push import register_chat_consumers
+from app.services.outbox.consumers import consumer_registry
+from app.services.outbox.worker import OutboxWorker, register_outbox_jobs, set_wake_callback
 from app.tasks.payment_checker import (
     check_and_cancel_expired_payment_proposals,
     send_pending_payment_reminders,
@@ -134,11 +137,22 @@ async def lifespan(app: FastAPI):
         id="send_pending_payment_reminders",
         replace_existing=True,
     )
+    if settings.outbox_worker_enabled:
+        _start_outbox_worker()
+
     _scheduler.start()
 
     yield
 
+    set_wake_callback(None)
+
     _scheduler.shutdown(wait=False)
+
+
+def _start_outbox_worker() -> None:
+    """채팅 전달 대상을 등록하고, 공통 Outbox 주기 작업(10초 처리, 매일 04:00 정리)과 커밋 직후 깨우기를 연결한다."""
+    register_chat_consumers(consumer_registry, SessionLocal, get_fcm_service())
+    register_outbox_jobs(_scheduler, OutboxWorker(SessionLocal))
 
 
 # Create FastAPI app

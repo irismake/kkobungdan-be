@@ -59,7 +59,14 @@ class FCMService:
         data: Optional[Dict[str, str]] = None,
         image: Optional[str] = None,
         priority: str = "high",
+        badge: Optional[int] = None,
+        collapse_key: Optional[str] = None,
     ) -> FCMSendResult:
+        """푸시 1건을 보낸다.
+
+        badge: 앱 아이콘 배지 숫자(채팅 안읽음 합계 + 알림 미읽음 수). 없으면 1.
+        collapse_key: 같은 키의 이전 푸시를 대체한다(APNs `apns-collapse-id`, Android `tag`).
+        """
         if not self.initialized:
             return FCMSendResult(success=False, error_code="NOT_INITIALIZED", error_message="FCM service not initialized")
 
@@ -70,12 +77,15 @@ class FCMService:
                 notification=messaging.AndroidNotification(
                     sound="default",
                     priority="high" if priority == "high" else "default",
+                    tag=collapse_key,
+                    notification_count=badge,
                 ),
             )
             apns_config = messaging.APNSConfig(
+                headers={"apns-collapse-id": collapse_key} if collapse_key else None,
                 payload=messaging.APNSPayload(
-                    aps=messaging.Aps(sound="default", badge=1, content_available=True)
-                )
+                    aps=messaging.Aps(sound="default", badge=1 if badge is None else badge, content_available=True)
+                ),
             )
             message = messaging.Message(
                 notification=notification,
@@ -159,12 +169,15 @@ class FCMService:
             for key, value in data.items():
                 fcm_data[f"data_{key}"] = str(value)
 
+        from app.services.notification.badge import badge_count
+
         result = self.send_notification(
             token=token_record.fcm_token,
             title=title,
             body=body,
             data=fcm_data,
             image=image,
+            badge=badge_count(db, user_id),
         )
 
         if result.success:

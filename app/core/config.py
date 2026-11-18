@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_dir: str = "/app/logs"
     log_file_enabled: bool = False
+    # 공통 Outbox 주기 작업(발행·전달·지연 점검·정리). 테스트는 끄고 함수를 직접 부른다.
+    outbox_worker_enabled: bool = True
     log_retention_days: int = 14
 
     # Database

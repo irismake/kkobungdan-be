@@ -323,6 +323,111 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | runnerLevel | number | 꼬붕 사용자 레벨 |
 | acceptedAt | string | Offer 수락 시각 |
 
+### ChatRoomDetailResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅방 ID |
+| proposalId | number | 요청 ID |
+| offerId | number | 지원 ID |
+| proposalTitle | string | 요청 제목 |
+| myRole | string | 이 채팅방에서 나의 역할 (`ORDERER`, `RUNNER`) |
+| partnerId | string | 상대 사용자 ID |
+| partnerName | string | 상대 이름. 탈퇴했으면 `"탈퇴한 사용자"` |
+| status | string | 채팅방 상태 (`ACTIVE`, `INACTIVE`, `CLOSED`) |
+| statusReason | string, null | 상태 이유 ([`chat-requirements.md`](../product-specs/chat-requirements.md#상태-이유-statusreason)) |
+| proposalStatus | string | 요청 상태 |
+| offerStatus | string | 지원 상태 |
+| lastSeq | number | 마지막 채팅 순번 |
+| myLastReadSeq | number | 내가 마지막으로 읽은 채팅 순번 |
+| partnerLastReadSeq | number | 상대가 마지막으로 읽은 채팅 순번 |
+| createdAt | string | 생성 시각 |
+
+### ChatRoomListResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| content | ChatRoomListItemResponse[] | 채팅방 목록 |
+| nextCursor | string, null | 다음 페이지 커서. 마지막 페이지면 null |
+
+### ChatRoomListItemResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅방 ID |
+| proposalId | number | 요청 ID |
+| offerId | number | 지원 ID |
+| proposalTitle | string | 요청 제목 |
+| myRole | string | `ORDERER`, `RUNNER` |
+| partnerId | string | 상대 사용자 ID |
+| partnerName | string | 상대 이름. 탈퇴했으면 `"탈퇴한 사용자"` |
+| lastMessage | ChatLastMessageResponse, null | 마지막 채팅. 채팅이 없으면 null |
+| lastMessageAt | string, null | 마지막 채팅 시각 |
+| unreadCount | number | 내 안읽음 수 |
+| status | string | 채팅방 상태 |
+| statusReason | string, null | 상태 이유 |
+| proposalStatus | string | 요청 상태 |
+| offerStatus | string | 지원 상태 |
+| blockStatus | string | `NONE`, `BLOCKED_BY_ME`, `BLOCKED_BY_PARTNER`. 차단 구현 전에는 항상 `NONE` |
+| createdAt | string | 채팅방 생성 시각 |
+
+### ChatLastMessageResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅 ID |
+| seq | number | 순번 |
+| type | string | `USER`, `SYSTEM` |
+| senderId | string, null | 보낸 사람. 시스템 채팅은 null |
+| content | string | 내용. 시스템 채팅은 보는 사람에 맞는 문구 |
+| createdAt | string | 전송 시각 |
+
+### ChatMessageListResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| content | ChatMessageResponse[] | 채팅. 저장 순서(`seq` 오름차순) |
+| hasPrevious | boolean | 첫 채팅보다 앞선 채팅이 있는지 |
+
+### ChatMessageResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 채팅 ID. 앱의 중복 제거 기준 |
+| roomId | number | 채팅방 ID |
+| seq | number | 채팅방 안의 저장 순서 |
+| type | string | `USER`(일반 채팅), `SYSTEM`(시스템 채팅) |
+| senderId | string, null | 보낸 사람. 시스템 채팅은 null |
+| content | string | 내용. 시스템 채팅은 보는 사람(행님/꼬붕)에 맞는 문구 |
+| systemEvent | string, null | 시스템 채팅 사건 코드 (예: `OFFER_CREATED`) |
+| createdAt | string | 전송 시각 |
+
+### OutboxDeliveryResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| id | number | 전달 기록 ID |
+| eventId | string | 이벤트 ID (UUID) |
+| eventType | string | 이벤트 유형 (예: `chat.message.created`) |
+| aggregateType | string | 대상 종류 (예: `chat_room`) |
+| aggregateId | string | 대상 ID (순서 키) |
+| consumer | string | 전달 대상 (예: `chat.push`) |
+| status | string | `PENDING`, `PROCESSING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `DEAD` |
+| attempts | number | 이번 회차의 시도 횟수. 수동 재처리 때 0 |
+| lastError | string, null | 마지막 오류 |
+| skipReason | string, null | `SKIPPED` 이유 (예: `expired`) |
+| manualRetryCount | number | 수동 재처리 횟수 |
+| occurredAt | string | 이벤트 발생 시각 |
+| nextAttemptAt | string, null | 다음 시도 시각 (`FAILED`일 때) |
+| finishedAt | string, null | 끝난 시각 (`SUCCEEDED`·`SKIPPED`·`DEAD`) |
+
+### OutboxBulkRetryResponse
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| consumer | string | 전달 대상 |
+| retriedCount | number | 다시 처리하도록 바꾼 DEAD 전달 수 |
+
 ### DisputeEvidenceResponse
 
 | 필드 | 타입 | 설명 |
@@ -496,6 +601,51 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 꼬붕 전달 완료 | `POST` | `/v1/offer/{offerId}/complete-delivery` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
 | 꼬붕 분쟁 접수 | `POST` | `/v1/offer/{offerId}/dispute` | 필요. Offer 제출 꼬붕만 가능 | `200 OK` | `OfferResponse` |
 | 지원 취소 | `DELETE` | `/v1/offer/{offerId}` | 필요. Offer 제출 꼬붕만 가능 | `204 No Content` | 없음 |
+
+### Chat API
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 채팅 목록 조회 | `GET` | `/v1/chat-room?cursor=&size=` | 필요 | `200 OK` | `ChatRoomListResponse` |
+| 채팅방 상세 조회 | `GET` | `/v1/chat-room/{roomId}` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatRoomDetailResponse` |
+| 채팅 조회 | `GET` | `/v1/chat-room/{roomId}/messages?beforeSeq=&afterSeq=` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatMessageListResponse` |
+| 채팅 전송 | `POST` | `/v1/chat-room/{roomId}/messages` | 필요. 채팅방 참여자만 가능 | `201 Created` | `ChatMessageResponse` |
+| 읽음 처리 | `POST` | `/v1/chat-room/{roomId}/read` | 필요. 채팅방 참여자만 가능 | `200 OK` | `ChatReadResponse` (`roomId`, `lastReadSeq`, `unreadCount`) |
+| 안읽음 수 조회 | `GET` | `/v1/chat-room/unread-count` | 필요 | `200 OK` | `ChatUnreadSummaryResponse` (`totalUnreadCount`, `rooms[{roomId, unreadCount}]`) |
+| 전체 읽음 | `POST` | `/v1/chat-room/read-all` | 필요 | `200 OK` | `ChatReadAllResponse` (`totalUnreadCount`) |
+
+- 채팅방은 지원 제출(`POST /v1/offer`) 때 함께 생성된다.
+- 채팅 목록: 행님·꼬붕 역할과 관계없이 참여한 모든 채팅방. 마지막 채팅이 최신인 순서(채팅이 없으면 생성 시각). 다음 페이지는 `nextCursor`를 `cursor`로 넘긴다. 목록 조회는 읽음 처리하지 않는다.
+- 채팅 조회: 기본은 최근 30개, `beforeSeq`는 그보다 앞선 30개, `afterSeq`는 그 뒤의 채팅(최대 100개, 재연결 후 복구). 둘은 함께 쓸 수 없다.
+- 읽음: 읽음 위치는 뒤로만 움직인다. 이미 읽은 위치와 같거나 앞선 `seq`도 성공으로 응답하고 위치를 유지한다. 채팅방에 없는 `seq`는 `400 CHAT_READ_SEQ_INVALID`. 채팅방 상태·차단과 관계없이 읽을 수 있다.
+- 안읽음 수: 내 읽음 위치 뒤의 상대 일반 채팅 + 나에게 보이는 시스템 채팅(행님 기준 매칭 미선정 안내 제외). 안읽음이 있는 채팅방만 담고, 종료·차단 채팅방도 합계에 포함한다.
+- 전체 읽음: 역할과 관계없이 내 모든 채팅방을 요청 시점의 마지막 채팅까지 읽는다. 그 사이 더 읽은 채팅방은 그대로 두고 상대방 읽음 위치는 바꾸지 않는다.
+- 채팅방 상세의 `partnerLastReadSeq`로 내 채팅의 안읽음 표시(`1`)를 그린다. `version`은 채팅방 상태·읽음 위치가 바뀔 때마다 1 오른다.
+- 실시간: `GET /v1/chat/ws`(WebSocket, 받기 전용). `Authorization: Bearer <access token>`으로 인증한다. 토큰이 없거나 만료·잘못되면 close code `4401`로 거부하고, 연결 중 토큰 만료 시각이 되면 서버가 `4401`로 닫는다. 앱은 토큰을 갱신해 다시 연결하고 놓친 것을 REST(`afterSeq` 조회, 목록, 상세)로 복구한다. 이벤트는 JSON이고 `type`으로 구분한다: `chat.message.created`, `chat.room.updated`, `chat.read.updated`, `chat.unread.updated`, `ping`(30초마다). 형식은 [`chat-architecture.md` 실시간](../design-docs/chat-architecture.md#실시간-chat-req-015017028)을 따른다.
+
+### Admin Chat API
+
+관리자 웹 채팅 조회다 (CHAT-REQ-002). 관리자만 가능하고 조회 전용이다. 관리자는 채팅을 보낼 수 없고(`POST /v1/chat-room/{roomId}/messages`는 참여자가 아니라 `403 FORBIDDEN`), 조회는 참여자의 읽음 위치를 바꾸지 않는다.
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 요청의 채팅방 조회 | `GET` | `/v1/admin/chat-room?proposalId=` | 관리자 | `200 OK` | `AdminChatRoomResponse[]` (참여자 이름, 상태, 지원 상태, 양쪽 읽음 위치) |
+| 채팅 조회 | `GET` | `/v1/admin/chat-room/{roomId}/messages?beforeSeq=&afterSeq=` | 관리자 | `200 OK` | `AdminChatMessageListResponse` |
+
+- 채팅 조회 페이지 규칙은 참여자 조회와 같다. 일반 채팅은 `senderRole`(`ORDERER`·`RUNNER`), 시스템 채팅은 행님 문구(`content`)와 꼬붕 문구(`runnerContent`)를 함께 담는다.
+
+### Admin Outbox API
+
+공통 Transactional Outbox의 전달 기록 조회와 DEAD 수동 재처리다 ([`outbox.md`](../design-docs/outbox.md), OUTBOX-REQ-006). 관리자만 가능하다.
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 전달 목록 조회 | `GET` | `/v1/admin/outbox/deliveries?status=DEAD&consumer=&from=&to=&page=&size=` | 관리자 | `200 OK` | `PageResponse<OutboxDeliveryResponse>` |
+| DEAD 전달 재처리 | `POST` | `/v1/admin/outbox/deliveries/{deliveryId}/retry` | 관리자 | `200 OK` | `OutboxDeliveryResponse` |
+| 전달 대상의 DEAD 일괄 재처리 | `POST` | `/v1/admin/outbox/deliveries/retry?consumer=` | 관리자 | `200 OK` | `OutboxBulkRetryResponse` |
+
+- `status` 기본값은 `DEAD`. `from`(포함)·`to`(미포함)는 끝난 시각(`finishedAt`) 기준이다.
+- 재처리는 `DEAD`인 전달만 가능하다. 아니면 `409 OUTBOX_DELIVERY_NOT_RETRYABLE`. 동시에 여러 번 요청해도 한 번만 바뀐다.
 
 ### Admin Execution API
 
@@ -677,6 +827,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
 | proposalId | number | O | 1 이상 |
+| greeting | string | O | 꼬붕의 첫 인사. 공백·줄바꿈만 있으면 안 되고 화면 글자(grapheme) 기준 500자 이하. 지원과 같은 트랜잭션에서 채팅방에 꼬붕의 일반 채팅으로 저장된다 |
 
 #### `POST /v1/offer/{offerId}/accept`
 
@@ -728,6 +879,23 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 |------|------|------|------|
 | proposalId | number | 조건부 | `proposalId`, `offerId` 중 정확히 하나만 입력 |
 | offerId | number | 조건부 | `proposalId`, `offerId` 중 정확히 하나만 입력 |
+
+### Chat
+
+#### `POST /v1/chat-room/{roomId}/messages`
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| clientMessageId | string | O | 1~64자. 앱이 채팅마다 만드는 전송 ID. 재시도할 때 같은 값을 보낸다 |
+| content | string | O | 공백·줄바꿈만 있으면 안 되고 화면 글자 기준 500자 이하 |
+
+그 밖의 필드(예: 채팅 유형)는 받지 않는다(`400 VALIDATION_ERROR`). 시스템 채팅은 서버만 만든다.
+
+#### `POST /v1/chat-room/{roomId}/read`
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| seq | integer | O | 1 이상. 읽은 마지막 채팅의 순번. 채팅방의 마지막 순번보다 크면 `400 CHAT_READ_SEQ_INVALID` |
 
 ### Settlement
 
@@ -816,6 +984,7 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 400 | `PROPOSAL_DEPOSIT_INVALID` | 보증금이 0원 미만 |
 | 400 | `PHONE_VERIFICATION_EXPIRED` | 전화번호 인증 코드 만료 |
 | 400 | `PHONE_VERIFICATION_CODE_MISMATCH` | 전화번호 인증 코드 불일치 |
+| 400 | `CHAT_READ_SEQ_INVALID` | 채팅방에 없는 채팅으로 읽음 요청 |
 | 401 | `INVALID_TOKEN` | 유효하지 않은 토큰 |
 | 401 | `EXPIRED_TOKEN` | 만료된 토큰 |
 | 403 | `FORBIDDEN` | 권한 없음 |
@@ -824,6 +993,11 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 | 404 | `PHONE_VERIFICATION_NOT_FOUND` | 전화번호 인증 요청 없음 |
 | 404 | `PROPOSAL_NOT_FOUND` | Proposal을 찾을 수 없음 |
 | 404 | `OFFER_NOT_FOUND` | Offer를 찾을 수 없음 |
+| 404 | `CHAT_ROOM_NOT_FOUND` | 채팅방을 찾을 수 없음 |
+| 409 | `CHAT_MESSAGE_ID_CONFLICT` | 같은 전송 ID로 내용이나 채팅방이 다른 채팅 |
+| 409 | `CHAT_ROOM_NOT_SENDABLE` | `INACTIVE`·`CLOSED` 채팅방이거나 차단 중 |
+| 404 | `OUTBOX_DELIVERY_NOT_FOUND` | 전달 기록을 찾을 수 없음 (관리자) |
+| 409 | `OUTBOX_DELIVERY_NOT_RETRYABLE` | DEAD가 아닌 전달을 재처리하려 함 (관리자) |
 | 409 | `PHONE_ALREADY_EXISTS` | 이미 사용 중인 전화번호 |
 | 409 | `DUPLICATE_OFFER` | 동일 Proposal에 중복 Offer 제출 |
 | 409 | `PROPOSAL_NOT_OPEN` | Offer를 받을 수 없는 Proposal 상태 |

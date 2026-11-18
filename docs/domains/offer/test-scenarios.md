@@ -4,7 +4,7 @@
 
 ## 보장 범위
 
-- Offer 생성은 `proposalId`만 입력으로 받고 Proposal을 `OFFERED`로 전이한다.
+- Offer 생성은 `proposalId`와 첫 인사(`greeting`, 필수)를 입력으로 받고 Proposal을 `OFFERED`로 전이한다. 같은 트랜잭션에서 채팅방과 첫 인사가 저장된다([`../chat/test-scenarios.md`](../chat/test-scenarios.md) CHAT-TS-001, 016, 017).
 - 두 번째 Offer 생성은 Proposal을 `OFFERED`로 유지한다.
 - 목록/내 목록 조회는 최신순 정렬, 페이징, 반복 `status` 필터를 지원한다.
 - Proposal별 목록 조회는 상세 조회와 별도 DTO를 사용하며 오픈채팅방 링크를 반환하지 않는다.
@@ -26,7 +26,7 @@
 
 | ID | 보장 내용 | 테스트 |
 |----|-----------|--------|
-| OFFER-TS-001 | 지원 생성은 `proposalId`만 받고 요청을 `OFFERED`로 바꾼다 | `test_offer_integration.py::test_create_offer_with_proposal_id_only_and_marks_proposal_offered` |
+| OFFER-TS-001 | 지원 생성은 `proposalId`와 첫 인사(`greeting`)를 받고 요청을 `OFFERED`로 바꾼다 | `test_offer_integration.py::test_create_offer_with_greeting_marks_proposal_offered` |
 | OFFER-TS-002 | 꼬붕의 정산 계좌가 없으면 지원할 수 없다 | `test_offer_integration.py::test_create_offer_requires_runner_settlement_account` |
 | OFFER-TS-003 | 지원 생성 시 알림이 켜진 행님·꼬붕에게 알림이 생긴다 | `test_offer_integration.py::test_create_offer_creates_notifications_for_alarm_enabled_users` |
 | OFFER-TS-004 | 알림이 꺼진 사용자의 지원 알림은 `SKIPPED`로 저장된다 | `test_offer_integration.py::test_create_offer_stores_skipped_notifications_when_alarm_disabled` |

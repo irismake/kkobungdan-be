@@ -1090,3 +1090,230 @@ ADMIN_LOGIN_EXAMPLE = {
     },
     "message": None,
 }
+
+
+EXAMPLE_CHAT_ROOM_ID = 42
+
+CHAT_ROOM_DETAIL_EXAMPLE = {
+    "success": True,
+    "data": {
+        "id": EXAMPLE_CHAT_ROOM_ID,
+        "proposalId": 1,
+        "offerId": 10,
+        "proposalTitle": "편의점 담배 심부름",
+        "myRole": "ORDERER",
+        "partnerId": EXAMPLE_RUNNER_ID,
+        "partnerName": EXAMPLE_RUNNER_NAME,
+        "status": "ACTIVE",
+        "statusReason": None,
+        "proposalStatus": "OFFERED",
+        "offerStatus": "WAITING",
+        "lastSeq": 2,
+        "myLastReadSeq": 0,
+        "partnerLastReadSeq": 0,
+        "version": 0,
+        "createdAt": EXAMPLE_CREATED_AT,
+    },
+    "message": "Success",
+}
+
+CHAT_READ_EXAMPLE = {
+    "success": True,
+    "data": {"roomId": EXAMPLE_CHAT_ROOM_ID, "lastReadSeq": 5, "unreadCount": 0},
+    "message": "Success",
+}
+
+CHAT_UNREAD_COUNT_EXAMPLE = {
+    "success": True,
+    "data": {
+        "totalUnreadCount": 3,
+        "rooms": [
+            {"roomId": EXAMPLE_CHAT_ROOM_ID, "unreadCount": 2},
+            {"roomId": EXAMPLE_CHAT_ROOM_ID + 1, "unreadCount": 1},
+        ],
+    },
+    "message": "Success",
+}
+
+CHAT_READ_ALL_EXAMPLE = {
+    "success": True,
+    "data": {"totalUnreadCount": 0},
+    "message": "Success",
+}
+
+ADMIN_CHAT_ROOM_LIST_EXAMPLE = {
+    "success": True,
+    "data": [
+        {
+            "id": EXAMPLE_CHAT_ROOM_ID,
+            "proposalId": 1,
+            "offerId": 10,
+            "ordererId": "6f1c7c8e-0000-4000-8000-000000000001",
+            "ordererName": "김행님",
+            "runnerId": EXAMPLE_RUNNER_ID,
+            "runnerName": EXAMPLE_RUNNER_NAME,
+            "status": "ACTIVE",
+            "statusReason": None,
+            "offerStatus": "ACCEPTED",
+            "lastSeq": 4,
+            "lastMessageAt": EXAMPLE_CREATED_AT,
+            "ordererLastReadSeq": 4,
+            "runnerLastReadSeq": 3,
+            "createdAt": EXAMPLE_CREATED_AT,
+        }
+    ],
+    "message": "Success",
+}
+
+ADMIN_CHAT_MESSAGE_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": 100,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 1,
+                "type": "SYSTEM",
+                "senderId": None,
+                "senderRole": None,
+                "content": "지원으로 채팅이 시작됐어요.",
+                "runnerContent": "지원으로 채팅이 시작됐어요.",
+                "systemEvent": "OFFER_CREATED",
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+            {
+                "id": 101,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 2,
+                "type": "USER",
+                "senderId": EXAMPLE_RUNNER_ID,
+                "senderRole": "RUNNER",
+                "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                "runnerContent": None,
+                "systemEvent": None,
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+        ],
+        "hasPrevious": False,
+    },
+    "message": "Success",
+}
+
+CHAT_MESSAGE_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": 100,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 1,
+                "type": "SYSTEM",
+                "senderId": None,
+                "content": "지원으로 채팅이 시작됐어요.",
+                "systemEvent": "OFFER_CREATED",
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+            {
+                "id": 101,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 2,
+                "type": "USER",
+                "senderId": EXAMPLE_RUNNER_ID,
+                "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                "systemEvent": None,
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+        ],
+        "hasPrevious": False,
+    },
+    "message": "Success",
+}
+
+
+OUTBOX_DELIVERY_EXAMPLE = {
+    "id": 7,
+    "eventId": "8f0c7d6e-0000-4000-8000-000000000001",
+    "eventType": "chat.message.created",
+    "aggregateType": "chat_room",
+    "aggregateId": "42",
+    "consumer": "chat.push",
+    "status": "DEAD",
+    "attempts": 6,
+    "lastError": "RuntimeError: FCM 발송 실패",
+    "skipReason": None,
+    "manualRetryCount": 0,
+    "occurredAt": EXAMPLE_CREATED_AT,
+    "nextAttemptAt": None,
+    "finishedAt": EXAMPLE_UPDATED_AT,
+}
+
+ADMIN_OUTBOX_DELIVERY_PAGE_EXAMPLE = _admin_page(OUTBOX_DELIVERY_EXAMPLE)
+
+ADMIN_OUTBOX_RETRY_EXAMPLE = {
+    "success": True,
+    "data": {
+        **OUTBOX_DELIVERY_EXAMPLE,
+        "status": "PENDING",
+        "attempts": 0,
+        "manualRetryCount": 1,
+        "finishedAt": None,
+    },
+    "message": "전달을 다시 처리하도록 바꿨습니다.",
+}
+
+ADMIN_OUTBOX_BULK_RETRY_EXAMPLE = {
+    "success": True,
+    "data": {"consumer": "chat.push", "retriedCount": 3},
+    "message": "전달을 다시 처리하도록 바꿨습니다.",
+}
+
+
+CHAT_ROOM_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": EXAMPLE_CHAT_ROOM_ID,
+                "proposalId": 1,
+                "offerId": 10,
+                "proposalTitle": "편의점 담배 심부름",
+                "myRole": "ORDERER",
+                "partnerId": EXAMPLE_RUNNER_ID,
+                "partnerName": EXAMPLE_RUNNER_NAME,
+                "lastMessage": {
+                    "id": 101,
+                    "seq": 2,
+                    "type": "USER",
+                    "senderId": EXAMPLE_RUNNER_ID,
+                    "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                    "createdAt": EXAMPLE_CREATED_AT,
+                },
+                "lastMessageAt": EXAMPLE_CREATED_AT,
+                "unreadCount": 2,
+                "status": "ACTIVE",
+                "statusReason": None,
+                "proposalStatus": "OFFERED",
+                "offerStatus": "WAITING",
+                "blockStatus": "NONE",
+                "createdAt": EXAMPLE_CREATED_AT,
+            }
+        ],
+        "nextCursor": None,
+    },
+    "message": "Success",
+}
+
+CHAT_MESSAGE_SEND_EXAMPLE = {
+    "success": True,
+    "data": {
+        "id": 102,
+        "roomId": EXAMPLE_CHAT_ROOM_ID,
+        "seq": 3,
+        "type": "USER",
+        "senderId": EXAMPLE_USER_ID,
+        "content": "지금 어디세요?",
+        "systemEvent": None,
+        "createdAt": EXAMPLE_CREATED_AT,
+    },
+    "message": "Success",
+}

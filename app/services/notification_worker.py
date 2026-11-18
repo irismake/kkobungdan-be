@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationStatus
 from app.services.fcm_service import FCMService
+from app.services.notification.badge import badge_count
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ class NotificationWorker:
                 title=notif.title,
                 body=notif.body,
                 data=data,
+                badge=badge_count(db, notif.user_id),
             ) if token else None
 
             if result is None or not result.success:

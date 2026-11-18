@@ -15,6 +15,8 @@ from app.schemas.admin import AdminProposalReportResponse
 from app.schemas.common import PageResponse
 from app.schemas.proposal_report import ProposalReportCreateRequest, ProposalReportReasonQuestionResponse, ProposalReportResponse
 from app.services.admin.admin_user_display import WITHDRAWN_USER_NAME, admin_user_names
+from app.services.chat.chat_lifecycle import ChatLifecycle
+from app.services.locking import lock_proposal
 
 
 REPORTABLE_PROPOSAL_STATUSES = (ProposalStatus.POSTED, ProposalStatus.OFFERED)
@@ -214,7 +216,10 @@ class ProposalReportService:
     def accept(db: Session, report_id: int) -> AdminProposalReportResponse:
         report = ProposalReportService._get_report(db, report_id)
         ProposalReportService._ensure_pending(report)
-        proposal = ProposalReportService._get_proposal(db, report.proposal_id)
+        # 신고 승인과 매칭·지원이 겹치지 않게 요청을 잠그고 최신 상태로 판단한다.
+        proposal = lock_proposal(db, report.proposal_id)
+        if proposal is None:
+            raise api_error(AppError.PROPOSAL_NOT_FOUND, f"id: {report.proposal_id}")
         if proposal.status not in (*REPORTABLE_PROPOSAL_STATUSES, ProposalStatus.REPORTED):
             raise api_error(AppError.PROPOSAL_NOT_REPORTABLE, f"status: {proposal.status.value}")
         if proposal.status in REPORTABLE_PROPOSAL_STATUSES:
@@ -224,6 +229,7 @@ class ProposalReportService:
                 .filter(Offer.proposal_id == proposal.id, Offer.status == OfferStatus.WAITING)
                 .update({Offer.status: OfferStatus.REJECTED}, synchronize_session=False)
             )
+            ChatLifecycle.on_report_accepted(db, proposal.id)
         report.status = ProposalReportStatus.ACCEPTED
         report.reviewed_at = utcnow_naive()
         db.commit()
