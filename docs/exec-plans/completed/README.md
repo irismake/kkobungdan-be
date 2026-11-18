@@ -31,3 +31,4 @@
 - [`2026-08-27-withdrawal-open-obligation-rule.md`](./2026-08-27-withdrawal-open-obligation-rule.md): 탈퇴 차단 조건을 종결 상태 화이트리스트 기반 미결 판정 하나로 통일하고 `HOLDING` 자동 취소 제거
 - [`2026-08-27-fcm-token-dedup.md`](./2026-08-27-fcm-token-dedup.md): 여러 계정이 같은 FCM 토큰을 공유해 알림이 엉뚱한 기기로 가는 문제 정리 — 로그인 시 dedupe, 로그아웃 시 토큰 삭제, `fcm_token_hash` unique 제약 추가
 - [`2026-09-29-rds-to-ec2-mysql.md`](./2026-09-29-rds-to-ec2-mysql.md): RDS를 걷어내고 STAGING·PROD DB를 같은 EC2의 MySQL 컨테이너(별도 compose `orderrun-db`)로 이전, 매시/일일 S3 백업, Docker Hub namespace `orderrun` 전환
+- [`2026-11-18-notification-chat-unification.md`](./2026-11-18-notification-chat-unification.md): 지원 전은 요청 상세로 가는 푸시 알림, 지원 후는 채팅방으로 가는 시스템 채팅으로 전달 통합
