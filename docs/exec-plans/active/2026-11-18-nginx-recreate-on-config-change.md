@@ -1,7 +1,7 @@
 # nginx 설정이 바뀌면 배포 때 다시 만들기
 
 > 상태: 진행 중
-> 브랜치: `fix/nginx-recreate-on-config-change`
+> 브랜치: `fix/nginx-recreate-on-config-change`(#10), 후속 수정 `fix/deploy-heredoc-stdin`
 > 관련: [`2026-06-12-ec2-prod-staging-split.md`](./2026-06-12-ec2-prod-staging-split.md) (EC2 한 대에 `app-staging`·`app-prod`·`nginx`), [`2026-11-17-chat-implementation.md`](./2026-11-17-chat-implementation.md) (`/v1/chat/ws` location 추가)
 
 ## 문제
@@ -44,6 +44,18 @@
 - [x] 워크플로 연결 (`staging-deploy.yml`, `production-deploy.yml`)
 - [x] 로컬 Docker로 검증 (2026-11-18): 처음 실행(검사 후 띄움) → 그대로 실행(건너뜀, 같은 컨테이너) → 템플릿 변경(검사 후 다시 만듦) → 잘못된 템플릿(`nginx -t` 실패로 exit 1, 돌던 nginx 유지·응답 정상). 로컬 Colima는 `/private/tmp`를 마운트하지 못해 저장소 안 임시 폴더에서 돌렸다
 - [ ] staging 배포 로그에서 nginx 다시 만들기 확인, `/v1/chat/ws` 연결 확인
+  - 2026-11-18 첫 확인 실패: #8·#11 staging 배포 로그에 `refresh-nginx.sh` 출력이 없고 nginx는 `Up 7 weeks` 그대로, `/v1/chat/ws` 핸드셰이크는 앱 404(nginx에 location 없음). 아래 "배포 때 실행되지 않은 문제"로 고친다
+- [x] `refresh-nginx.sh`가 실행되지 않는 원인 재현 (2026-11-18, 로컬 Docker)
+- [ ] 워크플로·스크립트 stdin 분리 수정 후 staging 재배포로 확인
+
+## 배포 때 실행되지 않은 문제 (2026-11-18)
+
+- 원인: 워크플로는 `ssh … << 'EOF'`로 원격 셸에 명령을 stdin으로 넘긴다. `deploy.sh` 안의 `docker compose run -T`(마이그레이션)는 TTY만 끄고 stdin은 붙인 채 실행되므로, 원격 셸의 stdin에 남아 있던 heredoc 나머지 줄(`./refresh-nginx.sh`)을 읽어 버린다. 그래서 `deploy.sh`는 끝까지 돌지만 그 다음 줄은 실행되지 않는다. production 워크플로도 같은 구조다.
+- 재현: 스크래치 디렉터리에서 `bash << 'EOF'` 안에 `docker compose run --rm -T`를 부르는 스크립트와 다음 줄 `echo`를 두면 `echo`가 실행되지 않고, 스크립트에 `< /dev/null`을 주면 실행된다.
+- 수정:
+  - `staging-deploy.yml`·`production-deploy.yml`: `./deploy.sh < /dev/null`, `./refresh-nginx.sh < /dev/null`
+  - `scripts/deploy.sh`(마이그레이션)·`scripts/refresh-nginx.sh`(`nginx -t`)의 `docker compose run`에도 `< /dev/null`. 다른 곳에서 불러도 호출자의 stdin을 읽지 않게 한다
+- 서버에 지문 파일이 아직 없으므로 수정 후 첫 배포에서 nginx를 검사 후 다시 만든다. prod·staging 요청이 몇 초 끊긴다.
 
 ## 검증 방법
 

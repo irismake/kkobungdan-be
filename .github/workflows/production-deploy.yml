@@ -179,9 +179,9 @@ jobs:
 
             chmod +x deploy.sh install-logrotate.sh refresh-nginx.sh staging-smoke-test.sh
 
-            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh
+            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 DEPLOY_TARGET=prod ./deploy.sh < /dev/null
             # nginx 설정(템플릿 등)이 바뀌었을 때만 검사 후 다시 만든다. 꺼져 있으면 띄운다.
-            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 ./refresh-nginx.sh
+            COMPOSE_FILE=docker-compose.ec2.yml COMPOSE_ENV_FILE=.env.ec2 ./refresh-nginx.sh < /dev/null
           EOF
 
       - name: Verify production deployment
