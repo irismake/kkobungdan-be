@@ -58,3 +58,6 @@
 | NOTI-TS-027 | 관리자 알림 링크는 관리자 웹 주소를 쓴다 | `test_admin_alert_integration.py::test_alert_link_uses_admin_web_base_url` |
 | NOTI-TS-028 | 관리자 웹 주소가 없으면 알림에 링크를 넣지 않는다 | `test_admin_alert_integration.py::test_alert_omits_link_when_admin_web_base_url_missing` |
 | NOTI-TS-029 | 관리자 알림의 금액은 천 단위로 구분된다 | `test_admin_alert_integration.py::test_fee_is_thousand_separated` |
+
+| NOTI-TS-030 | NOTI-REQ-001: 지원 전 행님/관리자 취소는 정확한 신규 문구·타입·요청 ID로 알림을 저장하고 커밋 후 발송 대상으로 전달한다. 알림 꺼짐은 SKIPPED다 | `test_chat_notification_integration.py::test_before_offer_cancellation_notification` |
+| NOTI-TS-031 | NOTI-REQ-001: 지원 전 환불 완료는 행님 알림만 만들고 반복 완료는 거부한다 | `test_chat_notification_integration.py::test_before_offer_refund_notification` |

@@ -123,3 +123,7 @@
 | CHAT-TS-106 | CHAT-REQ-018, CHAT-REQ-029 | Given 저장된 지 10분이 지난 채팅의 실패한 푸시 / When 재시도 처리 / Then 보내지 않고 `SKIPPED`로 끝낸다 | unit | `service` |
 | CHAT-TS-110 | CHAT-REQ-029, CHAT-REQ-016 | Given 받는 사람이 연결되어 있지 않거나 WebSocket 전송이 오류를 냄 / When `chat.realtime`이 이벤트를 처리 / Then `SKIPPED`로 끝나고 다시 시도하지 않으며 모니터링 알림도 없다 | unit | `service` |
 | CHAT-TS-111 | CHAT-REQ-018, CHAT-REQ-029 | Given 계속 실패하는 가짜 FCM 발송기 / When `chat.push`가 재시도를 반복 / Then 5초, 30초, 1분, 2분, 4분 간격으로 5회 재시도하고 모두 10분 안에 끝나며, 그 뒤 `DEAD`가 되어 모니터링 알림이 1번 나간다 | unit | `service` |
+
+| CHAT-TS-112 | CHAT-REQ-030, NOTI-REQ-001 | Given 지원 후 매칭 전 취소된 요청 / When 환불 완료 / Then 닫힌 모든 기존 채팅방에 안내가 한 번씩 생기고 별도 알림은 없다 | integration | `test_chat_notification_integration.py::test_before_match_refund_in_existing_rooms` |
+| CHAT-TS-113 | CHAT-REQ-030, NOTI-REQ-001 | Given 기존 알림을 받던 사건 / When 시스템 채팅 조회·푸시 / Then 기존 제목·본문을 정확하게 유지하고 roomId로 이동한다 | integration | `test_chat_notification_integration.py::test_system_copy_and_push_replace_notifications` |
+| CHAT-TS-114 | CHAT-REQ-030, NOTI-REQ-001 | Given 지원 후 요청 / When 취소·환불 안내 기록 도중 예외 / Then 업무·알림·채팅·outbox가 함께 롤백된다 | integration | `test_chat_notification_integration.py::test_notice_failure_rolls_back_business_change` |
