@@ -1,8 +1,8 @@
 # nginx 설정이 바뀌면 배포 때 다시 만들기
 
-> 상태: 진행 중
-> 브랜치: `fix/nginx-recreate-on-config-change`(#10), 후속 수정 `fix/deploy-heredoc-stdin`
-> 관련: [`2026-06-12-ec2-prod-staging-split.md`](./2026-06-12-ec2-prod-staging-split.md) (EC2 한 대에 `app-staging`·`app-prod`·`nginx`), [`2026-11-17-chat-implementation.md`](./2026-11-17-chat-implementation.md) (`/v1/chat/ws` location 추가)
+> 상태: 완료 (2026-11-18). staging 배포(#12, `c96ef5d`)에서 nginx를 검사 후 다시 만들고 `/v1/chat/ws`가 앱까지 전달되는 것을 확인했다
+> 브랜치: `fix/nginx-recreate-on-config-change`(#10), 후속 수정 `fix/deploy-heredoc-stdin`(#12)
+> 관련: [`2026-06-12-ec2-prod-staging-split.md`](../active/2026-06-12-ec2-prod-staging-split.md) (EC2 한 대에 `app-staging`·`app-prod`·`nginx`), [`2026-11-17-chat-implementation.md`](../active/2026-11-17-chat-implementation.md) (`/v1/chat/ws` location 추가)
 
 ## 문제
 
@@ -43,10 +43,13 @@
 - [x] 스크립트 작성 (`scripts/refresh-nginx.sh`)
 - [x] 워크플로 연결 (`staging-deploy.yml`, `production-deploy.yml`)
 - [x] 로컬 Docker로 검증 (2026-11-18): 처음 실행(검사 후 띄움) → 그대로 실행(건너뜀, 같은 컨테이너) → 템플릿 변경(검사 후 다시 만듦) → 잘못된 템플릿(`nginx -t` 실패로 exit 1, 돌던 nginx 유지·응답 정상). 로컬 Colima는 `/private/tmp`를 마운트하지 못해 저장소 안 임시 폴더에서 돌렸다
-- [ ] staging 배포 로그에서 nginx 다시 만들기 확인, `/v1/chat/ws` 연결 확인
+- [x] staging 배포 로그에서 nginx 다시 만들기 확인, `/v1/chat/ws` 연결 확인
   - 2026-11-18 첫 확인 실패: #8·#11 staging 배포 로그에 `refresh-nginx.sh` 출력이 없고 nginx는 `Up 7 weeks` 그대로, `/v1/chat/ws` 핸드셰이크는 앱 404(nginx에 location 없음). 아래 "배포 때 실행되지 않은 문제"로 고친다
 - [x] `refresh-nginx.sh`가 실행되지 않는 원인 재현 (2026-11-18, 로컬 Docker)
-- [ ] 워크플로·스크립트 stdin 분리 수정 후 staging 재배포로 확인
+- [x] 워크플로·스크립트 stdin 분리 수정 후 staging 재배포로 확인 (2026-11-18, #12 배포 run `44259046593`)
+  - 배포 로그: `nginx 설정이 바뀌어 다시 만든다.` → `nginx -t` 통과(`syntax is ok`, `test is successful`) → `Container orderrun-nginx Recreated` → `nginx를 새 설정으로 띄웠다.`
+  - 인증 없이 `/v1/chat/ws` 핸드셰이크: 수정 전 앱 404(nginx가 Upgrade를 넘기지 않음) → 수정 후 403(앱의 WebSocket 경로가 인증 없는 연결을 accept 전에 거부)
+  - 배포 후 staging·prod `/v1/health` 모두 200
 
 ## 배포 때 실행되지 않은 문제 (2026-11-18)
 
@@ -60,4 +63,9 @@
 ## 검증 방법
 
 - 로컬: 스크래치 디렉터리의 가짜 compose(`nginx` + upstream 대역 `app`)로 위 네 경우를 실행한다.
-- staging: 머지 후 배포 로그의 `nginx 설정이 바뀌어 다시 만든다` 줄과 `curl -i -H 'Connection: Upgrade' -H 'Upgrade: websocket' …/v1/chat/ws`(인증 없이 → 앱이 4401로 닫음, nginx 404가 아님)로 확인한다.
+- staging: 머지 후 배포 로그의 `nginx 설정이 바뀌어 다시 만든다` 줄과 `curl -i -H 'Connection: Upgrade' -H 'Upgrade: websocket' …/v1/chat/ws`(인증 없이 → accept 전에 거부되어 HTTP 403, nginx 404가 아님. 4401은 accept 후 토큰 만료로 닫을 때 쓴다)로 확인한다.
+
+## 남은 리스크
+
+- nginx 컨테이너를 prod·staging이 함께 쓰므로, 설정이 바뀐 배포마다 prod 요청이 몇 초 끊긴다.
+- production 배포는 아직 이 경로를 타지 않았다. production 서버에는 지문 파일이 이미 생겼으므로(같은 EC2), 다음 production 배포는 설정이 다시 바뀌지 않는 한 nginx를 건드리지 않는다.
