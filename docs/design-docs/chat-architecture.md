@@ -1,6 +1,6 @@
 # 채팅 아키텍처
 
-> 상태: 설계 확정 (2026-11-17), 구현 전
+> 상태: 구현됨 (2026-11-18, 0035~0037)
 > 관련 문서: [`../product-specs/chat-requirements.md`](../product-specs/chat-requirements.md) (`CHAT-REQ-*`), [`outbox.md`](./outbox.md) (공통 Transactional Outbox), [`../domains/chat/test-scenarios.md`](../domains/chat/test-scenarios.md) (`CHAT-TS-*`), [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md), [`tdd-workflow.md`](./tdd-workflow.md)
 
 ## 배경

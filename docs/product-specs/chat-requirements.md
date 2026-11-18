@@ -1,6 +1,6 @@
 # 채팅 요구사항
 
-> 상태: 초안 (기능·비기능 요구사항 정의, 구현 전)
+> 상태: 구현됨 (2026-11-18, 사용자 차단 관련 요구사항은 차단 구현 후)
 > 관련 문서: [`../domains/chat/test-scenarios.md`](../domains/chat/test-scenarios.md), [`../design-docs/chat-architecture.md`](../design-docs/chat-architecture.md), [`../exec-plans/active/2026-11-14-tdd-harness.md`](../exec-plans/active/2026-11-14-tdd-harness.md), [`user-block.md`](./user-block.md), [`chat-reporting.md`](./chat-reporting.md)
 
 ## 목적

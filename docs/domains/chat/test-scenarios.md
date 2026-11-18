@@ -1,6 +1,6 @@
 # Chat Test Scenarios
 
-> 상태: 구현 전 (모든 시나리오가 아직 테스트로 작성되지 않음)
+> 상태: 구현됨 (모든 시나리오가 테스트에 연결됨. 사용자 차단 시나리오는 차단 구현 전까지 skip)
 > 요구사항 정본: [`chat-requirements.md`](../../product-specs/chat-requirements.md) (`CHAT-REQ-*`)
 
 기준 테스트 파일: `tests/test_chat_service.py`(단위), `tests/test_chat_integration.py`(통합), `tests/test_chat_realtime_integration.py`(실시간 연결 통합, 예정)

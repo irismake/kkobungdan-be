@@ -1,6 +1,6 @@
 # 이벤트 전달 (Transactional Outbox) 공통 정책
 
-> 상태: 초안 (구현 전)
+> 상태: 구현됨 (2026-11-17, 채팅에서 처음 사용)
 > 관련 문서: [`../design-docs/outbox.md`](../design-docs/outbox.md), [`../domains/outbox/test-scenarios.md`](../domains/outbox/test-scenarios.md) (`OUTBOX-TS-*`), [`chat-requirements.md`](./chat-requirements.md) (첫 적용: CHAT-REQ-029)
 
 ## 목적

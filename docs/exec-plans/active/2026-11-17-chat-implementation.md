@@ -1,6 +1,6 @@
 # 채팅 구현
 
-> 상태: 진행 중 (설계 완료, 구현 전)
+> 상태: 구현 완료 (2026-11-18), staging 확인 대기. staging에서 실제 앱으로 채팅 전송·실시간 수신·푸시를 확인하면 `completed/`로 옮긴다
 > 요구사항: [`../../product-specs/chat-requirements.md`](../../product-specs/chat-requirements.md) · 시나리오: [`../../domains/chat/test-scenarios.md`](../../domains/chat/test-scenarios.md) · 설계: [`../../design-docs/chat-architecture.md`](../../design-docs/chat-architecture.md)
 > 브랜치: `feature/chat` (PR #8)
 
@@ -60,6 +60,13 @@
 - 묶음마다 `scripts/verify.sh`(static, unit, integration) 통과. CI에서는 PR이 Draft라 정적·단위만 돌므로, 통합 테스트는 로컬 MySQL(`docker-compose.test.yml`)이나 Ready 전환 후 CI로 확인한다.
 - 마지막에 채팅 시나리오 문서 상태에서 `구현 전`을 지워 시나리오 연결 검사를 강제한다(차단 후 시나리오는 skip 테스트로 연결).
 - staging 머지 후 실제 앱에서 채팅 전송·실시간 수신·푸시를 확인한다.
+
+## 배포 시 확인
+
+- `alembic upgrade head`로 0035(채팅 테이블)·0036(Outbox 테이블)·0037(기존 지원 채팅방 생성)이 적용된다. 0037은 되돌리지 않는다.
+- nginx 설정에 `/v1/chat/ws` location이 추가됐다. nginx 컨테이너를 다시 만들어야 적용된다.
+- 실시간 hub가 프로세스 메모리라 앱 서버는 1대여야 한다(TD-026).
+- 지원 등록에 첫 인사(`greeting`)가 필수가 됐다. 첫 인사를 보내지 않는 기존 앱의 지원은 실패하므로 앱 배포와 순서를 맞춘다.
 
 ## 남은 결정·위험
 
