@@ -99,7 +99,7 @@
 | 분쟁 접수 | `OfferService.raise_dispute` / `ProposalService.raise_dispute` | `INACTIVE·RUNNER_DISPUTED` / `ORDERER_DISPUTED` | 분쟁 접수 |
 | 분쟁 판정 | `MissionService.resolve_dispute`, `AdminCommandService.resolve_dispute` | `CLOSED·DISPUTE_COMPLETED` / `DISPUTE_FAILED` | 판정 결과 |
 | 수행비 입금 | `MissionService.record_settlement`, `AdminCommandService.complete_payout` (임무 `PAID`) | 없음 | 수행비 입금 완료 |
-| 환불 완료 | `AdminCommandService.complete_refund` (Refund `COMPLETED`, 매칭 후만) | 없음 | 환불 완료 |
+| 환불 완료 | `AdminCommandService.complete_refund` (Refund `COMPLETED`, 지원 이력이 있는 요청) | 없음 | 환불 완료 |
 
 ## 데이터 모델
 
@@ -187,7 +187,7 @@
 
 | type | 받는 사람 | 내용 |
 |------|-----------|------|
-| `chat.message.created` | 두 참여자 | `roomId`, `message`(채팅 조회 응답과 같은 형식: `id`, `seq`, `type`, `senderId`, 보는 사람 기준 `content`, `systemEvent`, `createdAt`) |
+| `chat.message.created` | 두 참여자 | `roomId`, `message`(채팅 조회 응답과 같은 형식: `id`, `seq`, `type`, `senderId`, 보는 사람 기준 `content`·`systemTitle`, `systemEvent`, `createdAt`) |
 | `chat.room.updated` | 두 참여자 | `roomId`, `status`, `statusReason`, `proposalStatus`, `offerStatus`, `version`. 완료 확인 여부는 `offerStatus`(`RUNNER_COMPLETED`)·`proposalStatus`(`ORDER_COMPLETED`)로 나타난다 |
 | `chat.read.updated` | 상대방 | `roomId`, 읽은 사람의 `lastReadSeq`, `version` |
 | `chat.unread.updated` | 본인 | `roomId`, `unreadCount`, `totalUnreadCount`. 새 채팅을 받은 쪽과 읽은 사람에게 보낸다 |
@@ -204,7 +204,7 @@
 
 - 서비스가 outbox에 기록한 이벤트를 `ChatPushConsumer`가 FCM으로 보낸다. `notifications`에는 저장하지 않는다.
 - 실패하면 최대 5회 다시 시도하고, 채팅 저장 후 10분이 지났으면 보내지 않고 `SKIPPED`로 끝낸다(아래 [채팅 전달 대상](#채팅-전달-대상)).
-- 제목은 상대방 이름(탈퇴는 `"탈퇴한 사용자"`), 내용은 받는 사람에게 보이는 채팅 문구.
+- 일반 채팅 제목은 상대방 이름(탈퇴는 `"탈퇴한 사용자"`), 시스템 채팅은 아래 제목 정책을 따른다. 내용은 수신자별 본문이다.
 - 같은 채팅방 푸시는 묶는다: APNs `apns-collapse-id`와 Android `tag`를 `chat-room-{id}`로 둔다.
 - 배지는 채팅 안읽음 합계 + 알림 미읽음 수. 기존 알림 푸시도 같은 값을 보내도록 `fcm_service`의 고정값 `badge=1`을 바꾼다.
 - 푸시 `data`는 `type=CHAT`, `roomId`, `messageId`, `seq`. 앱은 `roomId`로 그 채팅방으로 이동한다.
