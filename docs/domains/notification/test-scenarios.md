@@ -7,7 +7,7 @@
 - root 응답의 OpenAPI 예시 shape를 확인한다.
 - 알림 목록, 통계, 상세 조회, 읽음 처리를 검증한다.
 - 알림 발송 성공과 실패 응답을 검증한다.
-- 지원, 수락, 임무 완료, 분쟁 이벤트가 수신자의 `alarm_enabled` 조건에 따라 `PENDING` 또는 `SKIPPED` 알림 레코드를 생성하는지 검증한다.
+- 지원 전 취소·환불 이벤트가 수신자의 `alarm_enabled` 조건에 따라 `PENDING` 또는 `SKIPPED` 알림 레코드를 생성하는지 검증한다. 지원 이후 안내는 채팅 시나리오에서 검증한다.
 - 알림 발송 worker는 실제 FCM을 호출하지 않고 fake FCM service의 `send_notification()` 호출 여부, 전달 data, `SENT`/`FAILED` 상태 전이를 검증한다.
 - 알림 발송 worker가 `SKIPPED` 알림을 FCM으로 보내거나 상태 변경하지 않는지 검증한다.
 - AWS SNS 전화번호 포맷, SMS attributes, provider error 전파를 검증한다.
@@ -58,3 +58,7 @@
 | NOTI-TS-027 | 관리자 알림 링크는 관리자 웹 주소를 쓴다 | `test_admin_alert_integration.py::test_alert_link_uses_admin_web_base_url` |
 | NOTI-TS-028 | 관리자 웹 주소가 없으면 알림에 링크를 넣지 않는다 | `test_admin_alert_integration.py::test_alert_omits_link_when_admin_web_base_url_missing` |
 | NOTI-TS-029 | 관리자 알림의 금액은 천 단위로 구분된다 | `test_admin_alert_integration.py::test_fee_is_thousand_separated` |
+
+| NOTI-TS-030 | NOTI-REQ-001: 지원 전 행님/관리자 취소는 정확한 신규 문구·타입·요청 ID로 알림을 저장하고 커밋 후 발송 대상으로 전달한다. 알림 꺼짐은 SKIPPED다 | `test_chat_notification_integration.py::test_before_offer_cancellation_notification` |
+| NOTI-TS-031 | NOTI-REQ-001: 지원 전 환불 완료는 행님 알림만 만들고 반복 완료는 거부한다 | `test_chat_notification_integration.py::test_before_offer_refund_notification` |
+| NOTI-TS-032 | NOTI-REQ-001: 취소 요청의 이전 조회 snapshot 이후 지원이 커밋되어도, 요청 잠금 뒤 최신 지원 이력으로 분류하여 시스템 채팅만 남긴다 | `test_chat_notification_integration.py::test_cancel_after_concurrent_application_uses_current_offer_history` |

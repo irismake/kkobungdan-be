@@ -147,18 +147,17 @@ class ChatLifecycle:
 
     @staticmethod
     def on_refund_completed(db: Session, refund: Refund) -> None:
-        """환불 완료. 매칭 후(임무가 있는) 환불만 그 임무의 채팅방에 안내한다."""
-        if refund.mission_id is None:
-            return
-        mission = db.get(Mission, refund.mission_id)
-        if mission is None:
-            return
-        room = ChatLifecycle._lock_room_of_offer(db, mission.offer_id)
-        if room is None:
-            return
-        ChatLifecycle._add_system_chat(
-            db, room, SystemChatEvent.REFUND_COMPLETED, event_key=f"REFUND_COMPLETED:refund:{refund.id}"
-        )
+        """매칭 후에는 매칭된 방만, 매칭 전에는 기존 모든 방에 안내한다(닫힌 방 포함)."""
+        if refund.mission_id is not None:
+            mission = db.get(Mission, refund.mission_id)
+            room = ChatLifecycle._lock_room_of_offer(db, mission.offer_id) if mission is not None else None
+            rooms = [room] if room is not None else []
+        else:
+            rooms = ChatLifecycle._lock_rooms_of_proposal(db, refund.proposal_id)
+        for room in rooms:
+            ChatLifecycle._add_system_chat(
+                db, room, SystemChatEvent.REFUND_COMPLETED, event_key=f"REFUND_COMPLETED:refund:{refund.id}"
+            )
 
     # ------------------------------------------------------------------ 내부
 

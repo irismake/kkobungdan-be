@@ -9,6 +9,7 @@ from app.models.dispute_evidence import DisputeEvidence
 from app.models.mission import Mission, MissionResolution, MissionStatus
 from app.models.offer import Offer, OfferStatus
 from app.models.proposal import Proposal, ProposalStatus
+from app.models.notification import NotificationType
 from app.models.refund import Refund, RefundReason, RefundStatus
 from app.schemas.admin import (
     AdminDisputeDetailResponse,
@@ -21,6 +22,7 @@ from app.services.chat.chat_lifecycle import ChatLifecycle
 from app.services.locking import lock_mission, lock_mission_of_offer, lock_offer, lock_proposal
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
+from app.services.notification.proposal_notice import create_before_offer_notice
 
 
 #: 관리자 취소 시 함께 취소하는 지원 상태. 이미 종료된 지원은 건드리지 않는다.
@@ -104,6 +106,7 @@ class AdminCommandService:
                 reason_detail=admin_note,
             )
         ChatLifecycle.on_admin_cancelled(db, proposal.id, after_match=mission is not None)
+        create_before_offer_notice(db, proposal, NotificationType.PROPOSAL_CANCELLED_BY_ADMIN)
 
         db.commit()
         return AdminQueryService.get_proposal_detail(db, proposal_id)
@@ -211,6 +214,7 @@ class AdminCommandService:
         refund.complete(admin_id, admin_note)
         proposal.mark_refunded()
         ChatLifecycle.on_refund_completed(db, refund)
+        create_before_offer_notice(db, proposal, NotificationType.REFUND_COMPLETED)
         db.commit()
         return AdminQueryService.get_refund_detail(db, refund_id)
 

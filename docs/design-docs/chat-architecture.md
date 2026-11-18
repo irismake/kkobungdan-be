@@ -99,7 +99,7 @@
 | 분쟁 접수 | `OfferService.raise_dispute` / `ProposalService.raise_dispute` | `INACTIVE·RUNNER_DISPUTED` / `ORDERER_DISPUTED` | 분쟁 접수 |
 | 분쟁 판정 | `MissionService.resolve_dispute`, `AdminCommandService.resolve_dispute` | `CLOSED·DISPUTE_COMPLETED` / `DISPUTE_FAILED` | 판정 결과 |
 | 수행비 입금 | `MissionService.record_settlement`, `AdminCommandService.complete_payout` (임무 `PAID`) | 없음 | 수행비 입금 완료 |
-| 환불 완료 | `AdminCommandService.complete_refund` (Refund `COMPLETED`, 매칭 후만) | 없음 | 환불 완료 |
+| 환불 완료 | `AdminCommandService.complete_refund` (Refund `COMPLETED`, 지원 이력이 있는 요청) | 없음 | 환불 완료 |
 
 ## 데이터 모델
 
@@ -187,7 +187,7 @@
 
 | type | 받는 사람 | 내용 |
 |------|-----------|------|
-| `chat.message.created` | 두 참여자 | `roomId`, `message`(채팅 조회 응답과 같은 형식: `id`, `seq`, `type`, `senderId`, 보는 사람 기준 `content`, `systemEvent`, `createdAt`) |
+| `chat.message.created` | 두 참여자 | `roomId`, `message`(채팅 조회 응답과 같은 형식: `id`, `seq`, `type`, `senderId`, 보는 사람 기준 `content`·`systemTitle`, `systemEvent`, `createdAt`) |
 | `chat.room.updated` | 두 참여자 | `roomId`, `status`, `statusReason`, `proposalStatus`, `offerStatus`, `version`. 완료 확인 여부는 `offerStatus`(`RUNNER_COMPLETED`)·`proposalStatus`(`ORDER_COMPLETED`)로 나타난다 |
 | `chat.read.updated` | 상대방 | `roomId`, 읽은 사람의 `lastReadSeq`, `version` |
 | `chat.unread.updated` | 본인 | `roomId`, `unreadCount`, `totalUnreadCount`. 새 채팅을 받은 쪽과 읽은 사람에게 보낸다 |
@@ -204,12 +204,12 @@
 
 - 서비스가 outbox에 기록한 이벤트를 `ChatPushConsumer`가 FCM으로 보낸다. `notifications`에는 저장하지 않는다.
 - 실패하면 최대 5회 다시 시도하고, 채팅 저장 후 10분이 지났으면 보내지 않고 `SKIPPED`로 끝낸다(아래 [채팅 전달 대상](#채팅-전달-대상)).
-- 제목은 상대방 이름(탈퇴는 `"탈퇴한 사용자"`), 내용은 받는 사람에게 보이는 채팅 문구.
+- 일반 채팅 제목은 상대방 이름(탈퇴는 `"탈퇴한 사용자"`), 시스템 채팅은 아래 제목 정책을 따른다. 내용은 수신자별 본문이다.
 - 같은 채팅방 푸시는 묶는다: APNs `apns-collapse-id`와 Android `tag`를 `chat-room-{id}`로 둔다.
 - 배지는 채팅 안읽음 합계 + 알림 미읽음 수. 기존 알림 푸시도 같은 값을 보내도록 `fcm_service`의 고정값 `badge=1`을 바꾼다.
 - 푸시 `data`는 `type=CHAT`, `roomId`, `messageId`, `seq`. 앱은 `roomId`로 그 채팅방으로 이동한다.
 - 시스템 채팅은 참여자 둘 다에게 갈 수 있다. 한쪽만 실패해도 전달 전체를 다시 시도하고, 이미 받은 쪽은 묶음 키로 대체되어 하나로 보인다.
-- 시스템 채팅의 푸시 대상은 `system_chat.py` 표를 따른다(기존 알림을 받는 사람 제외).
+- 시스템 채팅의 푸시 대상은 `system_chat.py` 표를 따른다. 지원 이후 기존 알림은 제거하고 그 수신자도 시스템 채팅 푸시 대상으로 포함한다. 기존 알림 제목은 `systemTitle`, 본문은 `content`로 조회/실시간에 제공한다. 푸시도 같은 제목·본문을 사용하며 별도 제목이 없는 시스템 안내만 상대 이름을 제목으로 쓴다.
 
 ## 이벤트 전달 (Transactional Outbox)
 
@@ -232,7 +232,7 @@
 | 전달 대상 | 받는 이벤트 | 하는 일 | 재시도 정책 |
 |-----------|-------------|---------|-------------|
 | `chat.realtime` | 세 가지 모두 | 받는 사람을 정해 hub로 WebSocket 전송 | 재시도 없음. 연결이 없거나 전송 오류면 `SKIPPED`. 앱은 재연결 후 REST로 복구 (CHAT-REQ-016) |
-| `chat.push` | `chat.message.created` | 받는 사람·문구·배지를 정해 FCM 전송. 기존 알림을 받는 사람·보낸 사람 본인·알림 꺼짐은 `SKIPPED` | 최대 5회, 5초·30초·1분·2분·4분, 유효 10분. 초과 시 `DEAD` + 알림 |
+| `chat.push` | `chat.message.created` | 받는 사람·문구·배지를 정해 FCM 전송. 일반 채팅의 보낸 사람 본인·알림 꺼짐은 `SKIPPED` | 최대 5회, 5초·30초·1분·2분·4분, 유효 10분. 초과 시 `DEAD` + 알림 |
 
 - `chat.push`는 같은 채팅방 푸시를 FCM 묶음 키(`chat-room-{id}`)로 대체하므로, 결과 기록 전 중단으로 한 번 더 보내도 사용자에게는 하나로 보인다(멱등).
 - `chat.realtime`은 앱이 채팅 ID와 `version`으로 중복을 거른다(CHAT-REQ-028).

@@ -32,6 +32,7 @@ from app.services.dispute.dispute_survey_service import DisputeSurveyService
 from app.services.locking import lock_proposal
 from app.services.mission.mission_service import MissionService
 from app.services.refund.refund_service import RefundService
+from app.services.notification.proposal_notice import create_before_offer_notice
 
 
 PAYMENT_DEADLINE = timedelta(hours=24)
@@ -348,6 +349,7 @@ class ProposalService:
                 .update({Offer.status: OfferStatus.REJECTED}, synchronize_session=False)
             )
         ChatLifecycle.on_proposal_cancelled(db, proposal.id)
+        create_before_offer_notice(db, proposal, NotificationType.PROPOSAL_CANCELLED_BY_USER)
 
         db.commit()
         db.refresh(proposal)

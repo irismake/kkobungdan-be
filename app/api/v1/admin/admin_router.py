@@ -358,13 +358,16 @@ def get_admin_proposal(proposal_id: int, db: Session = Depends(get_db)) -> ApiRe
 )
 def cancel_admin_proposal(
     proposal_id: int,
+    background_tasks: BackgroundTasks,
     request: AdminNoteRequest | None = None,
     db: Session = Depends(get_db),
 ) -> ApiResponse[AdminProposalDetailResponse]:
     payload = request or AdminNoteRequest()
+    data = AdminCommandService.cancel_proposal(db, proposal_id, payload.admin_note)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(
         success=True,
-        data=AdminCommandService.cancel_proposal(db, proposal_id, payload.admin_note),
+        data=data,
         message="요청이 취소되었습니다.",
     )
 
@@ -527,13 +530,16 @@ def get_admin_refund(refund_id: int, db: Session = Depends(get_db)) -> ApiRespon
 )
 def complete_admin_refund(
     refund_id: int,
+    background_tasks: BackgroundTasks,
     request: AdminNoteRequest | None = None,
     db: Session = Depends(get_db),
 ) -> ApiResponse[AdminRefundDetailResponse]:
     payload = request or AdminNoteRequest()
+    data = AdminCommandService.complete_refund(db, refund_id, payload.admin_id, payload.admin_note)
+    _queue_created_notifications(background_tasks, db)
     return ApiResponse(
         success=True,
-        data=AdminCommandService.complete_refund(db, refund_id, payload.admin_id, payload.admin_note),
+        data=data,
         message="환불을 기록했습니다.",
     )
 

@@ -4,7 +4,7 @@
 
 - 받는 사람: 일반 채팅은 보낸 사람의 상대. 시스템 채팅은 `system_chat_delivery` 표에서 푸시 대상인 참여자.
 - 알림이 꺼졌거나(`alarm_enabled`) 토큰이 없거나 탈퇴한 사람은 보내지 않는다. 보낼 사람이 없으면 `SKIPPED`.
-- 제목은 그 채팅방의 상대 이름, 내용은 받는 사람에게 보이는 채팅 문구, 배지는 채팅 안읽음 합계 + 알림 미읽음 수.
+- 제목은 기존 알림 제목(없으면 상대 이름), 내용은 받는 사람에게 보이는 채팅 문구, 배지는 채팅 안읽음 합계 + 알림 미읽음 수.
 - 같은 채팅방 푸시는 묶음 키 `chat-room-{id}`로 이전 푸시를 대체한다. 그래서 재시도로 같은 푸시가 한 번 더
   나가도 사용자에게는 하나로 보인다(멱등).
 """
@@ -21,7 +21,7 @@ from app.models.chat import ChatMessage, ChatMessageType, ChatRole, ChatRoom
 from app.models.user import User, UserFCMToken
 from app.schemas.notification import FCMSendResult
 from app.services.chat.chat_room_service import display_name
-from app.services.chat.system_chat import render_system_chat, system_chat_delivery
+from app.services.chat.system_chat import render_system_chat, render_system_title, system_chat_delivery
 from app.services.notification.badge import badge_count
 from app.services.outbox.consumers import SkipDelivery
 from app.services.outbox.envelope import EventEnvelope
@@ -114,13 +114,15 @@ class ChatPushConsumer:
         token = db.query(UserFCMToken).filter(UserFCMToken.user_id == recipient_id).first()
         if token is None:
             return None
+        title = display_name(db.get(User, partner_id))
         if message.type == ChatMessageType.SYSTEM:
+            title = render_system_title(message.system_event, message.system_payload, role) or title
             body = render_system_chat(message.system_event, message.system_payload, role)
         else:
             body = message.content
         return self._sender.send(
             token=token.fcm_token,
-            title=display_name(db.get(User, partner_id)),
+            title=title,
             body=body,
             data={"type": "CHAT", "roomId": str(room.id), "messageId": str(message.id), "seq": str(message.seq)},
             collapse_key=f"chat-room-{room.id}",
