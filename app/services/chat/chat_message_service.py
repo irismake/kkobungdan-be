@@ -36,15 +36,7 @@ class ChatMessageService:
         if before_seq is not None and after_seq is not None:
             raise api_error(AppError.VALIDATION_ERROR, "beforeSeq와 afterSeq는 함께 쓸 수 없습니다.")
         room, role = ChatRoomService.get_room_for_participant(db, room_id, user_id)
-        query = db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
-        if after_seq is not None:
-            page = query.filter(ChatMessage.seq > after_seq).order_by(ChatMessage.seq).limit(AFTER_PAGE_SIZE).all()
-        else:
-            if before_seq is not None:
-                query = query.filter(ChatMessage.seq < before_seq)
-            rows = query.order_by(ChatMessage.seq.desc()).limit(PAGE_SIZE + 1).all()
-            page = list(reversed(rows[:PAGE_SIZE]))
-        has_previous = bool(page) and page[0].seq > 1
+        page, has_previous = page_messages(db, room.id, before_seq, after_seq)
         return ChatMessageListResponse(
             content=[to_message_response(message, role) for message in page],
             has_previous=has_previous,
@@ -98,6 +90,21 @@ class ChatMessageService:
         db.commit()
         db.refresh(message)
         return to_message_response(message, role)
+
+
+def page_messages(
+    db: Session, room_id: int, before_seq: int | None, after_seq: int | None
+) -> tuple[list[ChatMessage], bool]:
+    """채팅 한 페이지(seq 오름차순)와 더 앞선 채팅이 있는지. 참여자 조회와 관리자 조회가 함께 쓴다."""
+    query = db.query(ChatMessage).filter(ChatMessage.room_id == room_id)
+    if after_seq is not None:
+        page = query.filter(ChatMessage.seq > after_seq).order_by(ChatMessage.seq).limit(AFTER_PAGE_SIZE).all()
+    else:
+        if before_seq is not None:
+            query = query.filter(ChatMessage.seq < before_seq)
+        rows = query.order_by(ChatMessage.seq.desc()).limit(PAGE_SIZE + 1).all()
+        page = list(reversed(rows[:PAGE_SIZE]))
+    return page, bool(page) and page[0].seq > 1
 
 
 def _find_by_client_id(db: Session, user_id: str, client_message_id: str) -> ChatMessage | None:

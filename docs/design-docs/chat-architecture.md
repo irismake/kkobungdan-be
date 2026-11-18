@@ -56,6 +56,8 @@
 |--------|------|------|
 | API | `app/api/v1/chat/chat_router.py` | 채팅방 목록·상세, 채팅 조회·전송, 읽음·전체 읽음, 안읽음 수 |
 | API (관리자) | `app/api/v1/admin/admin_chat_router.py` | 관리자 채팅방 조회·채팅 조회 (읽음 상태를 바꾸지 않음) |
+| Service (관리자) | `app/services/chat/chat_admin_service.py` | 요청별 채팅방 목록, 채팅 조회(행님·꼬붕 문구 함께) |
+| 데이터 마이그레이션 | `alembic/versions/0037_backfill_chat_rooms.py` | 배포 때 채팅방이 없는 기존 지원마다 채팅방 생성. 여러 번 실행해도 같다 |
 | 실시간 | `app/realtime/ws_router.py`, `app/realtime/hub.py` | WebSocket 인증·연결 등록·ping·토큰 만료 시 종료, 사용자별 이벤트 전송 |
 | Service | `app/services/chat/chat_room_service.py` | 채팅방 조회, 참여 권한 확인, 목록 정렬 |
 | Service | `app/services/chat/chat_message_service.py` | 일반 채팅 전송(검증·순번·중복 방지), 조회(이전·이후 페이지) |

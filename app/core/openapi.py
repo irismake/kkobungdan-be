@@ -1141,6 +1141,64 @@ CHAT_READ_ALL_EXAMPLE = {
     "message": "Success",
 }
 
+ADMIN_CHAT_ROOM_LIST_EXAMPLE = {
+    "success": True,
+    "data": [
+        {
+            "id": EXAMPLE_CHAT_ROOM_ID,
+            "proposalId": 1,
+            "offerId": 10,
+            "ordererId": "6f1c7c8e-0000-4000-8000-000000000001",
+            "ordererName": "김행님",
+            "runnerId": EXAMPLE_RUNNER_ID,
+            "runnerName": EXAMPLE_RUNNER_NAME,
+            "status": "ACTIVE",
+            "statusReason": None,
+            "offerStatus": "ACCEPTED",
+            "lastSeq": 4,
+            "lastMessageAt": EXAMPLE_CREATED_AT,
+            "ordererLastReadSeq": 4,
+            "runnerLastReadSeq": 3,
+            "createdAt": EXAMPLE_CREATED_AT,
+        }
+    ],
+    "message": "Success",
+}
+
+ADMIN_CHAT_MESSAGE_LIST_EXAMPLE = {
+    "success": True,
+    "data": {
+        "content": [
+            {
+                "id": 100,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 1,
+                "type": "SYSTEM",
+                "senderId": None,
+                "senderRole": None,
+                "content": "지원으로 채팅이 시작됐어요.",
+                "runnerContent": "지원으로 채팅이 시작됐어요.",
+                "systemEvent": "OFFER_CREATED",
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+            {
+                "id": 101,
+                "roomId": EXAMPLE_CHAT_ROOM_ID,
+                "seq": 2,
+                "type": "USER",
+                "senderId": EXAMPLE_RUNNER_ID,
+                "senderRole": "RUNNER",
+                "content": "안녕하세요! 근처에 있어서 바로 갈 수 있어요.",
+                "runnerContent": None,
+                "systemEvent": None,
+                "createdAt": EXAMPLE_CREATED_AT,
+            },
+        ],
+        "hasPrevious": False,
+    },
+    "message": "Success",
+}
+
 CHAT_MESSAGE_LIST_EXAMPLE = {
     "success": True,
     "data": {

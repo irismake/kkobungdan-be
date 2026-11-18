@@ -156,3 +156,50 @@ class ChatReadAllResponse(BaseModel):
     total_unread_count: int = Field(..., serialization_alias="totalUnreadCount", description="처리 뒤 남은 안읽음 합계")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# ------------------------------------------------------------------ 관리자 (CHAT-REQ-002)
+
+
+class AdminChatRoomResponse(BaseModel):
+    """관리자 웹 채팅방. 참여자 양쪽의 읽음 위치를 함께 보여준다(관리자 조회는 바꾸지 않는다)."""
+
+    id: int
+    proposal_id: int = Field(..., serialization_alias="proposalId")
+    offer_id: int = Field(..., serialization_alias="offerId")
+    orderer_id: str = Field(..., serialization_alias="ordererId")
+    orderer_name: str = Field(..., serialization_alias="ordererName", description="탈퇴했으면 '탈퇴한 사용자'")
+    runner_id: str = Field(..., serialization_alias="runnerId")
+    runner_name: str = Field(..., serialization_alias="runnerName", description="탈퇴했으면 '탈퇴한 사용자'")
+    status: ChatRoomStatus
+    status_reason: ChatRoomStatusReason | None = Field(None, serialization_alias="statusReason")
+    offer_status: OfferStatus = Field(..., serialization_alias="offerStatus")
+    last_seq: int = Field(..., serialization_alias="lastSeq")
+    last_message_at: datetime | None = Field(None, serialization_alias="lastMessageAt")
+    orderer_last_read_seq: int = Field(..., serialization_alias="ordererLastReadSeq")
+    runner_last_read_seq: int = Field(..., serialization_alias="runnerLastReadSeq")
+    created_at: datetime = Field(..., serialization_alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminChatMessageResponse(BaseModel):
+    id: int
+    room_id: int = Field(..., serialization_alias="roomId")
+    seq: int
+    type: ChatMessageType
+    sender_id: str | None = Field(None, serialization_alias="senderId")
+    sender_role: ChatRole | None = Field(None, serialization_alias="senderRole", description="일반 채팅을 보낸 사람의 역할")
+    content: str = Field(..., description="일반 채팅 내용. 시스템 채팅이면 행님에게 보이는 문구")
+    runner_content: str | None = Field(None, serialization_alias="runnerContent", description="시스템 채팅의 꼬붕에게 보이는 문구")
+    system_event: SystemChatEvent | None = Field(None, serialization_alias="systemEvent")
+    created_at: datetime = Field(..., serialization_alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminChatMessageListResponse(BaseModel):
+    content: list[AdminChatMessageResponse]
+    has_previous: bool = Field(..., serialization_alias="hasPrevious")
+
+    model_config = ConfigDict(populate_by_name=True)

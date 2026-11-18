@@ -623,6 +623,17 @@ Offer 조회 API에서 사용하는 응답이다. `OfferResponse`와 동일한 t
 - 채팅방 상세의 `partnerLastReadSeq`로 내 채팅의 안읽음 표시(`1`)를 그린다. `version`은 채팅방 상태·읽음 위치가 바뀔 때마다 1 오른다.
 - 실시간: `GET /v1/chat/ws`(WebSocket, 받기 전용). `Authorization: Bearer <access token>`으로 인증한다. 토큰이 없거나 만료·잘못되면 close code `4401`로 거부하고, 연결 중 토큰 만료 시각이 되면 서버가 `4401`로 닫는다. 앱은 토큰을 갱신해 다시 연결하고 놓친 것을 REST(`afterSeq` 조회, 목록, 상세)로 복구한다. 이벤트는 JSON이고 `type`으로 구분한다: `chat.message.created`, `chat.room.updated`, `chat.read.updated`, `chat.unread.updated`, `ping`(30초마다). 형식은 [`chat-architecture.md` 실시간](../design-docs/chat-architecture.md#실시간-chat-req-015017028)을 따른다.
 
+### Admin Chat API
+
+관리자 웹 채팅 조회다 (CHAT-REQ-002). 관리자만 가능하고 조회 전용이다. 관리자는 채팅을 보낼 수 없고(`POST /v1/chat-room/{roomId}/messages`는 참여자가 아니라 `403 FORBIDDEN`), 조회는 참여자의 읽음 위치를 바꾸지 않는다.
+
+| 기능 | Method | Path | 인증 | 성공 상태 | 응답 data |
+|------|--------|------|------|-----------|-----------|
+| 요청의 채팅방 조회 | `GET` | `/v1/admin/chat-room?proposalId=` | 관리자 | `200 OK` | `AdminChatRoomResponse[]` (참여자 이름, 상태, 지원 상태, 양쪽 읽음 위치) |
+| 채팅 조회 | `GET` | `/v1/admin/chat-room/{roomId}/messages?beforeSeq=&afterSeq=` | 관리자 | `200 OK` | `AdminChatMessageListResponse` |
+
+- 채팅 조회 페이지 규칙은 참여자 조회와 같다. 일반 채팅은 `senderRole`(`ORDERER`·`RUNNER`), 시스템 채팅은 행님 문구(`content`)와 꼬붕 문구(`runnerContent`)를 함께 담는다.
+
 ### Admin Outbox API
 
 공통 Transactional Outbox의 전달 기록 조회와 DEAD 수동 재처리다 ([`outbox.md`](../design-docs/outbox.md), OUTBOX-REQ-006). 관리자만 가능하다.
